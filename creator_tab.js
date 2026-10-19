@@ -181,15 +181,47 @@ const kind=name=>{
  for(const [k,re] of patterns)if(re.test(x))return k;
  return null;
 };
-const companyPath=raw=>{
+// Os arquivos podem vir compactados a partir de def/company, company ou
+// diretamente do CONTEÚDO de company (<empresa>/editor, in, out).
+// Formato sem prefixo só é aceito se o pacote demonstrar estrutura de Company.
+function discoverBareCompanyRoots(zip){
+ const roots=new Map();
+ for(const raw of Object.keys(zip.files)){
+  const p=pathNorm(raw);
+  if(p.split("/").some(x=>x==="."||x===".."))throw Error("Caminho inseguro dentro da DEF: "+raw);
+  const match=p.match(/^(.+?)\/(editor|in|out)\/[^/]+\.sii$/i);
+  if(!match)continue;
+  const root=match[1],segments=root.split("/");
+  if(segments.length>5||!segments.every(x=>/^[a-z0-9_.-]+$/i.test(x)))continue;
+  const key=root.toLowerCase();
+  if(!roots.has(key))roots.set(key,{root,editor:0,in:0,out:0});
+  roots.get(key)[match[2].toLowerCase()]++;
+ }
+ // Um modelo pode conter pasta "editor", mas uma DEF Company deve demonstrar
+ // empresas com editor e permissões de carga no mesmo diretório.
+ return new Set([...roots].filter(([,r])=>r.editor>0&&(r.in>0||r.out>0)).map(([key])=>key));
+}
+const companyPath=(raw,bareRoots=null)=>{
  const p=pathNorm(raw);
- // Aceita def/company/ e company/ na raiz ou dentro de pastas de exportação.
- // O sufixo após company/ não é modificado; os caminhos da saída são normalizados.
  if(p.split("/").some(x=>x===".."||x==="."))throw Error("Caminho inválido no ZIP de empresas: "+raw);
- const m=p.match(/(?:^|\/)(?:def\/)?company\/(.+)$/i);
- if(m)return"def/company/"+m[1];
- const reg=p.match(/(?:^|\/)(company(?:\.[a-z0-9_-]+)?\.sii)$/i);
- return reg?"def/"+reg[1]:null;
+ // Formato canônico com prefixo explícito.
+ const canonical=p.match(/(?:^|\/)(?:def\/)?company\/(.+)$/i);
+ if(canonical)return"def/company/"+canonical[1];
+ // ZIPs gerados a partir do interior de "company/" perdem seu prefixo.
+ // Só aceitar diretorios confirmados por editor E in/out.
+ if(bareRoots?.size){
+  const match=p.match(/^(.+?)\/(editor|in|out)\/([^/]+\.sii)$/i);
+  if(match&&bareRoots.has(match[1].toLowerCase())){
+   const id=match[1].split("/").pop();
+   return"def/company/"+id+"/"+match[2]+"/"+match[3];
+  }
+  const permanent=p.match(/^(.+?)\.sii$/i);
+  if(permanent&&bareRoots.has(permanent[1].toLowerCase())){
+   return"def/company/"+permanent[1].split("/").pop()+".sii";
+  }
+ }
+ const manifest=p.match(/(?:^|\/)(company(?:\.[a-z0-9_-]+)?\.sii)$/i);
+ return manifest?"def/"+manifest[1]:null;
 };
 const cargoPath=raw=>{
  const p=pathNorm(raw);
@@ -205,11 +237,14 @@ const companyMeta=path=>{
  return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null;
 };
 function mapFingerprint(map){
- // Identificador estável do conteúdo da Company, sem depender do nome de ZIP.
- // Evita sobrescrever arquivos de dois mapas diferentes chamados "def_company.zip".
+ // Mesmo caminho em mapas diferentes não significa necessariamente mesmo conteúdo.
+ // Inclui CRC32/tamanho da entrada no identificador determinístico.
  const signature=[
    ...[...map.companies.values()].map(c=>c.id).sort(),
-   ...[...map.files.values()].map(x=>x.p.toLowerCase()).sort()
+   ...[...map.files.values()].map(x=>{
+    const meta=x.obj?._data;
+    return x.p.toLowerCase()+":"+(meta?.crc32??"unknown")+":"+(meta?.uncompressedSize??"unknown");
+   }).sort()
  ].join("|");
  let hash=2166136261;
  for(let i=0;i<signature.length;i++){
@@ -250,23 +285,25 @@ async function resolveEntries(zip,kind){
  while(stack.length){
   const frame=stack.pop();
   const nested=[];
+  const bareRoots=kind==="map"?discoverBareCompanyRoots(frame.zip):null;
+  let matchedHere=0;
   for(const [raw,obj] of Object.entries(frame.zip.files)){
    if(obj.dir)continue;
    if(++entryCount>ARCHIVE_LIMITS.maxEntries)throw Error("Pacote muito grande: limite de "+ARCHIVE_LIMITS.maxEntries+" entradas alcançado. Selecione só a DEF do mapa.");
    if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
      throw Error("Caminho inseguro encontrado no arquivo "+frame.source);
    const name=pathNorm(raw);
-   const canonical=isRelevant(name);
+   const canonical=kind==="map"?companyPath(name,bareRoots):isRelevant(name);
    if(canonical){
-    matched.push([name,obj,frame.source]);
+    matched.push([name,obj,frame.source,bareRoots]);
+    matchedHere++;
    }else if(frame.level<ARCHIVE_LIMITS.maxDepth&&ARCHIVE_FILE.test(name)){
     nested.push({name,obj});
    }
   }
-  // Não vasculhar dezenas de outras modificações embutidas se já existe
-  // uma DEF Company reconhecível no arquivo principal.
-  // Mesmo que existam definições na raiz, validar e juntar outras DEF internas;
-  // caminhos repetidos serão rejeitados na etapa de normalização.
+  // Quando este nível já tem Company, os SCS/ZIP extras não fazem parte
+  // dela. Evita colisões e leitura custosa de mods de veículos/modelos.
+  if(matchedHere>0)continue;
   for(const entry of nested){
    if(++nestedCount>ARCHIVE_LIMITS.maxNestedFiles)
      throw Error("O arquivo contém muitos pacotes internos. Separe a DEF do mapa (máximo "+ARCHIVE_LIMITS.maxNestedFiles+").");
@@ -481,8 +518,8 @@ function farmCargoEvidence(c,type){
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  const resolution=await resolveEntries(zip,"map");
- for(const [raw,obj,source] of resolution.matched){
-  const p=companyPath(raw);if(!p)continue;
+ for(const [raw,obj,source,bareRoots] of resolution.matched){
+  const p=companyPath(raw,bareRoots);if(!p)continue;
   const key=p.toLowerCase();if(files.has(key))throw Error("Definição duplicada: "+p+" (em "+files.get(key).source+" e "+source+"). Remova um dos pacotes repetidos; nenhuma entrada será sobrescrita.");
   files.set(key,{p,obj,source});
   const m=companyMeta(p);if(!m)continue;
@@ -493,7 +530,7 @@ async function loadMap(zip){
  }
  if(!companies.size){
   const sample=Object.keys(zip.files).filter(p=>!zip.files[p].dir).slice(0,6);
-  throw Error("Não encontrei definições de empresas. A DEF deve ter company/<id>/editor, in ou out (ou def/company/). Pacotes internos ZIP/SCS examinados: "+resolution.nestedCount+"; HashFS não legíveis: "+resolution.skippedHashFS+". Arquivos visíveis: "+(sample.join(", ")||"nenhum")+". Selecione a DEF Company, não apenas o mapa/modelos.");
+  throw Error("Nenhuma DEF Company reconhecida. Estruturas aceitas: def/company/<empresa>/editor|in|out, company/<empresa>/editor|in|out ou <empresa>/editor|in|out (editor e IN/OUT no mesmo diretório). Pacotes internos lidos: "+resolution.nestedCount+"; HashFS não legíveis: "+resolution.skippedHashFS+". Exemplos do ZIP: "+(sample.join(", ")||"nenhum")+".");
  }
  let i=0;
  for(const v of files.values()){
@@ -1047,5 +1084,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic};
+window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
