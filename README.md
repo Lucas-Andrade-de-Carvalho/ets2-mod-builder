@@ -59,6 +59,20 @@ Na aba **Criação de Companys**, a relação `OUT` significa **local que pode e
 
 A presença de um mesmo setor em IN e OUT é intencional para representar transferência entre depósitos, revenda e redistribuição. Se o mapa não identifica a atividade econômica da empresa, a análise pode manter o ponto sem frete em vez de inventar atividade. A identificação de modelos, carrocerias e ofertas ainda deve ser testada no jogo.
 
+## Estratégia de redistribuição econômica ampliada
+
+A aba **Criação de Companys** passou a considerar múltiplas maneiras legítimas de expedir mercadorias:
+
+- **Siderurgia / metalurgia:** bobinas industriais de nome genérico (ex. `Bobinas 2`) podem partir de empresas do setor; essa interpretação é identificada como **hipótese**, porque o nome não prova o conteúdo físico 3D da bobina.
+- **Agroinsumos e cooperativas:** adubo pode partir de distribuidores rurais ou, com evidência contextual, de cooperativas que comercializem insumos.
+- **Transportadoras e armazéns:** expedição e recebimento de cimento, materiais industriais, madeira e pluma de algodão somente em setores compatíveis.
+- **Transferências entre construtoras:** quando não existir fábrica, depósito ou distribuidor identificável, e houver pelo menos duas empresas de obras, admite-se uma expedição limitada como hipótese de remanejamento de estoque. A hipótese aparece no diagnóstico.
+- **Permissões antigas de carga:** são usadas apenas como indício pontual se a empresa tiver um conjunto pequeno de IN/OUT e a carga antiga corresponder semanticamente à mercadoria. Isso evita herdar a distribuição genérica e indiscriminada das DEF Companies originais.
+- **Identificação por ID:** `agrotec`, `arralog` e `acero` são tratados de maneira setorial conservadora; empresas sem indício continuam desconhecidas.
+- **Preservação de maiúsculas e minúsculas:** as pastas das empresas mantêm a grafia do mapa ao gerar os novos `IN/OUT`.
+
+O diagnóstico mostra exemplos de IDs de origem/destino e marca quaisquer hipóteses. Se um mapa realmente não tiver ao menos um par plausível, a carga permanece excluída; não são fabricadas empresas novas. A versão não garante fretes no ETS2 sem teste no jogo.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
