@@ -111,6 +111,19 @@ Em caso de ausência de evidência, a empresa permanece como desconhecida. O rel
 
 **Restrições rígidas de exportação:** somente empresas do arquivo de entrada e somente IDs de cargas lidos na DEF do Librelato podem receber novas permissões de `IN/OUT`. Os cargos/empresas do catálogo nunca são adicionados ao mapa. O pacote gerado remove as antigas relações do ZIP fornecido e preserva os arquivos editor. Se houver regras antigas dentro de outro mod/arquivo de mapa, é necessário substituí-lo ou remover o conflito à parte. O catálogo classifica empresas, mas não certifica que o mercado esteja funcionando dentro do ETS2.
 
+## Como o catálogo é consultado num mapa misto
+
+A verificação ocorre **para cada empresa que já existe na DEF do mapa**, no início da distribuição, e **não** durante a criação de uma lista de novas empresas. Para cada uma:
+
+1. Confere correspondência **exata** do ID da empresa com uma referência SCS (incluindo aliases documentados). Se não houver, confere correspondência exata do nome exibido.
+2. Se a empresa for reconhecida como SCS, utiliza o setor do catálogo na análise da carga específica, registrando a fonte e o tipo de correspondência (ID/nome).
+3. Se não for reconhecida, utiliza a classificação baseada no ID/nome brasileiro e nas permissões antigas `cargo:` de IN/OUT do mapa. Nunca atribui o setor de outra empresa apenas por semelhança.
+4. Simula IN e OUT **exclusivamente** para empresas no mapa; o catálogo jamais adiciona locais, e os únicos cargos novos de associação são IDs presentes na DEF enviada do Librelato.
+
+Exemplo: um mapa com 300 empresas customizadas mais EuroAcres e Kaarfor usa os setores SCS somente nessas duas quando reconhecidas; as 300 continuam classificadas pelos próprios arquivos. `EuroAcresBR` não vira automaticamente `EuroAcres`.
+
+O relatório indica quantas empresas existentes foram consultadas, quantas correspondências exatas houve e quais cargos envolveram locais SCS. No teste sintético com 9 empresas (7 customizadas + 2 SCS), o arquivo foi gerado com ambas grades, sem criar empresas ou IDs de carga fora dos arquivos de entrada.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
