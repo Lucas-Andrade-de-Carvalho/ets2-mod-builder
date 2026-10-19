@@ -12,6 +12,11 @@ const root=path.resolve(__dirname,"..");
 const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 assert.equal(scripts.length,3,"O HTML precisa conter biblioteca, motor antigo e motor Company");
+const engineSource=fs.readFileSync(path.join(root,"creator_tab.js"),"utf8");
+const catalogSource=fs.readFileSync(path.join(root,"scs_company_catalog.js"),"utf8");
+assert.equal(scripts[2].trim(),engineSource.trim(),"O motor incorporado no HTML está desatualizado");
+assert.ok(engineSource.includes(catalogSource.trim()),"O catálogo incorporado no motor está desatualizado");
+
 
 const moduleShim={exports:{}};
 new Function("module","exports","setImmediate",scripts[0])(
