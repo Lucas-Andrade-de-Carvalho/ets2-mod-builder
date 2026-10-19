@@ -145,6 +145,16 @@ O histórico `cargo:` da DEF pode oferecer evidência específica mesmo com um I
 
 **Teste automatizado desta regra:** 8 tipos de carga com dois graus de carroceria e mapa sem fábricas, 14 verificações de IN/OUT/editor, ausência de cargas antigas e download do SCS confirmado. Ainda sem validação dentro do ETS2.
 
+## Validação com arquivos reais — Minas Gerais / Librelato
+
+O cenário real enviado foi analisado com `def_company.zip` e `def(2).zip`. A DEF do mapa possui **370 empresas com associações IN/OUT**; a DEF Librelato define **23 cargas personalizadas**. A Company de validação foi montada a partir dos IDs existentes, com **556 relações IN/OUT** e **23 cargas com origem e destino**. O pacote ZIP/SCS passou na verificação de integridade e não contém IDs de cargas ou empresas novos.
+
+**Cimento:** não existe uma carga antiga `cimento` na Company original, mas os `IN/OUT` revelam revendedores/depósitos que movimentam tijolos, tubos de concreto, madeira, areia e brita. O motor passou a reconhecer lojas com movimentação real de múltiplos materiais; depósitos exclusivamente de areia/brita não são automaticamente liberados para cimento. As três versões (carga6, carga10, carga11) receberam possíveis expedidores existentes.
+
+**Relatório:** referências antigas comprovadas deixam de aparecer como “hipóteses”. A análise detalhada permanece disponível em um painel recolhido. Incertezas genuínas (p. ex. conteúdo de `Bobinas 2` e `Pallets Alto TESTE`) são mantidas como observações técnicas, nunca apresentadas como validação plena.
+
+**Limite importante:** os 556 vínculos e a integridade do arquivo são validações estáticas; não houve teste no mercado de fretes dentro do ETS2. Prioridade de mod, compatibilidade dos modelos de reboque, DEF principal e combinação de cargas precisam de teste in-game antes de chamar o pacote de definitivo.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
