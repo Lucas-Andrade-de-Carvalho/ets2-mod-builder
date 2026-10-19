@@ -111,6 +111,24 @@ async function makesFixtures(){
 
 async function main(){
  const f=await makesFixtures();
+
+ // Regressões: IDs opacos com provas nos cargos IN/OUT não devem ser
+ // descartados só porque a empresa não tem nome de fábrica conhecido.
+ function opaque(id,dir,goods){
+  return {id,name:"",role:"desconhecida",old:goods.map((unit,i)=>({dir,unit,stem:"arquivo_"+i}))};
+ }
+ for(const [type,dir,goods] of [
+  ["granito","out",["granito"]],["granito","in",["marmore"]],
+  ["racao","out",["racao"]],["racao","out",["farelo"]],
+  ["algodao","out",["pluma"]],["bobinas_industriais","out",["bobinas"]]
+ ]){
+  const candidate=opaque("empresa_sem_nome",dir,goods);
+  assert.ok(creator.relatedCargoCandidate(candidate,type,dir),
+   "Evidência explícita não reconhecida: "+type+" "+dir);
+ }
+ const incompatible={...opaque("posto01","out",["granito"]),role:"posto"};
+ assert.equal(creator.relatedCargoCandidate(incompatible,"granito","out"),null,"Posto não pode expedir granito");
+
  for(const [label,archive,expectedDepth] of [
   ["raiz",f.map,0],
   ["ZIP/SCS aninhado",f.wrapper,2]
