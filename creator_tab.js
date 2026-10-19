@@ -7,7 +7,7 @@ const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
 ["adubo",/\b(adubos?|fertilizantes?)\b/],["algodao",/\b(pluma|algodao)\b/],["batata",/\bbatatas?\b/],["laranja",/\blaranjas?\b/],
 ["cerveja",/\b(cervejas?|beer)\b/],["cimento",/\bcimento\b/],["tijolo",/\btijolo[s]?\b/],["granito",/\b(granito|granitto)\b/],
-["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["palete_vazio",/\b(paletes? vazios?|pallets? vazios?|paletes? de madeira|pallets? de madeira)\b/],
+["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["bobinas_industriais",/\bbobinas?\b/],["palete_vazio",/\b(paletes? vazios?|pallets? vazios?|paletes? de madeira|pallets? de madeira)\b/],
 ["paletizado",/\b(paletes?|pallets?)\b/]
 ];
 const sectors=[
@@ -34,8 +34,9 @@ const sectors=[
 ["hortifruti",/(ceasa|hortifruti|entreposto de frutas)/],
 ["alimentos",/(distribuidora de alimentos|atacado de alimentos)/],
 ["siderurgica",/(siderurgica|siderurgia|gerdau|usiminas|csn)/],
-["metalurgica",/(metalurgica|industria mecanica|fabrica de maquinas)/],
+["metalurgica",/(metalurgica|industria mecanica|fabrica de maquinas|centro de servicos do aco|comercio de aco)/],
 ["paletes",/(fabrica de paletes|fabricante de pallets)/],
+["agroinsumos",/(loja agropecuaria|insumos agricolas|distribuidora de adubo|casa do agricultor|agrotec)/],
 ["posto",/(posto|refinaria|petrobras|fuel station)/],
 ["concessionaria",/(concessionaria|dealership|revenda de carros)/],
 ["correios",/(correios|correio|sedex)/]
@@ -46,7 +47,7 @@ const flows={
  milho:{out:["fazenda"],in:["silo","moinho","racoes","pecuaria"]},
  soja:{out:["fazenda"],in:["silo","moinho"]},
  sorgo:{out:["fazenda"],in:["silo","racoes","pecuaria"]},
- adubo:{out:["adubeira","materiais","logistica"],in:["fazenda","pecuaria","materiais","logistica"]},
+ adubo:{out:["adubeira","agroinsumos","materiais","logistica"],in:["fazenda","pecuaria","agroinsumos","materiais","logistica"]},
  madeira:{out:["serraria","floresta","materiais","logistica"],in:["obras","materiais","logistica","metalurgica"]},
  algodao:{out:["fazenda","algodoeira","logistica"],in:["textil","algodoeira","logistica"]},
  cimento:{out:["cimenteira","materiais","logistica"],in:["obras","materiais","logistica"]},
@@ -57,10 +58,11 @@ const flows={
  granito:{out:["pedreira","mineracao","materiais","logistica"],in:["obras","materiais","logistica"]},
  racao:{out:["racoes","logistica","alimentos"],in:["fazenda","pecuaria","logistica","alimentos"]},
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
+ bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","obras","logistica"]},
  // Paletes vazios: fabricantes e operadores logísticos expedem, várias empresas recebem.
  palete_vazio:{out:["paletes","logistica","materiais"],in:["fazenda","racoes","moinho","serraria","textil","ceramica","materiais","cervejaria","bebidas","hortifruti","alimentos","supermercado","logistica"]},
  // Pallets Alto/mercadoria paletizada sem conteúdo detalhado: uso amplo, mas não irrestrito.
- paletizado:{out:["fazenda","pecuaria","racoes","moinho","adubeira","serraria","textil","algodoeira","ceramica","cimenteira","materiais","cervejaria","bebidas","hortifruti","alimentos","siderurgica","metalurgica","paletes","logistica"],in:["fazenda","pecuaria","racoes","moinho","serraria","textil","algodoeira","ceramica","materiais","obras","cervejaria","bebidas","hortifruti","alimentos","supermercado","siderurgica","metalurgica","logistica"]}
+ paletizado:{out:["fazenda","pecuaria","racoes","moinho","adubeira","agroinsumos","serraria","textil","algodoeira","ceramica","cimenteira","materiais","cervejaria","bebidas","hortifruti","alimentos","siderurgica","metalurgica","paletes","logistica"],in:["fazenda","pecuaria","racoes","moinho","serraria","textil","algodoeira","ceramica","materiais","obras","cervejaria","bebidas","hortifruti","alimentos","supermercado","siderurgica","metalurgica","logistica"]}
 };
 const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[_-]/g," ");
 const pathNorm=s=>String(s).replace(/\\/g,"/").replace(/^\/+/,"").replace(/^\.\/+/,"");
@@ -91,7 +93,9 @@ const known=(id,label)=>{
  ["siderurgica",/^(belgo|gerdau|usiminas|siderurgica)/],
  ["mineracao",/^(mineracao|mineradora|mining)/],
  ["materiais",/^(materiais|materialconstrucao|matconstrucao|matconst|depositomaterial|depomaterial|casamaterial)/],
- ["logistica",/^(transportadora|centrologistico|centrodistribuicao|armazemgeral|logistica)/],
+ ["metalurgica",/^(acero(?:[0-9]+)?$|metalurgica|acos?comercial)/],
+ ["agroinsumos",/^(agrotec|agroinsumos|insumosagricolas)/],
+ ["logistica",/^(arralog|transportadora|centrologistico|centrodistribuicao|armazemgeral|logistica)/],
  ["posto",/^(posto|refinaria|petrobras|ipiranga)/],
  ["concessionaria",/^(concessionaria|dealer)/],
  ["correios",/^(correios|sedex)/],
@@ -99,7 +103,7 @@ const known=(id,label)=>{
  for(const [r,re] of prefixes)if(re.test(flat))return r;
  return"desconhecida";
 };
-const ALLOWED_ROLES=new Set(["mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
+const ALLOWED_ROLES=new Set(["agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
 function applyCompanyOverrides(map){
  const field=el("companyCreateOverrides"),raw=field?.value?.trim()||"";
  const accepted=[],errors=[];
@@ -255,39 +259,89 @@ async function loadCargo(zip){
  for(const c of cargos.values())c.trailer=trailer.get(c.id)||new Set();
  return{files,cargos,manifests}
 }
-function simulate(map,cargo){
- const byRole=new Map(),plan=new Map(),skipped=[],proof=[];
- for(const c of map.companies.values()){
-  if(!byRole.has(c.role))byRole.set(c.role,[]);
-  byRole.get(c.role).push(c);
+
+const LEGACY_EVIDENCE={
+ cimento:/^(?:vg_)?(?:cement|cimento|cement_b|cement_pallet|cement_bag)$/i,
+ tijolo:/^(?:vg_)?(?:bricks?|tijolos?|tijolaria|ceramic_bricks?)$/i,
+ granito:/^(?:vg_)?(?:granite|granito|marble|marmore|marble_blocks?)$/i,
+ adubo:/^(?:vg_)?(?:fertilizers?|fertilizantes?|adubo|ureia|fertilizer_b)$/i,
+ madeira:/^(?:vg_)?(?:lumber|wood|timber|planks?|boards?|logs?|toras?|madeira)$/i,
+ algodao:/^(?:vg_)?(?:cotton|cotton_bales?|algodao|pluma|cottonlint)$/i,
+ bobinas_industriais:/^(?:vg_)?(?:steel_coils?|steelcoil|metal_coils?|bobinas?|chapa_aco|rolled_steel)$/i
+};
+function legacyEvidence(c,type,dir){
+ // Um catálogo antigo com dezenas de cargos atribuídos a tudo não é prova de atividade.
+ if(!c||!Array.isArray(c.old)||!c.old.length||c.old.length>14)return false;
+ if(new Set(c.old.map(x=>x.stem)).size>10)return false;
+ const re=LEGACY_EVIDENCE[type];
+ return !!re&&c.old.some(x=>x.dir===dir&&re.test(x.stem));
+}
+const BUILDING_REDEPLOY=new Set(["cimento","tijolo","madeira","granito"]);
+function getCandidateMap(map){
+ const companies=[...map.companies.values()],byRole=new Map();
+ for(const c of companies){if(!byRole.has(c.role))byRole.set(c.role,[]);byRole.get(c.role).push(c)}
+ return{companies,byRole};
+}
+function chooseEndpoints(map,type,spec){
+ const {companies,byRole}=getCandidateMap(map);
+ const out=new Set(spec.out.flatMap(r=>byRole.get(r)||[]));
+ const inn=new Set(spec.in.flatMap(r=>byRole.get(r)||[]));
+ const notes=[];
+ // Trabalhar com as permissões antigas como evidência pontual, não como regra a preservar.
+ let historyOut=0,historyIn=0;
+ for(const c of companies){
+  if(legacyEvidence(c,type,"out")){if(!out.has(c)){out.add(c);historyOut++}}
+  if(legacyEvidence(c,type,"in")){if(!inn.has(c)){inn.add(c);historyIn++}}
  }
+ if(historyOut||historyIn)notes.push("histórico limitado: "+historyOut+" expedidores e "+historyIn+" recebedores adicionais");
+ // Canteiros e construtoras podem redistribuir estoque para outras obras,
+ // mas apenas quando não há expedidor melhor. Nunca tornam posto ou concessionária fonte.
+ if(!out.size&&BUILDING_REDEPLOY.has(type)){
+  const works=(byRole.get("obras")||[]).filter(c=>c.id&&c.evidence!=="nenhuma");
+  if(works.length>=2){out.add(works[0]);notes.push("remanejamento eventual de estoque entre construtoras/obras; hipótese logística")}
+ }
+ // Cooperativas agrícolas costumam fornecer insumos, mas não basta ser silo de grãos.
+ if(!out.size&&type==="adubo"){
+  const coop=(byRole.get("silo")||[]).filter(c=>/coop|cooperativ|agro/.test(norm(c.id+" "+c.name)));
+  for(const c of coop.slice(0,3))out.add(c);
+  if(coop.length)notes.push("fornecimento de insumos por cooperativa; hipótese de estoque");
+ }
+ return{out:[...out],inn:[...inn],notes}
+}
+
+function simulate(map,cargo){
+ const plan=new Map(),skipped=[],proof=[],assumptions=[];
  const grouped={alta:0,baixa:0,outros:0};
  for(const info of cargo.cargos.values()){
   const type=kind(info.name),spec=flows[type],problems=[];
-  if(!spec)problems.push("identificação de carga incerta");
+  if(!spec)problems.push("identificação econômica da carga incerta");
   if(!info.body.length)problems.push("sem body_types");
   const allowed=info.body.filter(b=>!info.trailer.size||info.trailer.has(b));
   if(!allowed.length)problems.push("carroceria incompatível");
-  const out=spec?spec.out.flatMap(r=>byRole.get(r)||[]):[];
-  const inn=spec?spec.in.flatMap(r=>byRole.get(r)||[]):[];
-  if(!out.length&&spec)problems.push("sem empresa expedidora compatível (setor: "+spec.out.join(" / ")+")");
-  if(!inn.length&&spec)problems.push("sem empresa recebedora compatível (setor: "+spec.in.join(" / ")+")");
-  // Uma loja, armazém ou distribuidor pode receber e expedir a mesma mercadoria.
-  // Isso não exige venda apenas a consumidores nem impõe cadeia em etapas.
+  const chosen=spec?chooseEndpoints(map,type,spec):{out:[],inn:[],notes:[]};
+  let outs=chosen.out,ins=chosen.in;
+  if(!outs.length&&spec)problems.push("sem expedidor compatível ou estoque comprovado (setores: "+spec.out.join(" / ")+")");
+  if(!ins.length&&spec)problems.push("sem recebedor compatível ou estoque comprovado (setores: "+spec.in.join(" / ")+")");
+  if(outs.length===1&&ins.length===1&&outs[0].id===ins[0].id)
+   problems.push("única origem e destino são a mesma empresa; nenhuma viagem identificável");
   if(problems.length){skipped.push({id:info.id,name:info.name,problems});continue}
-  for(const c of out){
-   if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});
-   plan.get(c.id).out.add(info.id);
+  if(type==="bobinas_industriais")chosen.notes.push("Bobinas 2 tratadas provisoriamente como bobinas industriais; conteúdo 3D não confirmado");
+  if(type==="paletizado")chosen.notes.push("paletes de conteúdo não identificado: distribuição industrial/comercial plausível");
+  if(chosen.notes.length)assumptions.push({id:info.id,notes:chosen.notes});
+  for(const c of outs){
+    if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});
+    plan.get(c.id).out.add(info.id);
   }
-  for(const c of inn){
-   if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});
-   plan.get(c.id).in.add(info.id);
+  for(const c of ins){
+    if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});
+    plan.get(c.id).in.add(info.id);
   }
   for(const b of allowed)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
-  proof.push({id:info.id,name:info.name,type,origins:out.length,destinations:inn.length});
+  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes});
  }
- return{plan,skipped,grouped,proof}
+ return{plan,skipped,grouped,proof,assumptions}
 }
+
 const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"\"\n }\n}\n";
 const emptySii=name=>"SiiNunit\n{\n cargo_def : ."+(name.match(/^[a-z0-9_]{1,60}$/i)?name:"v11empty")+" {\n  cargo: \"\"\n }\n}\n";
 async function build(map,cargo,sim){
