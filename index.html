@@ -724,18 +724,36 @@ function buildCandidate(companies,labels,templates,cargoData,bodyToken,overrides
  return{report,plan}
 }
 function safeReport(data){
- const active=data.report.filter(x=>x.ok),empty=[...data.companies.values()].filter(c=>{const p=data.plan.get(c.id);return !p.in.size&&!p.out.size}).length;
- let html='<p><b>'+data.companies.size+'</b> empresas · <b>'+active.length+'/'+data.report.length+'</b> cargas com origem, destino, template e compatibilidade comprovados · <b>'+empty+'</b> empresas sem cargas.</p>';
- html+='<div class="details-list">';
+ const active=data.report.filter(x=>x.ok);
+ const empty=[...data.companies.values()].filter(c=>{const p=data.plan.get(c.id);return !p.in.size&&!p.out.size}).length;
+ const counts=new Map(),roles=new Map();
+ for(const c of data.companies.values())roles.set(c.role,(roles.get(c.role)||0)+1);
+ for(const c of data.report)for(const cause of c.notes)counts.set(cause,(counts.get(cause)||0)+1);
+ const failures=[...counts].sort((a,b)=>b[1]-a[1]);
+ let html='<p><b>'+data.companies.size+'</b> empresas · <b>'+active.length+'/'+data.report.length+'</b> cargas liberadas · <b>'+empty+'</b> empresas sem carga.</p>';
+ html+='<div class="notice"><b>Diagnóstico da análise</b>';
+ if(!active.length)html+='<p>Zero cargas liberadas. O sistema não exportará uma DEF vazia. Veja os motivos abaixo para corrigir os arquivos ou a classificação.</p>';
+ html+='<p><b>Empresas reconhecidas por ramo:</b> '+[...roles].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([k,n])=>safe(k)+': '+n).join(' · ')+'</p>';
+ html+='<p><b>Problemas encontrados:</b> '+(failures.length?failures.map(([k,n])=>'<span class="tag extra">'+n+'× '+safe(k)+'</span>').join(' '):'nenhum')+'</p>';
+ html+='<p><b>DEF das cargas:</b> '+data.cargoData.entryCount+' arquivos no ZIP; '+data.cargoData.found.size+' cargo_data identificadas; '+data.cargoData.registration.size+' registros de inclusão; '+data.cargoData.manifestNames.length+' manifestos candidatos.</p>';
+ if(!data.cargoData.manifestNames.length)html+='<p>Aviso: nenhum cargo.librelato.sii foi encontrado ou reconhecido. Confira se o ZIP contém a DEF verdadeira.</p>';
+ if(data.cargoData.invalid.length)html+='<p><b>Definições de carga não reconhecidas:</b> '+data.cargoData.invalid.slice(0,8).map(safe).join('; ')+'</p>';
+ html+='<p><b>Templates válidos:</b> '+data.templates.accepted.size+' IN/OUT. '+data.templates.errors.length+' rejeitados.</p>';
+ if(data.templates.errors.length)html+='<p>'+data.templates.errors.slice(0,5).map(safe).join('; ')+'</p>';
+ if(failures.some(([x])=>x.includes("expedidor")||x.includes("destinatário")))html+='<p><b>Corrigir atividades:</b> os IDs de empresas do mapa podem ser abreviados. Use "Correções manuais de atividade" só para empresas cujo ramo você conhece.</p>';
+ if(failures.some(([x])=>x.includes("body_type")))html+='<p><b>Corrigir carroceria:</b> confira o valor de body_types nos arquivos de carga; o token deve ser exatamente igual.</p>';
+ if(failures.some(([x])=>x.includes("templates")))html+='<p><b>Corrigir templates:</b> selecione as DEF Companies 1 e 2 originais e examine os nomes das cargas dentro de company/.../in e out.</p>';
+ if(failures.some(([x])=>x.includes("cargo_data")||x.includes("include")))html+='<p><b>Corrigir DEF das cargas:</b> use o ZIP extraído do Librelato com seus cargo_data e o arquivo cargo.librelato.sii.</p>';
+ html+='</div>';
+ html+='<div class="details-list" style="margin-top:12px">';
  for(const x of data.report){
-  html+='<div class="detail"><b>'+safe(x.id)+" — "+safe(x.label)+'</b><br><span class="muted">'+safe(x.kind)+'</span><br>';
+  html+='<div class="detail"><b>'+safe(x.id)+' — '+safe(x.label)+'</b><br><span class="muted">'+safe(x.kind)+'</span><br>';
   if(x.ok)html+='<span style="color:#9be5c6">Liberada</span> · '+x.orig.length+' expedidores, '+x.dest.length+' destinatários<br><small>OUT: '+safe(x.orig.join(", "))+'<br>IN: '+safe(x.dest.join(", "))+'</small>';
   else html+='<span style="color:#ffabb4">Não atribuída</span><br>'+safe(x.notes.join("; "));
   html+='</div>';
  }
  html+='</div>';
- if(data.templates.errors.length)html+='<p class="notice">'+data.templates.errors.length+' templates foram rejeitados por estrutura inválida.</p>';
- html+='<p class="muted small">A compatibilidade foi comparada por body_types da carga. A SCS 1.54 também exige correspondência de método/modelo de carregamento no reboque; essa etapa depende de teste no ETS2.</p>';
+ html+='<p class="muted small">Validação de templates e body_types não garante, por si só, fretes visíveis dentro do ETS2. É necessário testar também métodos de carregamento e configuração do reboque.</p>';
  return html
 }
 function describeError(e){return e?.message||String(e)}
@@ -760,10 +778,10 @@ async function analyze(){
   progress("Auditando as empresas e os fluxos…",75);await yieldUI();
   const overrides=parseOverrides(el("v10-overrides").value);
   const plan=buildCandidate(scan.companies,labels,templates.accepted,cargoData,bodyToken,overrides);
-  V.scan={...scan,plan:plan.plan,report:plan.report,templates,mapZip,mapName:map.name,bodyToken,labels,companies:scan.companies};
+  V.scan={...scan,plan:plan.plan,report:plan.report,templates,cargoData,mapZip,mapName:map.name,bodyToken,labels,companies:scan.companies};
   el("v10-report").innerHTML=safeReport({...V.scan,templates});
   const enabled=plan.report.filter(x=>x.ok).length;
-  progress("Auditoria concluída: "+enabled+" carga(s) liberada(s).",100);
+  progress(enabled?"Auditoria concluída: "+enabled+" carga(s) liberada(s).":"Auditoria concluída: 0 cargas liberadas. Consulte o diagnóstico logo abaixo para saber por quê.",100);
   el("v10-download").disabled=enabled===0;
  }catch(err){if(V.token===token){progress("Erro: "+describeError(err),0);el("v10-report").textContent=describeError(err)}}
  finally{if(V.token===token){el("v10-cancel").disabled=true;el("v10-analyze").disabled=false}}
