@@ -16,13 +16,14 @@ O gerador usa somente **empresas existentes na DEF do mapa** e **IDs de carga ex
 
 O leitor detecta definições em:
 
-- `company/<empresa>/in/`, `out/`, `editor/`
-- `def/company/<empresa>/in/`, `out/`, `editor/`
-- Os mesmos caminhos **dentro de subpastas de um ZIP**.
+- `company/<empresa>/in/`, `out/`, `editor/`.
+- `def/company/<empresa>/in/`, `out/`, `editor/`.
+- **Diretamente `<empresa>/editor/`, `<empresa>/in/` e `<empresa>/out/`**, quando o ZIP foi criado de dentro da pasta `company/` (como `alc_cle/editor/clementina.sii`).
+- `def/<empresa>/...` ou os mesmos caminhos **dentro de subpastas de um ZIP**.
 - Pacotes **ZIP/SCS ZIP dentro de outro ZIP/SCS**, em até três níveis, com limites para evitar processamento excessivo.
 - `cargo/`, `def/cargo/`, `vehicle/` e manifestos de carga do Librelato, também em pacotes aninhados.
 
-**Limite:** não é possível ler um `.scs` binário em formato nativo **HashFS** com JSZip. Ele precisa ser extraído previamente usando ferramenta compatível. Um arquivo contendo apenas `map/`, `model/` ou `prefab/` não é uma DEF Company. Pacotes com caminhos duplicados são recusados, nunca sobrescritos silenciosamente.
+**Limite:** não é possível ler um `.scs` binário em formato nativo **HashFS** com JSZip. Ele precisa ser extraído previamente usando ferramenta compatível. Um arquivo contendo apenas `map/`, `model/` ou `prefab/` não é uma DEF Company. Pacotes com caminhos duplicados são recusados, nunca sobrescritos silenciosamente. Arquivos sem o prefixo `company/` devem ter pelo menos um `editor/*.sii` e um `in/*.sii` ou `out/*.sii` para não confundir pastas de modelos com empresas. ZIP/SCS internos desnecessários são ignorados se já existir uma DEF Company identificada no nível atual.
 
 ## Regras de precisão
 
@@ -55,6 +56,6 @@ Com Node.js 20+:
 node tests/company-creator.smoke.cjs
 ```
 
-O teste usa DEFs sintéticas e confirma: ZIP na raiz, arquivos aninhados, erros HashFS, caminhos repetidos, cargo_data, grade alta/baixa, integridade dos arquivos `editor`, ausência de empresas/cargas inventadas e download.
+O teste usa DEFs sintéticas e confirma: Company sem prefixo como `alc_cle/editor`, ZIP na raiz e arquivos aninhados, rejeição de modelos sem Company, erros HashFS, caminhos repetidos, mudanças no conteúdo do mapa, cargo_data, grade alta/baixa, integridade dos arquivos `editor`, ausência de empresas/cargas inventadas e download.
 
 **Ainda é necessária a validação in-game no ETS2** com o mod principal do Librelato e a Company específica do mapa. Não mantenha as antigas DEF Companies genéricas 1 e 2 competindo pelas mesmas definições; confira `game.log` e ofertas do mercado após alterar a ordem/prioridade dos mods.
