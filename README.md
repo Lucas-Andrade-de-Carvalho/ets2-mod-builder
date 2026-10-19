@@ -46,6 +46,19 @@ As rejeições de carga especificam quais setores de origem e destino ainda não
 - Um SCS complementar não elimina arquivos que ainda estão dentro **de outro mod**. Para substituição completa, desative a Company-base antiga separada ou resolva o conflito dentro do mapa.
 - É necessário validar o mod dentro do ETS2, conferir mercado de fretes e `game.log`.
 
+## Logística flexível: expedição e recebimento
+
+Na aba **Criação de Companys**, a relação `OUT` significa **local que pode expedir a mercadoria**, não necessariamente a fábrica que a produziu. `IN` significa **local que pode recebê-la**, não apenas consumidor final.
+
+- Cimento: cimenteiras, lojas e depósitos de materiais, e centros logísticos compatíveis podem **expedir**; obras, lojas e centros logísticos podem **receber**.
+- Tijolos: olarias **ou depósitos** expedem; obras e depósitos recebem.
+- Granito: pedreiras, mineradoras e depósitos expedem; obras e lojas de materiais recebem.
+- Bebidas, hortifrúti e outros produtos: distribuição e revenda podem atuar nos dois sentidos.
+- `Pallets Alto TESTE` é tratado como mercadoria **paletizada** sem conteúdo detalhado, habilitada em vários setores comercialmente plausíveis. Isso **não** equivale a paletes vazios e não libera automaticamente postos de combustível, Correios ou outros negócios sem indício de expedição.
+- Silos agrícolas recebem grãos; não se habilita OUT de grãos em silos indiscriminadamente, para evitar combinações não fundamentadas como silo→silo.
+
+A presença de um mesmo setor em IN e OUT é intencional para representar transferência entre depósitos, revenda e redistribuição. Se o mapa não identifica a atividade econômica da empresa, a análise pode manter o ponto sem frete em vez de inventar atividade. A identificação de modelos, carrocerias e ofertas ainda deve ser testada no jogo.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
