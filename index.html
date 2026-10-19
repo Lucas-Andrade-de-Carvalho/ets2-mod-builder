@@ -681,9 +681,10 @@ const flows={
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
  bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","siderurgica","logistica"]},
  // Paletes vazios: fabricantes e operadores logísticos expedem, várias empresas recebem.
- palete_vazio:{out:["paletes","logistica","materiais"],in:["fazenda","racoes","moinho","serraria","textil","ceramica","materiais","cervejaria","bebidas","hortifruti","alimentos","supermercado","logistica"]},
- // Pallets Alto/mercadoria paletizada sem conteúdo detalhado: uso amplo, mas não irrestrito.
- paletizado:{out:["fazenda","pecuaria","racoes","moinho","adubeira","agroinsumos","serraria","textil","algodoeira","ceramica","cimenteira","materiais","cervejaria","bebidas","hortifruti","alimentos","siderurgica","metalurgica","paletes","logistica"],in:["fazenda","pecuaria","racoes","moinho","serraria","textil","algodoeira","ceramica","materiais","obras","cervejaria","bebidas","hortifruti","alimentos","supermercado","siderurgica","metalurgica","logistica"]}
+ palete_vazio:{out:["madeireira","serraria","paletes"],in:["cooperativa","logistica","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]},
+ // Pallets Alto do Librelato: a logística será centrada no setor madeireiro,
+ // sujeita à confirmação da natureza exata da carga no modelo 3D.
+ paletizado:{out:["madeireira","serraria","paletes"],in:["cooperativa","logistica","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]}
 };
 const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[_-]/g," ");
 const pathNorm=s=>String(s).replace(/\\/g,"/").replace(/^\/+/,"").replace(/^\.\/+/,"");
@@ -1236,6 +1237,68 @@ function chooseEndpoints(map,type,spec){
  return{out:[...out],inn:[...inn],notes,categoryReasons,directOut:specificOut.length,directIn:specificIn.length};
 }
 
+// Paletes têm distribuição intencionalmente restrita, para não dominarem
+// o mercado de fretes por centenas de combinações entre empresas.
+// Limites aplicados somente às cargas cujo tipo é palete/paletizado.
+// Não alterar cargas paletizadas de mercadoria identificada (ex.: cimento pallet).
+const PALLET_MAX_ORIGINS=3;
+const PALLET_MAX_DESTINATIONS=6;
+const PALLET_MAX_DESTINATIONS_PER_SECTOR=2;
+const PALLET_OUT_PATTERN=/(?:^|[^a-z0-9])(?:paletes?|pallets?|supaletes|pallet_?wood|wood_?pallets?)(?:$|[^a-z0-9])/i;
+const PALLET_PACKING_PATTERN=/(?:^|[^a-z0-9])(?:paletes?|pallets?|supaletes|caixa_?vazia|embalagens?|caixotes?|pallet_?wood)(?:$|[^a-z0-9])/i;
+const PALLET_WOOD_PATTERN=/(?:^|[^a-z0-9])(?:madeira|lumber|wood|tabuas?|ripas?|serragem|sawmill|planks?|toras?)(?:$|[^a-z0-9])/i;
+function hasCargoInDirection(company,direction,pattern){
+ return(company.old||[]).some(x=>x.dir===direction&&
+  pattern.test(String(x.unit||x.stem||"").toLowerCase()));
+}
+function rankedLimitedCompanies(items,count,score,perSector=Infinity){
+ const ranked=[...items].sort((a,b)=>score(b)-score(a)||a.id.localeCompare(b.id));
+ const result=[],sectorCount=new Map();
+ for(const co of ranked){
+  const n=sectorCount.get(co.role)||0;
+  if(n>=perSector)continue;
+  result.push(co);sectorCount.set(co.role,n+1);
+  if(result.length>=count)break;
+ }
+ return result;
+}
+function palletEndpoints(map,type){
+ const firms=[...map.companies.values()];
+ const excludes=new Set(["posto","correios","concessionaria","cana","desconhecida"]);
+ const woodRoles=new Set(["madeireira","serraria","paletes"]);
+ const recipients=new Set(["cooperativa","logistica","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]);
+ // Não aceitar transportadora como origem só por trabalhar com transporte:
+ // apenas com paletes realmente declarados em OUT pela própria DEF.
+ const originCandidates=firms.filter(c=>
+  !excludes.has(c.role)&&
+  (woodRoles.has(c.role)||
+   (c.role==="logistica"&&hasCargoInDirection(c,"out",PALLET_OUT_PATTERN))));
+ const sources=rankedLimitedCompanies(originCandidates,PALLET_MAX_ORIGINS,c=>
+  (hasCargoInDirection(c,"out",PALLET_OUT_PATTERN)?100:0)+
+  (c.role==="madeireira"?60:c.role==="serraria"?55:c.role==="paletes"?50:0)+
+  (hasCargoInDirection(c,"out",PALLET_WOOD_PATTERN)?25:0)+
+  (hasCargoInDirection(c,"in",PALLET_WOOD_PATTERN)?12:0));
+ const sourceIds=new Set(sources.map(c=>c.id));
+ const destinationCandidates=firms.filter(c=>
+  !sourceIds.has(c.id)&&recipients.has(c.role)&&!excludes.has(c.role));
+ const destinations=rankedLimitedCompanies(destinationCandidates,PALLET_MAX_DESTINATIONS,c=>
+  (hasCargoInDirection(c,"in",PALLET_OUT_PATTERN)?100:0)+
+  (hasCargoInDirection(c,"in",PALLET_PACKING_PATTERN)?45:0)+
+  (c.role==="logistica"?25:0)+
+  (c.role==="cooperativa"?20:0)+
+  (c.role==="materiais"?15:0)+
+  (c.role==="supermercado"?12:0)+
+  (c.old?.length?8:0),PALLET_MAX_DESTINATIONS_PER_SECTOR);
+ const notes=[
+  "paletes: origens prioritariamente madeireiras/serrarias; até "+
+    PALLET_MAX_ORIGINS+" expedidores e "+PALLET_MAX_DESTINATIONS+
+    " recebedores (máx. "+PALLET_MAX_ORIGINS*PALLET_MAX_DESTINATIONS+
+    " pares teóricos) para não dominar o mercado",
+ ];
+ if(type==="paletizado")notes.push("nome da carga genérico: verificar no modelo 3D se são paletes de madeira");
+ return{out:sources,inn:destinations,notes,categoryReasons:[],directOut:sources.filter(c=>hasCargoInDirection(c,"out",PALLET_OUT_PATTERN)).length,directIn:destinations.filter(c=>hasCargoInDirection(c,"in",PALLET_OUT_PATTERN)).length};
+}
+
 function simulate(map,cargo){
  // Verifica cada empresa PRESENTE no mapa ao iniciar a distribuição.
  // Se houver coincidência exata com empresa SCS, usa o setor do catálogo.
@@ -1249,7 +1312,7 @@ function simulate(map,cargo){
   if(!info.body.length)problems.push("sem body_types");
   const allowed=info.body.filter(b=>!info.trailer.size||info.trailer.has(b));
   if(!allowed.length)problems.push("carroceria incompatível");
-  const chosen=spec?chooseEndpoints(map,type,spec):{out:[],inn:[],notes:[]};
+  const chosen=spec?((type==="paletizado"||type==="palete_vazio")?palletEndpoints(map,type):chooseEndpoints(map,type,spec)):{out:[],inn:[],notes:[]};
   let outs=chosen.out,ins=chosen.inn;
   if(!outs.length&&spec)problems.push("não foi encontrada nenhuma empresa com atividade ou categoria de expedição compatível: "+spec.out.join(" / "));
   if(!ins.length&&spec)problems.push("sem recebedor compatível ou estoque comprovado (setores: "+spec.in.join(" / ")+")");
@@ -1257,7 +1320,7 @@ function simulate(map,cargo){
    problems.push("única origem e destino são a mesma empresa; nenhuma viagem identificável");
   if(problems.length){skipped.push({id:info.id,name:info.name,problems});continue}
   if(type==="bobinas_industriais")chosen.notes.push("Bobinas 2 tratadas provisoriamente como bobinas industriais; conteúdo 3D não confirmado");
-  if(type==="paletizado")chosen.notes.push("paletes de conteúdo não identificado: distribuição industrial/comercial plausível");
+  // A limitação da carga de paletes já consta das observações do setor madeireiro.
   if(outs.every(c=>c.role==="logistica"))chosen.notes.push("expedição baseada em capacidade logística presumida; estoque específico não confirmado");
  if(chosen.notes.length)assumptions.push({id:info.id,notes:chosen.notes});
   for(const c of outs){
