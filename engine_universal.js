@@ -4,7 +4,7 @@
 const el=id=>document.getElementById(id),ui={map:el("mapFile"),cargo:el("cargoFile"),run:el("generate"),message:el("status"),bar:el("bar"),report:el("report"),detail:el("detail")};
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
-["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["sorgo",/\bsorgo\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
+["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
 ["adubo",/\b(adubo|fertilizante)\b/],["algodao",/\b(pluma|algodao)\b/],["batata",/\bbatata\b/],["laranja",/\blaranja\b/],
 ["cerveja",/\b(cerveja|beer)\b/],["cimento",/\bcimento\b/],["tijolo",/\btijolo[s]?\b/],["granito",/\bgranito\b/],
 ["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["palete",/\b(palete vazio|palete de madeira)\b/]
@@ -173,7 +173,7 @@ async function build(map,cargo,sim){
  for(const [co,ps] of sim.plan)for(const dir of ["in","out"])for(const id of ps[dir])generate.set("def/company/"+co+"/"+dir+"/"+id+".sii",cargoSii(id));
  for(const x of map.files.values()){
   const m=companyMeta(x.p),gen=generate.has(x.p);
-  if(m&&(m.type==="in"||m.type==="out")){if(!gen)put(x.p,emptySii(m.name.replace(/\.sii$/i,"")))}
+  if(m&&(m.type==="in"||m.type==="out")){if(!generate.has(x.p.toLowerCase()))put(x.p,emptySii(m.name.replace(/\.sii$/i,"")))}
   else put(x.p,x.obj)
  }
  for(const [p,t] of generate)put(p,t);
