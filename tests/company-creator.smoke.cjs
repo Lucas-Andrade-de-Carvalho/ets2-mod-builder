@@ -123,10 +123,44 @@ async function main(){
  packageWithHashFS.file("mod.scs",new Uint8Array([83,67,83,35,0,1,2]));
  await assert.rejects(creator.loadMap(packageWithHashFS),/HashFS não legíveis/);
 
+ // Empresa sem "company/" na raiz: exatamente como os ZIPs com alc_cle/editor.
+ const bare=new JSZip();
+ bare.file("alc_cle/editor/clementina.sii","SiiNunit\n{}\n");
+ bare.file("alc_cle/in/tanquevazio.sii",'SiiNunit\n{\n cargo_def: .c { cargo: "cargo.tanquevazio" }\n}\n');
+ bare.file("alc_cle/out/alcoil.sii",'SiiNunit\n{\n cargo_def: .c { cargo: "cargo.alcoil" }\n}\n');
+ bare.file("alc_cle.sii",'SiiNunit\n{\ncompany_permanent: .test {}\n}\n');
+ const bareMap=await creator.loadMap(bare);
+ assert.equal(bareMap.companies.size,1);
+ assert.ok(bareMap.files.has("def/company/alc_cle/editor/clementina.sii"));
+ assert.ok(bareMap.files.has("def/company/alc_cle/in/tanquevazio.sii"));
+ assert.ok(bareMap.files.has("def/company/alc_cle/out/alcoil.sii"));
+ assert.ok(bareMap.files.has("def/company/alc_cle.sii"));
+
+ // Prioriza a Company já encontrada na raiz e não mistura outros mods aninhados.
+ const mixed=new JSZip();
+ mixed.file("def/company/fazenda01/editor/city.sii","SiiNunit\n{}\n");
+ mixed.file("pacote.scs",f.originalMap);
+ const mixedResult=await creator.loadMap(mixed);
+ assert.equal(mixedResult.companies.size,1);
+ assert.equal(mixedResult.archivesRead,0);
+
+ // Dois caminhos diferentes que geram o mesmo destino não podem sobrescrever.
  const conflict=new JSZip();
  conflict.file("def/company/fazenda01/editor/city.sii","SiiNunit\n{}\n");
- conflict.file("pacote.scs",f.originalMap);
+ conflict.file("company/fazenda01/editor/city.sii","SiiNunit\n{}\n");
  await assert.rejects(creator.loadMap(conflict),/duplicada/);
+
+ const noCompany=new JSZip();
+ noCompany.file("vehicle/truck/editor/part.sii","SiiNunit\n{}\n");
+ await assert.rejects(creator.loadMap(noCompany),/Nenhuma DEF Company reconhecida/);
+
+ const changed=new JSZip();
+ changed.file("alc_cle/editor/clementina.sii","SiiNunit\n{}\n");
+ changed.file("alc_cle/out/alcoil.sii",'SiiNunit\n{\n cargo_def: .c { cargo: "cargo.combustivel" }\n}\n');
+ changed.file("alc_cle/in/tanquevazio.sii",'SiiNunit\n{\n cargo_def: .c { cargo: "cargo.tanquevazio" }\n}\n');
+ const fingerprintOriginal=await creator.mapFingerprint(bareMap);
+ const fingerprintChanged=await creator.mapFingerprint(await creator.loadMap(changed));
+ assert.notEqual(fingerprintOriginal,fingerprintChanged,"Identificador deve refletir conteúdo");
 
  const cargoOuter=await JSZip.loadAsync(f.cargoFile);
  assert.equal((await creator.loadCargo(cargoOuter)).cargos.size,2);
@@ -163,6 +197,6 @@ async function main(){
  assert.match(filename,/\.scs$/i);
  element("companyCreateMapFile").listeners.change();
  assert.equal(element("companyCreateDownload").hidden,true,"Troca de arquivo invalida download");
- console.log("OK: ZIP raiz e duplamente aninhado; HashFS; colisão; carrocerias; integridade SCS; download.");
+ console.log("OK: DEF alc_cle sem prefixo; ZIP raiz/aninhado; HashFS; colisão; fingerprint; carrocerias; integridade SCS; download.");
 }
 main().catch(error=>{console.error(error);process.exitCode=1});
