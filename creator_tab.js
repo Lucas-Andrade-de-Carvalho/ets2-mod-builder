@@ -806,9 +806,9 @@ function relatedCargoCandidate(c,type,dir){
   const feeds=/^(?:racao|racoes|xerem|farelo|animal_?feed|feedmeal|salmineral|suplementomineral)$/i;
   if(type==="granito"){
    const n=num(goods,stones);
-   if(dir==="out"&&(n>=2||(n&&/marmor|pedra|granito|miner/.test(name)))){
+   if(dir==="out"&&(n>=2||(n&&/marmor|pedra|granito|miner/.test(name))||(n&&c.old.some(x=>x.dir==="out"&&x.unit&&stones.test(String(x.unit).toLowerCase()))))){
     score=86+6*n;reason="mercadorias de pedra/mármore documentadas no OUT";
-   }else if(dir==="in"&&n>=2){score=71+5*n;reason="mercadorias de pedra/mármore no IN"}
+   }else if(dir==="in"&&(n>=2||(n&&c.old.some(x=>x.dir==="in"&&x.unit&&stones.test(String(x.unit).toLowerCase()))))){score=71+5*n;reason="mercadorias de pedra/mármore no IN"}
   }
   if(type==="racao"&&num(goods,feeds)){
    score=95+5*num(goods,feeds);
@@ -824,7 +824,7 @@ function relatedCargoCandidate(c,type,dir){
   }
   if(type==="bobinas_industriais"){
    const metal=num(goods,RELATED_FREIGHT_PATTERNS.steel);
-   if(metal>=2||(metal&&/metal|sider|ferro|aco|steel|belgo/.test(name))){
+   if(metal>=2||(metal&&/metal|sider|ferro|aco|steel|belgo/.test(name))||(metal&&c.old.some(x=>x.dir===dir&&x.unit&&/^(?:bobinas?|steel_?coils?|metal_?coils?)$/i.test(x.unit)))){
     score=82+5*metal;reason="materiais metálicos comprovados no "+dir.toUpperCase();
    }
   }
@@ -1247,5 +1247,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,relatedCargoCandidate,relatedCargoFallback,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
