@@ -112,6 +112,32 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // As empresas devem ser selecionadas pelos produtos em IN/OUT, não por
+ // supostos ramos derivados do nome e do ID.
+ const cargoFlows=[
+  {id:"carga14",name:"Pedra Granito 1",type:"granito",from:"granitto",to:"marble"},
+  {id:"carga15",name:"Pedra Granito 2",type:"granito",from:"granitto",to:"marble"},
+  {id:"carga17",name:"Ração Mineral Laranja",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga18",name:"Xerém",type:"racao",from:"xerem",to:"animal_feed"},
+  {id:"carga19",name:"Sacaria Ração",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga20",name:"Sacaria Ração 2",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga23",name:"Sorgoalto",type:"sorgo",from:"corn",to:"soybeans"},
+  {id:"carga5",name:"Carga Pluma de Algodão",type:"algodao",from:"cotton",to:"cotton"},
+  {id:"carga9",name:"Bobinas 2",type:"bobinas_industriais",from:"chapaaco",to:"ferroconst"}
+ ];
+ for(const [i,item] of cargoFlows.entries()){
+  const made=(id,dir,units)=>({id,folder:id,role:"desconhecida",old:units.map((unit,k)=>({
+   p:"def/company/"+id+"/"+dir+"/old"+k+".sii",dir,stem:"old"+k,unit
+  }))});
+  const src=made("empresa_origem"+i,"out",item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from]);
+  const dest=made("empresa_destino"+i,"in",item.id==="carga9"?["chapaaco","ferroconst"]:[item.to]);
+  const map={companies:new Map([[src.id,src],[dest.id,dest]])};
+  const endpoints=creator.chooseEndpoints(map,item.type,creator.flows[item.type],item.id);
+  assert.ok(endpoints.out.some(x=>x.id===src.id),"Sem origem provada "+item.id);
+  assert.ok(endpoints.inn.some(x=>x.id===dest.id),"Sem destino provado "+item.id);
+ }
+
+
  // Evidência IN/OUT deve superar ID/nome que aparenta outro setor.
  for(const [dir,type,unit] of [["out","racao","racao"],["out","granito","granito"],
   ["in","granito","marmore"],["out","bobinas_industriais","bobinas"],
