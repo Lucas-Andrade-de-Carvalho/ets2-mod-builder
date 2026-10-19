@@ -910,7 +910,7 @@ async function build(map,cargo,sim){
   for(const dir of ["in","out"])for(const id of ps[dir]){
    const folder=map.companies.get(co)?.folder||co;
    const p="def/company/"+folder+"/"+dir+"/"+id+".sii";
-   generated.set(p.toLowerCase(),cargoSii(id));
+   generated.set(p,cargoSii(id));
   }
  }
  let count=0;
@@ -934,7 +934,8 @@ async function build(map,cargo,sim){
   if(!obj)throw Error("Faltou carga gerada: "+p);
   if(!/cargo\s*:\s*"cargo\./i.test(await obj.async("text")))throw Error("Cargo não registrado corretamente em "+p);
  }
- for(const p of removed)if(check.file(p)&&!generated.has(p.toLowerCase()))throw Error("Cargo original permaneceu no arquivo: "+p);
+ const generatedLower=new Set([...generated.keys()].map(p=>p.toLowerCase()));
+ for(const p of removed)if(check.file(p)&&!generatedLower.has(p.toLowerCase()))throw Error("Cargo original permaneceu no arquivo: "+p);
  for(const x of map.files.values())if(companyMeta(x.p)?.type==="editor"&&!check.file(x.p))throw Error("Arquivo editor perdido: "+x.p);
  return{blob,count:generated.size,removed:removed.length}
 }
