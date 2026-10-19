@@ -167,6 +167,18 @@ A classificação por categoria opera **somente entre empresas reais do mapa**. 
 
 Teste automatizado de integração com dois ZIPs sintéticos: cimento e tijolos expedidos por lojas reconhecidas via areia/brita/pisos/telhas; construções recebem; empresas incompatíveis não expedem; arquivo SCS reaberto e botão de download acionado; nenhum ID extra inserido.
 
+## Revisão de precisão baseada na DEF real — 19/10/2026
+
+O gerador agora usa esta ordem de decisão, **por empresa e por direção IN/OUT**:
+
+1. **Cargo específico confirmado:** lê o identificador `cargo: "cargo.<id>"` da Company original e dá preferência às empresas que já expedem ou recebem essa mesma mercadoria.
+2. **Categoria correlata quando faltar origem/destino:** cimento pode partir de lojas que expedem areia, brita, pisos, telhas, tubos e ferragens; lojas/obras que recebem insumos relacionados podem ser destino.
+3. **Ramo econômico como último recurso:** a classificação por nome só serve quando há pouca evidência de mercadorias; o motor verifica compatibilidade e bloqueia empresas explicitamente incompatíveis.
+
+Foi corrigida uma divergência real do mapa: a empresa `acero` tem saída de `adubo`, `fertilizante`, `equipagrico` e `racao`, e deve ser interpretada como **fornecedora de insumos agrícolas**, não metalúrgica pelo nome. Também foram corrigidos os seguintes casos: fazendas com produtos específicos não são automaticamente produtoras de outros cultivos; silo não vira expedidor indiscriminado de grãos; telha não equivale a tijolo; mineração que só tem areia/brita não vira fornecedora de granito; marmoraria com histórico comprovado de tijolos pode revendê-los.
+
+**Testes de regressão:** 19 verificações de setor e relações por carga, mais 16 verificações de exportação do SCS, incluindo download, preservação de editor e nenhuma empresa/cargo criado. Testes estruturais com ZIPs sintéticos; ainda é obrigatório verificar as ofertas no ETS2 com os arquivos reais.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
