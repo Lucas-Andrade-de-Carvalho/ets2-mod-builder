@@ -40,6 +40,12 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 #creator .metric{padding:9px}
 @media(max-width:750px){.creator-uploads{grid-template-columns:1fr}#creator .audit{flex-direction:column;gap:3px}}
 
+
+#creator .creator-manual{background:#0d1520;border:1px solid var(--line);padding:12px;border-radius:10px;margin-top:14px}
+#creator .creator-manual summary{font-weight:650}
+#creator .creator-manual p{margin:10px 0}
+#creator .creator-manual textarea{width:100%;box-sizing:border-box;background:#0a111b;color:var(--text);border:1px solid #30445d;border-radius:7px;padding:11px;font:13px/1.5 ui-monospace,Consolas,monospace}
+
 </style>
 </head>
 <body>
@@ -90,7 +96,14 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
     <input type="file" id="companyCreateCargoFile" accept=".zip,.scs">
    </label>
   </div>
-  <div class="creator-actions">
+  
+  <details class="creator-manual">
+   <summary>Corrigir identificação de empresas (opcional)</summary>
+   <p class="muted small">Se algum ID não revela o tipo de empresa, informe apenas os ramos que você tem certeza. Isso não adiciona empresas ou cargas fictícias.</p>
+   <textarea id="companyCreateOverrides" spellcheck="false" rows="4" placeholder="ID_da_empresa = obras&#10;outro_ID = serraria"></textarea>
+   <p class="muted small">Exemplos de ramos: fazenda, silo, pecuaria, racoes, moinho, adubeira, serraria, ceramica, cimenteira, pedreira, obras, materiais, supermercado, hortifruti, cervejaria, siderurgica, metalurgica, textil, alimentos.</p>
+  </details>
+<div class="creator-actions">
    <button id="companyCreateGenerate" class="btn primary">Analisar e gerar Company</button>
    <button id="companyCreateSaveDiagnostic" class="btn" hidden>Baixar diagnóstico TXT</button>
    <span class="muted small">Sem escolher mapa ou grade manualmente</span>
@@ -541,7 +554,6 @@ $("defFiles").addEventListener('change',async e=>{state.defFiles=[...e.target.fi
 window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Erro interno: '+e.message,'bad')});
 </script>
 <script>
-
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail")};
@@ -612,17 +624,18 @@ const known=(id,label)=>{
  ["racoes",/^(racoes?|feedmill|nutricaoanimal)/],
  ["adubeira",/^(fertilizantes?|adubeira)/],
  ["fazenda",/^(faz(?:enda|[_0-9])|farm|finca|hacienda|agropec|agricol|agricult|rural|plantacao|plantation|cultivo|rancho)/],
- ["pecuaria",/^(pecuaria|granja|ganaderia|gado)/],
+ ["pecuaria",/^(arnasuino|pecuaria|granja|ganaderia|gado)/],
  ["floresta",/^(florestal|reflorestamento)/],
- ["serraria",/^(serraria|serradero|sawmill)/],
+ ["serraria",/^(araserr|serraria|serradero|sawmill)/],
  ["moinho",/^(moinho|molino)/],
  ["hortifruti",/^(ceasa|hortifruti)/],
  ["ceramica",/^(olaria|ceramica|tijolaria)/],
  ["cimenteira",/^(cimenteira|fabrica.?cimento)/],
- ["obras",/^(construtora|construcao|construction|obra|canteiro)/],
+ ["obras",/^(abconstru|construtora|construcao|construc|construction|obra|canteiro)/],
  ["pedreira",/^(pedreira|quarry|cantera|marmoraria)/],
  ["cervejaria",/^(ambev|heineken|cervejaria)/],
  ["supermercado",/^(supermercado|hipermercado|atacadao|assai|carrefour)/],
+ ["siderurgica",/^(belgo|gerdau|usiminas|siderurgica)/],
  ["posto",/^(posto|refinaria|petrobras|ipiranga)/],
  ["concessionaria",/^(concessionaria|dealer)/],
  ["correios",/^(correios|sedex)/],
@@ -630,6 +643,25 @@ const known=(id,label)=>{
  for(const [r,re] of prefixes)if(re.test(flat))return r;
  return"desconhecida";
 };
+const ALLOWED_ROLES=new Set(["fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
+function applyCompanyOverrides(map){
+ const field=el("companyCreateOverrides"),raw=field?.value?.trim()||"";
+ const accepted=[],errors=[];
+ if(!raw)return{accepted};
+ for(const [i,row]of raw.split(/\r?\n/).entries()){
+  const line=row.trim();if(!line||line.startsWith("#"))continue;
+  const m=line.match(/^([a-z0-9_-]+)\s*[=:]\s*([a-z_]+)$/i);
+  if(!m){errors.push("Linha "+(i+1)+": formato esperado ID = setor");continue}
+  const id=m[1].toLowerCase(),role=m[2].toLowerCase();
+  if(!ALLOWED_ROLES.has(role)){errors.push("Setor inválido: "+role);continue}
+  const c=map.companies.get(id);
+  if(!c){errors.push("Empresa não encontrada no mapa: "+id);continue}
+  c.role=role;c.evidence="classificação informada pelo usuário";
+  accepted.push(id+" = "+role)
+ }
+ if(errors.length)throw Error("Corrija o campo de classificação: "+errors.slice(0,5).join("; "));
+ return{accepted}
+}
 const kind=name=>{
  const x=norm(name)
    .replace(/\b(soja|milho|sorgo)alto\b/g,"$1 alto")
@@ -779,8 +811,8 @@ function simulate(map,cargo){
   if(!allowed.length)problems.push("carroceria incompatível");
   const out=spec?spec.out.flatMap(r=>byRole.get(r)||[]):[];
   const inn=spec?spec.in.flatMap(r=>byRole.get(r)||[]):[];
-  if(!out.length)problems.push("sem produtor reconhecido");
-  if(!inn.length)problems.push("sem destinatário reconhecido");
+  if(!out.length&&spec)problems.push("sem produtor identificado (setor: "+spec.out.join(" / ")+")");
+  if(!inn.length&&spec)problems.push("sem destinatário identificado (setor: "+spec.in.join(" / ")+")");
   if(out.some(a=>inn.some(b=>a.id===b.id)))problems.push("empresa consta em origem e destino");
   if(problems.length){skipped.push({id:info.id,name:info.name,problems});continue}
   for(const c of out){if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});plan.get(c.id).out.add(info.id)}
@@ -841,6 +873,8 @@ function audit(map,cargo,sim){
  const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
  if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
  if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
+ const manual=companies.filter(c=>c.evidence==="classificação informada pelo usuário").length;
+ if(manual)warning.push(manual+" empresas classificadas manualmente.");
  if(!producers.length)warning.push("Nenhuma atividade produtora foi reconhecida neste mapa. Confira os IDs desconhecidos no diagnóstico.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  const reasons=new Map();
@@ -897,7 +931,7 @@ async function generate(){
  busy=true;ui.run.disabled=true;ui.report.innerHTML="";ui.detail.innerHTML="";latestDiagnostic=null;
  try{
   say("Identificando empresas do mapa…",8);
-  const map=await loadMap(await zipRead(one));await yieldUI();
+  const map=await loadMap(await zipRead(one));applyCompanyOverrides(map);await yieldUI();
   say("Identificando cargas e carrocerias…",28);
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
@@ -919,7 +953,6 @@ if(el("companyCreateSaveDiagnostic"))el("companyCreateSaveDiagnostic").addEventL
 for(const id of ["companyCreateMapFile","companyCreateCargoFile"])el(id).addEventListener("change",()=>{const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
 window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
 })();
-
 </script>
 </body>
 </html>
