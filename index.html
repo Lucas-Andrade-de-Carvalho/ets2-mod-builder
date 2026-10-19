@@ -933,6 +933,13 @@ function reconcileSectorWithEvidence(c){
    c.evidence="categoria agroinsumos inferida de OUT "+agInput.join(", ")+" e mercadorias agrícolas";
    return true;
  }
+ const metalGoods=["b_reforco","ferroconst","chapaaco","tubosmg","aramefar"].filter(x=>out.has(x));
+ if(c.role==="desconhecida"&&metalGoods.length>=2&&
+    [...incoming].some(x=>metalGoods.includes(x))){
+   c.role="metalurgica";
+   c.evidence="metalurgia identificada por IN/OUT de ferragens e chapas: "+metalGoods.join(", ");
+   return true;
+ }
  if(c.role==="desconhecida"&&out.has("racao")&&(incoming.has("milho")||incoming.has("soja")||incoming.has("feijao"))){
    c.role="racoes";c.evidence="fábrica/distribuidora de ração identificada por OUT ração e IN grãos";return true;
  }
