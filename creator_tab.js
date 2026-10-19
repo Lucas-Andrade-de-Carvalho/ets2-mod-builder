@@ -404,7 +404,7 @@ function audit(map,cargo,sim){
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
- [["Empresas",companies.length],["Cargas do Librelato",cargo.cargos.size],["Cargas rejeitadas",sim.skipped.length],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned]]
+ [["Empresas",companies.length],["Cargas do Librelato",cargo.cargos.size],["Cargas rejeitadas",sim.skipped.length],["Hipóteses auditadas",sim.assumptions.length],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
  (ranked.length?"<div class='warning'><b>Por que as cargas foram rejeitadas?</b><div style='margin-top:9px'>"+ranked.map(([reason,count])=>"<div style='padding:3px 0'><strong>"+count+"x</strong> "+escapeHTML(reason)+"</div>").join("")+"</div></div>":"")+
@@ -413,6 +413,9 @@ function audit(map,cargo,sim){
  ". Empresas ainda sem classificação (amostra): "+escapeHTML(exampleUnknown.join(", "))+ ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
  ui.detail.innerHTML="<details"+(sim.skipped.length===cargo.cargos.size?" open":"")+"><summary>Diagnóstico detalhado de cada carga</summary>"+
  "<p class='muted'>Cargas distribuídas (expedidores → recebedores): "+sim.proof.map(p=>escapeHTML(p.name)+": "+p.origins+" → "+p.destinations).join("; ")+"</p>"+
+ "<p class='muted'>Exemplos de relações do mapa (não garante oferta no ETS2):</p>"+
+ sim.proof.map(p=>"<div class='audit'><b>"+escapeHTML(p.name)+"</b><span>OUT: "+escapeHTML(p.sourceIds.slice(0,6).join(", "))+" | IN: "+escapeHTML(p.destIds.slice(0,6).join(", "))+"</span></div>").join("")+
+ (sim.assumptions.length?"<p class='warning'><b>Hipóteses usadas, sujeitas à confirmação:</b><br>"+sim.assumptions.map(p=>escapeHTML(p.id+": "+p.notes.join("; "))).join("<br>")+"</p>":"")+
  sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+
  "</details>";
 }
@@ -434,6 +437,8 @@ function createDiagnosticText(map,cargo,sim){
  }
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
+ rows.push("","CARGAS LIBERADAS E RAZÕES (ID | NOME | EXPEDIDORES | RECEBEDORES | HIPÓTESES)");
+ for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.notes.join("; ")].join(" | "));
  rows.push("","CARGAS DESTINADAS A EMPRESAS (ID | IN | OUT)");
  for(const [id,p] of sim.plan)rows.push([id,[...p.in].join(","),[...p.out].join(",")].join(" | "));
  return rows.join("\n");
