@@ -235,6 +235,8 @@ function isZipMagic(data){
  return ZIP_SIGNATURES.has(Array.from(a.slice(0,4),v=>v.toString(16).padStart(2,"0")).join(""));
 }
 async function zipRead(file){
+ if(!file||typeof file.slice!=="function")throw Error("Selecione um ZIP/SCS válido.");
+ if(file.size>700*1024*1024)throw Error("Arquivo maior que 700 MB. Envie apenas a DEF Company ou a DEF das cargas, sem modelos e texturas.");
  const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
  if(!isZipMagic(header)){
   throw Error("O arquivo "+file.name+" não é ZIP/SCS ZIP legível. Pacotes HashFS precisam ser extraídos com ferramenta compatível antes do upload.");
@@ -489,7 +491,10 @@ async function loadMap(zip){
   if(m.type==="editor")c.editor++;
   if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
  }
- if(!companies.size)throw Error("Nenhuma empresa reconhecida neste arquivo. Procure def/company/<empresa>/editor, in ou out na DEF do mapa. Foram examinados "+resolution.nestedCount+" ZIP/SCS internos"+(resolution.skippedHashFS?" ("+resolution.skippedHashFS+" HashFS não legíveis)":"")+". Um arquivo só com map/, model/ ou prefab/ não contém as definições Company.");
+ if(!companies.size){
+  const sample=Object.keys(zip.files).filter(p=>!zip.files[p].dir).slice(0,6);
+  throw Error("Não encontrei definições de empresas. A DEF deve ter company/<id>/editor, in ou out (ou def/company/). Pacotes internos ZIP/SCS examinados: "+resolution.nestedCount+"; HashFS não legíveis: "+resolution.skippedHashFS+". Arquivos visíveis: "+(sample.join(", ")||"nenhum")+". Selecione a DEF Company, não apenas o mapa/modelos.");
+ }
  let i=0;
  for(const v of files.values()){
   const m=companyMeta(v.p);if(!m||m.type!=="permanent")continue;
