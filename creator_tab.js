@@ -263,7 +263,8 @@ async function resolveEntries(zip,kind){
   }
   // Não vasculhar dezenas de outras modificações embutidas se já existe
   // uma DEF Company reconhecível no arquivo principal.
-  if(frame.level===0&&matched.length&&kind==="map")continue;
+  // Mesmo que existam definições na raiz, validar e juntar outras DEF internas;
+  // caminhos repetidos serão rejeitados na etapa de normalização.
   for(const entry of nested){
    if(++nestedCount>ARCHIVE_LIMITS.maxNestedFiles)
      throw Error("O arquivo contém muitos pacotes internos. Separe a DEF do mapa (máximo "+ARCHIVE_LIMITS.maxNestedFiles+").");
@@ -480,8 +481,8 @@ async function loadMap(zip){
  const resolution=await resolveEntries(zip,"map");
  for(const [raw,obj,source] of resolution.matched){
   const p=companyPath(raw);if(!p)continue;
-  const key=p.toLowerCase();if(files.has(key))throw Error("A DEF contém o mesmo caminho em mais de um pacote: "+p+". Separe o mapa das Companys duplicadas; o sistema não sobrescreve dados silenciosamente.");
-  files.set(key,{p,obj});
+  const key=p.toLowerCase();if(files.has(key))throw Error("Definição duplicada: "+p+" (em "+files.get(key).source+" e "+source+"). Remova um dos pacotes repetidos; nenhuma entrada será sobrescrita.");
+  files.set(key,{p,obj,source});
   const m=companyMeta(p);if(!m)continue;
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
@@ -497,7 +498,7 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
- let parsedRelations=0;
+ let parsedRelations=0,scannedRelations=0;
  for(const item of files.values()){
   const m=companyMeta(item.p);
   if(!m||(m.type!=="in"&&m.type!=="out"))continue;
@@ -510,7 +511,7 @@ async function loadMap(zip){
    const relation=c?.old.find(x=>x.p===item.p);
    if(relation){relation.unit=match[1].toLowerCase();parsedRelations++}
   }
-  if(parsedRelations%180===0)await yieldUI();
+  if(++scannedRelations%180===0)await yieldUI();
  }
  for(const c of companies.values())c.categories=categorizeExistingCompanyLoads(c);
  for(const c of companies.values()){
@@ -541,10 +542,10 @@ async function loadMap(zip){
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
  const resolution=await resolveEntries(zip,"cargo");
- for(const [raw,obj] of resolution.matched){
+ for(const [raw,obj,source] of resolution.matched){
   const p=cargoPath(raw);if(!p)continue;
-  if(files.has(p.toLowerCase()))throw Error("Caminho duplicado na DEF de cargas: "+p);
-  files.set(p.toLowerCase(),{p,obj})
+  if(files.has(p.toLowerCase()))throw Error("Definição de carga duplicada: "+p+" (em "+files.get(p.toLowerCase()).source+" e "+source+").");
+  files.set(p.toLowerCase(),{p,obj,source})
  }
  if(!files.size)throw Error("Não foi localizada a DEF das cargas. Procure cargo/, vehicle/ ou def/cargo/ dentro do ZIP/SCS, inclusive pacotes internos.");
  let i=0;
@@ -843,7 +844,6 @@ function simulate(map,cargo){
 }
 
 const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"\"\n }\n}\n";
-const emptySii=name=>"SiiNunit\n{\n cargo_def : ."+(name.match(/^[a-z0-9_]{1,60}$/i)?name:"v11empty")+" {\n  cargo: \"\"\n }\n}\n";
 async function build(map,cargo,sim){
  const out=new JSZip(),keys=new Set(),generated=new Map(),removed=[];
  async function put(p,v){
@@ -871,7 +871,7 @@ async function build(map,cargo,sim){
   if((++count)%150===0){say("Preservando arquivos do mapa… "+count,54);await yieldUI()}
  }
  for(const [p,t]of generated)await put(p,t);
- await put("description.txt","DEF Company personalizada por mapa. Requer mod principal do Librelato ativo. Nao usar DEF Companies genericas 1/2.\n");
+
  const blob=await out.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:4},streamFiles:true},info=>say("Compactando Company… "+Math.round(info.percent)+"%",62+Math.round(info.percent*.28)));
  const check=await JSZip.loadAsync(blob,{createFolders:false});
  for(const p of generated.keys()){
@@ -1003,7 +1003,7 @@ async function generate(){
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
-  if(!sim.plan.size)throw Error("Sem cadeias de carga verificadas. Confira o diagnóstico. Não vou gerar SCS vazio.");
+  if(!sim.plan.size)throw Error("Nenhuma relação IN/OUT válida encontrada. Consulte o diagnóstico de empresas e cargas; o site não gera pacotes vazios.");
   // Não inventar fretes para completar uma grade ausente neste mapa.
   // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);
@@ -1019,7 +1019,7 @@ async function generate(){
    removed:out.removed
   };
   updateDownloadUI();
-  say("Company do mapa gerada: "+out.count+" relações IN/OUT; "+sim.grouped.baixa+" cargas grade baixa, "+sim.grouped.alta+" grade alta. Clique em Baixar Company .SCS. Teste no ETS2 necessário.",100);
+  say("Company pronta: "+out.count+" associações IN/OUT, "+map.companies.size+" empresas analisadas, "+map.archivesRead+" arquivo(s) interno(s) processado(s). Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Clique em Baixar Company .SCS.",100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
