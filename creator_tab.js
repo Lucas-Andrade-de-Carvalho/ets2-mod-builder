@@ -556,7 +556,7 @@ function roleSuitableForSpecificCargo(c,type,direction){
  // Avalia o ramo e especializações reais, não a existência de uma fábrica.
  if(c.role==="cana"&&SPECIAL_CROPS.has(type))return false;
  if(c.role==="cana"&&type==="adubo")return direction==="in";
- if(c.role==="marmoraria"&&type==="tijolo")return false;
+ if(c.role==="marmoraria"&&type==="tijolo")return oldSpecificEvidence(c,"tijolo",direction)&&constructionStockEvidence(c).isRetailProfile;
  if(c.role==="fazenda"&&direction==="out"&&SPECIAL_CROPS.has(type)){
   const specific=specificFarmCrop(c);
   // Uma fazenda explicitamente de batatas não vira fornecedora de laranja e milho.
