@@ -1141,13 +1141,18 @@ function audit(map,cargo,sim){
  "<p class='muted'>Empresas reconhecidas por atividade: "+
  [...roles].filter(([k])=>k!=="desconhecida").sort((a,b)=>b[1]-a[1]).map(([role,n])=>escapeHTML(role)+": "+n).join(" · ")+
  ". Empresas ainda sem classificação (amostra): "+escapeHTML(exampleUnknown.join(", "))+ ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
+ const catalogCompanies=companies.filter(c=>c.catalog);
+ const catalogSummary="<details class='creator-catalog'><summary>Empresas do mapa identificadas pela base SCS ("+catalogCompanies.length+")</summary>"+
+ catalogCompanies.slice(0,120).map(c=>"<div class='creator-catalog-row'><b>"+escapeHTML(c.folder||c.id)+"</b><span>"+escapeHTML(c.catalog.name+" · "+c.catalog.role)+"</span><a href='"+escapeHTML(SCS_REFERENCE_URLS[c.catalog.source]||SCS_REFERENCE_URLS.wiki)+"' target='_blank' rel='noopener noreferrer'>Fonte</a></div>").join("")+
+ (catalogCompanies.length>120?"<p class='muted'>Exibindo os primeiros 120. O relatório TXT contém todos os registros.</p>":"")+
+ "</details>";
  ui.detail.innerHTML="<details"+(sim.skipped.length===cargo.cargos.size?" open":"")+"><summary>Diagnóstico detalhado de cada carga</summary>"+
  "<p class='muted'>Cargas distribuídas (expedidores → recebedores): "+sim.proof.map(p=>escapeHTML(p.name)+": "+p.origins+" → "+p.destinations).join("; ")+"</p>"+
  "<p class='muted'>Exemplos de relações do mapa (não garante oferta no ETS2):</p>"+
  sim.proof.map(p=>"<div class='audit'><b>"+escapeHTML(p.name)+"</b><span>OUT: "+escapeHTML(p.sourceIds.slice(0,6).join(", "))+" | IN: "+escapeHTML(p.destIds.slice(0,6).join(", "))+"</span></div>").join("")+
  (sim.assumptions.length?"<p class='warning'><b>Hipóteses usadas, sujeitas à confirmação:</b><br>"+sim.assumptions.map(p=>escapeHTML(p.id+": "+p.notes.join("; "))).join("<br>")+"</p>":"")+
  sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+
- "</details>";
+ "</details>"+catalogSummary;
 }
 
 let latestDiagnostic=null;
