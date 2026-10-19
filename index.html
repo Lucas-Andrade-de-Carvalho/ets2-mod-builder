@@ -754,11 +754,16 @@ async function exportArchive(){
   }
   if(!selectedPaths.size)throw new Error("Nenhuma relação econômica válida para exportar");
   for(let i=0;i<oldPaths.length;i++){
-   const path=oldPaths[i];z.remove(path);
+   const path=oldPaths[i];
+   let empty=null;
    if(mode==="overlay"){
-    const unit="SiiNunit\n{\n cargo_def : .v10empty {\n  cargo: \"\"\n }\n}\n";
-    z.file(path,unit,{createFolders:false});
+    const original=await z.files[path].async("text");
+    if(!/\bcargo_def\s*:/i.test(original)||!/^\s*cargo\s*:/mi.test(original))throw new Error("Sem cargo_def válido: "+path);
+    empty=original.replace(/(^\s*cargo\s*:\s*)(?:"[^"]*"|'[^']*'|[^\r\n]+)/mi,'$1""');
+    if(!/^\s*cargo\s*:\s*""/mi.test(empty))throw new Error("Falha ao neutralizar: "+path);
    }
+   z.remove(path);
+   if(empty!==null)z.file(path,empty,{createFolders:false});
    if(i%250===0){progress("Removendo referências antigas: "+(i+1)+"/"+oldPaths.length,20+Math.floor(25*i/Math.max(1,oldPaths.length)));await yieldUI()}
   }
   for(const [p,text] of selectedPaths)z.file(p,text,{createFolders:true});
