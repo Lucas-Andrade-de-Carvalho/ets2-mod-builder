@@ -739,6 +739,12 @@ async function exportArchive(){
   progress("Preparando a company específica…",10);await yieldUI();
   const z=await JSZip.loadAsync(el("v10-map-file").files[0],{createFolders:false});
   const oldPaths=Object.keys(z.files).filter(x=>cargoRel(x)&&!z.files[x].dir);
+  for(const [path,obj] of listEntries(z)){
+   if(!/^def\/company\/[^/]+\.sii$/i.test(normPath(path)))continue;
+   if((obj._data?.uncompressedSize||0)>1000000)throw new Error("Empresa com SII excessivo: "+path);
+   const text=await obj.async("text");
+   if(/^\s*(in_cargo|out_cargo)(?:\[\])?\s*:/mi.test(text))throw new Error("Empresa com lista de cargas legada, incompatível com substituição: "+path);
+  }
   const mode=el("v10-output-mode").value;
   const active=new Set(data.report.filter(x=>x.ok).map(x=>x.id));
   const selectedPaths=new Map();
