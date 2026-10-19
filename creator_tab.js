@@ -43,9 +43,9 @@ const sectors=[
 const flows={
  // O ETS2 usa OUT (expedição) e IN (recebimento), não apenas fábricas e consumidores.
  // Um distribuidor/depósito pode ter IN e OUT da mesma mercadoria.
- milho:{out:["fazenda","silo"],in:["silo","moinho","racoes","pecuaria"]},
- soja:{out:["fazenda","silo"],in:["silo","moinho"]},
- sorgo:{out:["fazenda","silo"],in:["silo","racoes","pecuaria"]},
+ milho:{out:["fazenda"],in:["silo","moinho","racoes","pecuaria"]},
+ soja:{out:["fazenda"],in:["silo","moinho"]},
+ sorgo:{out:["fazenda"],in:["silo","racoes","pecuaria"]},
  adubo:{out:["adubeira","materiais","logistica"],in:["fazenda","pecuaria","materiais","logistica"]},
  madeira:{out:["serraria","floresta","materiais","logistica"],in:["obras","materiais","logistica","metalurgica"]},
  algodao:{out:["fazenda","algodoeira","logistica"],in:["textil","algodoeira","logistica"]},
