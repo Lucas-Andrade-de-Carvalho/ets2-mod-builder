@@ -121,6 +121,36 @@ function zipRead(file){
  })
 }
 function entries(zip){return Object.entries(zip.files).filter(([,o])=>!o.dir)}
+
+function inferRoleFromHistoricalFreights(company){
+ // O histórico serve somente para identificar setor; nunca é copiado como logística.
+ const cargoSet=new Set(company.old.map(x=>x.stem.toLowerCase()));
+ if(!cargoSet.size||cargoSet.size>35)return null;
+ const has=(dir,re)=>company.old.some(x=>x.dir===dir&&re.test(x.stem.replace(/[_-]/g," ")));
+ const out=re=>has("out",re),inn=re=>has("in",re);
+ const grain=/(wheat|trigo|maize|corn|milho|soybean|soja|barley|cevada|sunflower|girassol|rapeseed|canola|sorghum|sorgo|rice|arroz|grain|graos)/i;
+ const crop=/(potat|batata|beet|beterraba|cotton|algodao|orange|laranja|vegetable|hortalica|fruit|fruta|cereals?|sementes?|seeds?)/i;
+ const fert=/(fertiliz|adubo|seed|sement|pesticid|defensivo)/i;
+ const reGrain=company.old.filter(x=>x.dir==="out"&&grain.test(x.stem)).map(x=>x.stem.toLowerCase());
+ const inGrain=new Set(company.old.filter(x=>x.dir==="in"&&grain.test(x.stem)).map(x=>x.stem.toLowerCase()));
+ const sharedGrain=reGrain.some(x=>inGrain.has(x));
+ const evidence=[
+ ["silo",sharedGrain],
+ ["fazenda",out(grain)&&!inn(grain)&&(inn(fert)||out(crop)||reGrain.length>=2)],
+ ["fazenda",out(crop)&&!inn(crop)&&inn(fert)],
+ ["pecuaria",out(/(cattle|gado|sheep|ovelha|wool|la|animals?|livestock|milk|leite)/i)&&inn(/(feed|racao|hay|feno)/i)],
+ ["racoes",out(/(animal.?feed|racao|feedmeal|farelo|xerem)/i)&&inn(grain)],
+ ["moinho",out(/(flour|farinha|bran|farelo|meal)/i)&&inn(grain)],
+ ["adubeira",out(/(fertiliz|adubo|ammoni|ureia)/i)&&inn(/(chemical|quimic|phosphate|fosfato)/i)],
+ ["serraria",out(/(lumber|planks?|boards?|madeira.?serrada|timber)/i)&&inn(/(logs?|toras?|wood)/i)],
+ ["ceramica",out(/(bricks?|tijolos?|tiles?|telhas?|ceramic)/i)&&inn(/(clay|argila)/i)],
+ ["cimenteira",out(/(cement|cimento)/i)&&inn(/(limestone|calcario|clay|argila)/i)],
+ ["cervejaria",out(/(beer|cervejas?)/i)&&inn(/(barley|cevada|hops|lupulo|malt|malte)/i)],
+ ["siderurgica",out(/(steel|aco|coils?|bobinas?)/i)&&inn(/(iron|ferro|ore|minerio|coal|carvao)/i)]
+ ];
+ for(const [role,ok] of evidence)if(ok)return{role,method:"combinação IN/OUT anterior"};
+ return null;
+}
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  for(const [raw,obj] of entries(zip)){
@@ -142,7 +172,7 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
- for(const c of companies.values())c.role=known(c.id,c.name);
+ for(const c of companies.values()){c.role=known(c.id,c.name);c.evidence="identificador/nome";if(c.role==="desconhecida"){const x=inferRoleFromHistoricalFreights(c);if(x){c.role=x.role;c.evidence=x.method}}}
  return{companies,files}
 }
 async function loadCargo(zip){
@@ -235,7 +265,9 @@ function audit(map,cargo,sim){
  const producerSectors=new Set(["fazenda","adubeira","racoes","serraria","floresta","algodoeira","cimenteira","ceramica","pedreira","cervejaria","siderurgica","paletes"]);
  const producers=companies.filter(c=>producerSectors.has(c.role));
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
+ const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
  if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
+ if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
  if(!producers.length)warning.push("Nenhuma atividade produtora foi reconhecida neste mapa. Confira os IDs desconhecidos no diagnóstico.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  const reasons=new Map();
@@ -282,5 +314,5 @@ async function generate(){
 }
 ui.run.addEventListener("click",generate);
 for(const id of ["mapFile","cargoFile"])el(id).addEventListener("change",()=>{const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
-window.CompanyLogisticsTest={kind,known,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
+window.CompanyLogisticsTest={kind,known,inferRoleFromHistoricalFreights,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
 })();
