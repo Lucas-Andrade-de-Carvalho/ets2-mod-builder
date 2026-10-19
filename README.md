@@ -87,6 +87,30 @@ As primeiras simulações de empresas reais revelaram expedições economicament
 
 **Teste de regressão:** geração integral de SCS com mapa sintético de 16 empresas e 9 cargos do Librelato, verificando 11 permissões válidas, 8 ausências obrigatórias e a exclusão das antigas referências do ZIP de entrada. Este teste não substitui validação com o mapa real no ETS2.
 
+## Catálogo de empresas SCS e leitura da DEF original (outubro de 2026)
+
+A aba **Criação de Companys** contém agora um catálogo **offline** com **143 referências únicas** de empresas padrão e seus ramos, compiladas a partir de discussões no Fórum SCS (2014, 2020) e da Truck Simulator Wiki. Cada referência inclui nome, ramo e ligação à fonte. A lista **não é exaustiva**: o catálogo comunitário atual reúne mais empresas, e as empresas mudam entre versões e DLCs.
+
+**Fontes:** 
+- https://forum.scssoft.com/viewtopic.php?p=195482
+- https://forum.scssoft.com/viewtopic.php?t=285506
+- https://forum.scssoft.com/viewtopic.php?t=3897
+- https://trucksimulator.wiki.gg/wiki/Companies/Euro_Truck_Simulator_2
+- https://modding.scssoft.com/wiki/Documentation/Engine/Units/cargo_def
+- https://modding.scssoft.com/wiki/Documentation/Engine/Units/company_permanent
+
+O catálogo é usado **somente para classificar empresas que já estão presentes nos arquivos da DEF do mapa**; nenhuma dessas referências vira empresa no mod gerado.
+
+A leitura do ZIP do mapa analisa:
+- Os IDs reais dos arquivos `def/company/<id>/editor/` e dos arquivos `def/company/<id>.sii`.
+- As permissões antigas `def/company/<id>/in/*.sii` e `out/*.sii`.
+- **O campo efetivo** `cargo: "cargo.<id>"` de cada cargo_def, e não apenas o nome do arquivo SII.
+- A categoria econômica inferível do identificador de carga e os indícios cruzados de entrada e saída da empresa.
+
+Em caso de ausência de evidência, a empresa permanece como desconhecida. O relatório exibe setor, evidência, categorias IN/OUT e, quando se tratar de referência SCS, a fonte consultada.
+
+**Restrições rígidas de exportação:** somente empresas do arquivo de entrada e somente IDs de cargas lidos na DEF do Librelato podem receber novas permissões de `IN/OUT`. Os cargos/empresas do catálogo nunca são adicionados ao mapa. O pacote gerado remove as antigas relações do ZIP fornecido e preserva os arquivos editor. Se houver regras antigas dentro de outro mod/arquivo de mapa, é necessário substituí-lo ou remover o conflito à parte. O catálogo classifica empresas, mas não certifica que o mercado esteja funcionando dentro do ETS2.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
