@@ -1,54 +1,49 @@
-# ETS2 Company Logistics — Universal
+# ETS2 Company Logistics — Ultimate + Criação de Companys
 
-Versão simplificada do gerador de Company para Euro Truck Simulator 2, usando **dois arquivos**.
+Esta versão recupera a base **ETS2_Company_Logistics_ULTIMATE_UPDATE(3).html**, preserva suas abas e integra um segundo gerador em **Criação de Companys**.
 
-## Uso
+## Abas
 
-1. Abra `index.html` no Chrome ou Edge.
-2. No campo **DEF Company do mapa**, carregue o `.zip` ou `.scs` ZIP que contém as empresas (`company/` ou `def/company/`).
-3. Em **DEF das cargas do Librelato**, carregue o ZIP com `cargo/`, `vehicle/` e `cargo.librelato.sii`, como `def(1).zip`.
-4. Clique **Gerar Company simulada**. O site identifica o nome do mapa pelo arquivo e considera automaticamente cargas de **grade baixa** e **grade alta**.
-5. O arquivo `DEF_Company_Librelato_<MAPA>_Universal.scs` será baixado quando houver cargas e destinos válidos nas duas grades.
+- **Arquivos**: leitura da Company do mapa, atualização usando uma versão anterior e DEF auxiliar opcional.
+- **Empresas**: classificação da atividade econômica e justificativas.
+- **Logística**: visualização da distribuição de cargas.
+- **Cadeias**: representação das regras de origem e destino.
+- **Gerar SCS**: exportação do modo original.
+- **Criação de Companys**: geração de uma nova Company por mapa para o rodotrem Librelato, usando dois arquivos.
 
-## O que faz
+## Criação de Companys — modo novo
 
-- Classifica as empresas a partir de IDs e nomes encontrados nos arquivos.
-- Atribui cargas apenas a setores compatíveis, por exemplo milho: fazenda → silo, moinho ou fábrica de ração.
-- Conserva arquivos das empresas e editores do mapa, neutralizando as antigas referências `IN/OUT` que constem no arquivo fornecido.
-- Cria os arquivos `def/company/<empresa>/in|out/<carga>.sii` sem precisar anexar as antigas DEF Companies 1 e 2.
-- Inclui no SCS resultante a DEF das cargas (cargo_data e definições de veículo presentes no ZIP da segunda entrada).
-- Preserva empresas vazias quando não houver correspondência econômica reconhecível.
-- Não obriga o uso de uma cidade, empresa ou nome de mapa específico.
+1. Selecione a **DEF Company do mapa** (SCS/ZIP contendo `company/` ou `def/company/`).
+2. Selecione a **DEF das cargas do Librelato** (`def.zip` com `cargo/`, `cargo.librelato.sii` e, quando disponível, `vehicle/`).
+3. Clique em **Analisar e gerar Company**.
+4. O sistema identifica os cargos `carga1`, `carga2`, etc., e seus `body_types`, verifica a cadeia econômica por empresa e gera um único `.scs` para grade alta e baixa quando ambas estiverem disponíveis.
+5. Use **Baixar diagnóstico TXT** se alguma carga for rejeitada.
 
-## Diagnóstico aprimorado
+Não é necessário anexar as antigas DEF Companies 1 e 2 à aba nova. O nome do arquivo final é derivado do arquivo do mapa; nenhuma cidade ou mapa específico está codificado como obrigatório.
 
-O motor cruza o ID e o nome da empresa com um conjunto conservador de funções econômicas. Quando não consegue reconhecer o ramo, usa as mercadorias **antigas** recebidas e expedidas, quando a combinação IN/OUT contém evidência suficiente (ex.: entrada de calcário e saída de cimento indica cimenteira). Isso serve só para inferir atividade; não copia a distribuição irreal anterior.
+O SCS novo preserva os arquivos **editor** e demais arquivos Company do ZIP original, remove as permissões antigas `IN/OUT` **do próprio ZIP usado como entrada**, e escreve apenas as novas relações validadas. Ele **não** copia nem substitui `def/cargo` ou `def/vehicle` do mod principal do reboque.
 
-O site também disponibiliza **Baixar relatório de diagnóstico TXT** depois de analisar. O documento lista todos os IDs encontrados, setores classificados, mercadorias originais e motivos das cargas não liberadas.
+## Maior precisão no modo original
 
-A geração continua bloqueada quando faltam produtores ou destinatários comprováveis, evitando uma DEF Company vazia ou economicamente incoerente. Os arquivos originais permanecem intactos.
+O gerador original continua disponível, porém o modo normal não inventa mais intermediários genéricos, não distribui pacotes arbitrários de cargas a hubs, nem preenche planos com mercadorias apenas pela categoria ampla da empresa. Para grãos, o motor evita autorizar OUT de silo automaticamente quando isso permitiria fretes silo→silo.
 
-## Limites reais
+Isso pode reduzir o número de ofertas, propositalmente: empresa não reconhecida não passa a transportar produtos incompatíveis para aumentar cobertura.
 
-- O arquivo do mapa precisa ser um ZIP/SCS com pasta `company/` ou `def/company/`. Se for HashFS, deve ser extraído previamente.
-- Não é possível inferir com segurança o setor de toda empresa de qualquer mapa apenas de um ID opaco. Empresas não reconhecidas permanecem vazias, e o diagnóstico mostra as cargas não distribuídas.
-- A geração é bloqueada se não houver ao menos uma carga economicamente válida para cada uma das carrocerias `alta` e `baixa`.
-- O sistema reproduz cadeias por mercadoria, mas o ETS2 combina qualquer origem OUT válida com qualquer destino IN válido para a mesma carga. Para evitar fretes silo→silo, esta versão não autoriza automaticamente silos a expedir grãos que também recebem.
-- A validação em ZIP **não substitui** um teste real no ETS2 1.61.1, incluindo trailer_defs, métodos de carga, geografia, mercado de fretes e `game.log`.
-- No Gerenciador de Mods, mantenha o mod principal Librelato e a Company exclusiva gerada ativos e **desative as DEF Companies genéricas 1 e 2**.
+## Limitações técnicas
 
-## Ajustes no reconhecimento das empresas e cargas
+- O navegador abre arquivos `.scs` em formato ZIP. HashFS precisa ser extraído antes.
+- Não existe promessa de identificação perfeita de empresas com IDs opacos em qualquer mapa. Elas aparecem no diagnóstico, e podem permanecer sem cargas.
+- Uma definição `cargo_def` baseada no ID da carga não comprova sozinha compatibilidade de modelos, método de carregamento, rota econômica ou oferta no jogo.
+- O ETS2 combina origens OUT e destinos IN que usam o mesmo cargo; não é possível obrigar um percurso em estágios (ex.: fazenda → silo → indústria) apenas usando IN/OUT.
+- Um SCS complementar não elimina arquivos que ainda estão dentro **de outro mod**. Para substituição completa, desative a Company-base antiga separada ou resolva o conflito dentro do mapa.
+- É necessário validar o mod dentro do ETS2, conferir mercado de fretes e `game.log`.
 
-- As cargas personalizadas do Librelato com IDs `carga1`, `carga2` etc. são identificadas separadamente das definições genéricas como `corn_b` e `soybean_b`.
-- Reconhecimento ajustado para `Sojaalto`, `Milhoalto`, `Sorgoalto`, `Cervejas`, `Sacos de Batatas` e `Sacos de Laranjas`.
-- IDs compactos rurais (`faz_01`, `agropec...`, `silos...`) são reconhecidos quando indicam atividade econômica concreta.
-- A auditoria apresenta exemplos de empresas desconhecidas e motivos de rejeição. Empresas incertas não são transformadas artificialmente em produtoras.
-- Teste estrutural adicional: uma DEF sintética com 23 cargas Librelato e cinco genéricas produziu ligações de grade alta e baixa, ignorando corretamente as cargas genéricas.
+## Testes realizados
 
-## Verificações
+- Verificação de sintaxe da aplicação original e do motor da aba nova.
+- Teste da aba nova com Company e DEF simuladas, cobrindo milho para grade baixa e tijolos para grade alta.
+- Inspeção do SCS produzido: novos `IN/OUT` presentes, permissões antigas do ZIP excluídas, arquivo `editor` preservado.
+- Teste de regressão no motor original: empresa desconhecida não vira hub automático, milho sai de fazenda para silo e moinho, sem OUT automático de silo.
+- **Pendente:** execução com os dois ZIPs reais do usuário e teste in-game.
 
-- Sintaxe do motor JavaScript verificada.
-- Teste de ponta a ponta com ZIPs simulados: milho grade baixa (fazenda → silo), tijolos grade alta (olaria → construtora).
-- SCS resultante foi reaberto e confirmou `cargo_data`, manifest, empresas, arquivos editor e neutralizadores, sem modificar os originais.
-
-**Status:** gerador funcional em testes estruturais; teste in-game com o mod e mapa reais ainda pendente.
+O aplicativo é um HTML independente com JSZip incorporado. Abra `index.html` localmente no Chrome ou Edge.
