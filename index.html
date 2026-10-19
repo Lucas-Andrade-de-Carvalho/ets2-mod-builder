@@ -823,7 +823,8 @@ const SCS_CARGO_CATEGORY_MAP=[
  ["madeira",/(?:^|[_ ]|\.)(?:logs?|lumber|timber|wood|planks?|boards?|madeira|toras?)(?:$|[_ ]|\.)/],
  ["algodao",/(?:^|[_ ]|\.)(?:cotton(?:_bales?)?|algodao|pluma)(?:$|[_ ]|\.)/],
  ["cimento",/(?:^|[_ ]|\.)(?:cement(?:_bag|_pallet)?|cimento)(?:$|[_ ]|\.)/],
- ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?|tiles?|telhas?)(?:$|[_ ]|\.)/],
+ ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?)(?:$|[_ ]|\.)/],
+ ["telha",/(?:^|[_ ]|\.)(?:tiles?|telhas?|roof(?:ing)?)(?:$|[_ ]|\.)/],
  ["granito",/(?:^|[_ ]|\.)(?:granite|granito|marble|marmore)(?:$|[_ ]|\.)/],
  ["cerveja",/(?:^|[_ ]|\.)(?:beer|cervejas?)(?:$|[_ ]|\.)/],
  ["racao",/(?:^|[_ ]|\.)(?:animal_?feed|feedmeal|racao|xerem)(?:$|[_ ]|\.)/],
@@ -917,6 +918,52 @@ function inferConstructionSupplyFromINOUT(company){
  return true;
 }
 
+// Reconciliar ramos pela mercadoria REAL antes de confiar em nomes comerciais.
+// Casos reais: "acero" no mapa recebe/expede adubo e ração, não bobinas de aço.
+function reconcileSectorWithEvidence(c){
+ if(!c||c.catalog||!c.old?.length)return false;
+ const out=new Set(c.old.filter(x=>x.dir==="out").map(x=>String(x.unit||x.stem).toLowerCase()));
+ const incoming=new Set(c.old.filter(x=>x.dir==="in").map(x=>String(x.unit||x.stem).toLowerCase()));
+ const agInput=["adubo","fertilizante","fertilizer","ureia"].filter(x=>out.has(x));
+ const agricultural=out.has("racao")||out.has("equipagrico")||out.has("aramefar")||out.has("sementes");
+ // Exigir sinais independentes de catálogo: nome sozinho não decide o ramo.
+ if(agInput.length>=2&&agricultural&&
+    ["metalurgica","siderurgica","desconhecida","logistica"].includes(c.role)){
+   c.role="agroinsumos";
+   c.evidence="categoria agroinsumos inferida de OUT "+agInput.join(", ")+" e mercadorias agrícolas";
+   return true;
+ }
+ if(c.role==="desconhecida"&&out.has("racao")&&(incoming.has("milho")||incoming.has("soja")||incoming.has("feijao"))){
+   c.role="racoes";c.evidence="fábrica/distribuidora de ração identificada por OUT ração e IN grãos";return true;
+ }
+ return false;
+}
+function oldSpecificEvidence(c,type,dir){
+ // Priorizar o cargo efetivamente citado no arquivo cargo_def da própria empresa.
+ const aliases={
+  cerveja:/^(cervejas?|beer|ambev|amstel|antarctica|brahma|budweiser|devassa|heineken|schin|skol)$/,
+  algodao:/^(algodao|cotton|pluma|cotton_bales?)$/,
+  racao:/^(racao|animal_?feed|xerem|farelo|feedmeal)$/,
+  bobinas_industriais:/^(bobinas?|steel_?coils?|metal_?coils?|b_reforco|ferroconst|chapaaco)$/,
+  granito:/^(granito|granite|marmore|marble|pedra)$/,
+  tijolo:/^(tijolos?|bricks?)$/,
+  madeira:/^(madeira|lumber|timber|planks?)$/,
+  cimento:/^(cimento|cement|cement_b|cement_pallet|cement_bag)$/
+ };
+ return(c.old||[]).some(x=>{
+  if(x.dir!==dir)return false;
+  const identifier=String(x.unit||x.stem).toLowerCase();
+  if(oldCargoCategory(identifier)===type)return true;
+  return !!aliases[type]?.test(identifier);
+ });
+}
+function farmCargoEvidence(c,type){
+ const special=specificFarmCrop(c);
+ if(special&&special!==type)return false;
+ if(!c.old?.length)return true;
+ return oldSpecificEvidence(c,type,"out");
+}
+
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  for(const [raw,obj] of entries(zip)){
@@ -971,7 +1018,9 @@ async function loadMap(zip){
    const guess=inferRoleFromHistoricalFreights(c);
    if(guess){c.role=guess.role;c.evidence=guess.method+" (catálogo enxuto)";}
   }
-  // A DEF real pode mostrar um depósito de materiais mesmo com ID de construtora.
+  // Evidência específica da DEF supera palpites pelo nome da pasta.
+  reconcileSectorWithEvidence(c);
+  // A DEF pode indicar um depósito de materiais mesmo com ID de construtora.
   inferConstructionSupplyFromINOUT(c);
  }
 
@@ -1084,7 +1133,7 @@ function roleSuitableForSpecificCargo(c,type,direction){
  // Avalia o ramo e especializações reais, não a existência de uma fábrica.
  if(c.role==="cana"&&SPECIAL_CROPS.has(type))return false;
  if(c.role==="cana"&&type==="adubo")return direction==="in";
- if(c.role==="marmoraria"&&type==="tijolo")return false;
+ if(c.role==="marmoraria"&&type==="tijolo")return oldSpecificEvidence(c,"tijolo",direction)&&constructionStockEvidence(c).isRetailProfile;
  if(c.role==="fazenda"&&direction==="out"&&SPECIAL_CROPS.has(type)){
   const specific=specificFarmCrop(c);
   // Uma fazenda explicitamente de batatas não vira fornecedora de laranja e milho.
@@ -1096,36 +1145,80 @@ function roleSuitableForSpecificCargo(c,type,direction){
 function chooseEndpoints(map,type,spec){
  const {companies,byRole}=getCandidateMap(map);
  const allowed=(c,dir)=>roleSuitableForSpecificCargo(c,type,dir);
- const out=new Set(spec.out.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"out")));
- const inn=new Set(spec.in.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"in")));
- const notes=[],categoryReasons=[];
- // Referência específica IN/OUT existente, sem copiar todos os fretes antigos.
+ const out=new Set(),inn=new Set(),notes=[],categoryReasons=[];
+ const specificOut=[],specificIn=[];
+ const hardWrong=new Set(["posto","correios","concessionaria"]);
  for(const c of companies){
-  if(legacyEvidence(c,type,"out")&&allowed(c,"out"))out.add(c);
-  if(legacyEvidence(c,type,"in")&&allowed(c,"in"))inn.add(c);
+   if(hardWrong.has(c.role)||!allowed(c,"out"))continue;
+   if(oldSpecificEvidence(c,type,"out")){
+     // Setor conhecido incompatível precisa de múltiplos indícios do mesmo ramo.
+     const compatible=spec.out.includes(c.role)||
+       (["cimento","tijolo","madeira","granito"].includes(type)&&constructionStockEvidence(c).isRetailProfile)||
+       c.role==="desconhecida";
+     if(compatible)specificOut.push(c);
+   }
  }
- // Quando não há expedidor explícito, procurar pelo RAMO ECONÔMICO em
- // OUT/IN existentes: areia, brita, tijolos, piso, telha, tubo, etc.
- if(!out.size&&["cimento","tijolo","granito","madeira"].includes(type)){
-  for(const c of companies){
-   if(!allowed(c,"out")||!categoryOutletCandidate(c,type,"out"))continue;
-   out.add(c);
-   const proof=constructionStockEvidence(c);
-   categoryReasons.push(c.id+": estoque/revenda de construção (OUT "+[...proof.out].join(", ")+")");
-  }
+ for(const c of companies){
+   if(hardWrong.has(c.role)||!allowed(c,"in"))continue;
+   if(oldSpecificEvidence(c,type,"in")){
+     const compatible=spec.in.includes(c.role)||
+       (["cimento","tijolo","madeira","granito"].includes(type)&&constructionStockEvidence(c).inCount>=2)||
+       c.role==="desconhecida";
+     if(compatible)specificIn.push(c);
+   }
  }
- // Sem destinatários explícitos, obras e depósitos que recebem materiais
- // semelhantes podem receber o novo cargo correspondente.
- if(!inn.size&&["cimento","tijolo","granito","madeira"].includes(type)){
-  for(const c of companies){
-   if(!allowed(c,"in")||!categoryOutletCandidate(c,type,"in"))continue;
-   inn.add(c);
-   const proof=constructionStockEvidence(c);
-   categoryReasons.push(c.id+": recebedor de materiais (IN "+[...proof.in].join(", ")+")");
-  }
+ // Preferência 1: empresas com evidência do MESMO cargo na DEF.
+ // Preferência 2: categoria ou atividade de fato compatível, só se faltar evidência.
+ for(const c of specificOut)out.add(c);
+ for(const c of specificIn)inn.add(c);
+ if(!out.size){
+   if(["cimento","tijolo","madeira","granito"].includes(type)){
+     for(const c of companies)if(allowed(c,"out")&&categoryOutletCandidate(c,type,"out")){
+       out.add(c);
+       const proof=constructionStockEvidence(c);
+       categoryReasons.push(c.id+": OUT de materiais relacionados ("+[...proof.out].join(", ")+")");
+     }
+   }
+   // Fallback por setor quando a carga não aparece explicitamente na DEF.
+   if(!out.size)for(const role of spec.out){
+     for(const c of byRole.get(role)||[]){
+       if(!allowed(c,"out")||hardWrong.has(c.role))continue;
+       if(c.role==="fazenda"&&["milho","soja","sorgo","batata","laranja"].includes(type)&&!farmCargoEvidence(c,type))continue;
+       if(c.role==="logistica"&&c.old?.length&&!oldSpecificEvidence(c,type,"out")&&
+          !(["cimento","tijolo","madeira","granito"].includes(type)&&categoryOutletCandidate(c,type,"out")))continue;
+       if(c.role==="materiais"&&c.old?.length&&!categoryOutletCandidate(c,type,"out")&&!oldSpecificEvidence(c,type,"out"))continue;
+       if(c.role==="racoes"&&type!=="racao"&&!oldSpecificEvidence(c,type,"out"))continue;
+       if(c.role==="agroinsumos"&&["racao","adubo"].includes(type)&&c.old?.length&&!oldSpecificEvidence(c,type,"out"))continue;
+       if(type==="granito"&&["mineracao","pedreira","marmoraria"].includes(c.role)&&c.old?.length){
+         const stones=c.old.filter(x=>x.dir==="out").some(x=>/^(pedra|marmore|granito|granite|marble)$/.test(String(x.unit||x.stem).toLowerCase()));
+         if(!stones)continue;
+       }
+       if(c.role==="fazenda"&&type==="algodao"&&c.old?.length){
+         const crops=c.old.filter(x=>x.dir==="out").map(x=>oldCargoCategory(x.unit||x.stem));
+         if(!crops.some(x=>["milho","soja","sorgo","algodao"].includes(x)))continue;
+       }
+       out.add(c);
+     }
+   }
  }
- if(categoryReasons.length)notes.push("compatibilidade por categoria econômica da DEF: "+categoryReasons.join("; "));
- return{out:[...out],inn:[...inn],notes,categoryReasons};
+ if(!inn.size){
+   if(["cimento","tijolo","madeira","granito"].includes(type))
+      for(const c of companies)if(allowed(c,"in")&&categoryOutletCandidate(c,type,"in"))inn.add(c);
+   if(!inn.size)for(const role of spec.in){
+     for(const c of byRole.get(role)||[]){
+       if(!allowed(c,"in")||hardWrong.has(c.role))continue;
+       if(c.role==="logistica"&&c.old?.length&&!oldSpecificEvidence(c,type,"in")&&
+           !(["cimento","tijolo","madeira","granito"].includes(type)&&categoryOutletCandidate(c,type,"in")))continue;
+       if(c.role==="materiais"&&c.old?.length&&!oldSpecificEvidence(c,type,"in")&&
+           !(["cimento","tijolo","madeira","granito"].includes(type)&&categoryOutletCandidate(c,type,"in")))continue;
+       if(c.role==="supermercado"&&["batata","laranja","cerveja"].includes(type)&&c.old?.length&&!oldSpecificEvidence(c,type,"in"))continue;
+       inn.add(c);
+     }
+   }
+ }
+ if(categoryReasons.length)notes.push("expedição compatível por categoria da DEF: "+categoryReasons.join("; "));
+ // Confiança: evidência direta > mercadorias da mesma categoria > inferência setorial.
+ return{out:[...out],inn:[...inn],notes,categoryReasons,directOut:specificOut.length,directIn:specificIn.length};
 }
 
 function simulate(map,cargo){
@@ -1161,7 +1254,7 @@ function simulate(map,cargo){
     plan.get(c.id).in.add(info.id);
   }
   for(const b of allowed)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
-  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes,categoryReasons:chosen.categoryReasons||[],scsSourceIds:outs.filter(c=>c.catalog).map(c=>c.id),scsDestIds:ins.filter(c=>c.catalog).map(c=>c.id)});
+  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes,categoryReasons:chosen.categoryReasons||[],directOut:chosen.directOut||0,directIn:chosen.directIn||0,scsSourceIds:outs.filter(c=>c.catalog).map(c=>c.id),scsDestIds:ins.filter(c=>c.catalog).map(c=>c.id)});
  }
  return{plan,skipped,grouped,proof,assumptions,catalogChecks}
 }
