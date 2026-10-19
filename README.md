@@ -179,6 +179,21 @@ Foi corrigida uma divergência real do mapa: a empresa `acero` tem saída de `ad
 
 **Testes de regressão:** 19 verificações de setor e relações por carga, mais 16 verificações de exportação do SCS, incluindo download, preservação de editor e nenhuma empresa/cargo criado. Testes estruturais com ZIPs sintéticos; ainda é obrigatório verificar as ofertas no ETS2 com os arquivos reais.
 
+## Controle de fretes de paletes (ajuste final)
+
+Os fretes específicos de **paletes vazios / `Pallets Alto TESTE` (`carga16`)** não usam mais o conjunto amplo de empresas industriais, comerciais ou agrícolas.
+
+- Origem prioritária: **madeireiras, serrarias e fabricantes de paletes** presentes no mapa. Uma empresa de logística só pode expedir se a DEF comprovar `paletes` em OUT.
+- Limite de **3 empresas expedidoras** por cargo de paletes.
+- Limite de **6 empresas recebedoras** por cargo, com até **2 destinatárias do mesmo setor**; prioridade para empresas que declaram receber paletes/embalagens na DEF e setores coerentes.
+- Cada carga de paletes passa a ter no máximo **18 combinações teóricas** entre origens e destinos, contra centenas que a distribuição genérica podia produzir.
+- Não aplicar esse limite a **`Cimento e Pallet` (`carga10`)**, cuja mercadoria continua sendo cimento e usa logística de materiais de construção.
+- Nenhum ID de carga ou empresa extra é criado. Se o mapa não possuir origem/destino defensável, o cargo de paletes não é artificialmente distribuído.
+
+Esses limites restringem **quais empresas podem gerar ofertas**. O volume exato de fretes exibido pelo ETS2 depende também do jogo, dos mods ativos e do mercado de cargas; não há garantia de frequência exata sem validar in-game. **Desative as DEF Companies genéricas antigas** para elas não devolverem a distribuição anterior.
+
+Teste de regressão: 14 condições do motor e 10 verificações de um SCS gerado e reaberto (origens, destinos, editor, botão de download e ausência de novos IDs), incluindo carga de cimento paletizado sem alteração.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
