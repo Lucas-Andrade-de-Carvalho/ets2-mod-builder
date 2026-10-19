@@ -11,6 +11,12 @@ Esta versão recupera a base **ETS2_Company_Logistics_ULTIMATE_UPDATE(3).html**,
 - **Gerar SCS**: exportação do modo original.
 - **Criação de Companys**: geração de uma nova Company por mapa para o rodotrem Librelato, usando dois arquivos.
 
+## Download direto da Company gerada
+
+Na aba **Criação de Companys**, clique em **Analisar e gerar Company** e aguarde a validação. O botão **Baixar Company .SCS** será habilitado. Clique para salvar o arquivo `DEF_Company_Librelato_<MAPA>_Universal.scs` na pasta de downloads do navegador.
+
+O download é acionado **somente após o clique** e pode ser repetido sem reprocessar os arquivos. Se o ZIP do mapa, a DEF do Librelato ou correções manuais forem alterados, o botão é bloqueado até gerar e validar uma nova Company. Não existe download de SCS não validado.
+
 ## Criação de Companys — modo novo
 
 1. Selecione a **DEF Company do mapa** (SCS/ZIP contendo `company/` ou `def/company/`).
