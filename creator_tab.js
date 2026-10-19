@@ -1,7 +1,7 @@
 
 (function(){
 "use strict";
-const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail")};
+const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -641,11 +641,37 @@ function downloadDiagnostic(){
  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),50000);
 }
 let busy=false;
+let lastCompany=null;
+function updateDownloadUI(){
+ if(!ui.download)return;
+ ui.download.disabled=!lastCompany||busy;
+ ui.download.hidden=!lastCompany;
+ if(ui.downloadInfo)ui.downloadInfo.textContent=lastCompany?
+   "Company pronta: "+lastCompany.filename+" ("+lastCompany.count+" relações IN/OUT). Clique para baixar.":
+   "Gere e valide a Company para liberar o download.";
+}
+function clearCompanyDownload(){
+ lastCompany=null;
+ updateDownloadUI();
+}
+function downloadCompany(){
+ if(!lastCompany||busy){say("Primeiro gere uma Company válida para habilitar o download.",0);return}
+ const {blob,filename}=lastCompany;
+ const url=URL.createObjectURL(blob),a=document.createElement("a");
+ try{
+  a.href=url;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  say("Download solicitado: "+filename+". Confira a pasta Downloads do navegador.",100);
+ }finally{setTimeout(()=>URL.revokeObjectURL(url),60000)}
+}
 async function generate(){
  if(busy)return;
  const one=ui.map.files?.[0],two=ui.cargo.files?.[0];
  if(!one||!two){say("Anexe a Company do mapa e a DEF das cargas do Librelato.",0);return}
- busy=true;ui.run.disabled=true;ui.report.innerHTML="";ui.detail.innerHTML="";latestDiagnostic=null;
+ busy=true;ui.run.disabled=true;clearCompanyDownload();ui.report.innerHTML="";ui.detail.innerHTML="";latestDiagnostic=null;
  try{
   say("Identificando empresas do mapa…",8);
   const map=await loadMap(await zipRead(one));applyCompanyOverrides(map);await yieldUI();
@@ -658,16 +684,23 @@ async function generate(){
   say("Criando DEF Company completa…",60);
   const out=await build(map,cargo,sim);
   const clean=(one.name.replace(/\.(scs|zip)$/i,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,55)||"Mapa");
-  const a=document.createElement("a"),url=URL.createObjectURL(out.blob);
-  a.href=url;a.download="DEF_Company_Librelato_"+clean+"_Universal.scs";document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),55000);
-  say("Arquivo gerado: "+out.count+" IN/OUT novos, "+out.removed+" permissões antigas retiradas do ZIP. Teste dentro do ETS2 ainda necessário.",100);
+  lastCompany={
+   blob:out.blob,
+   filename:"DEF_Company_Librelato_"+clean+"_Universal.scs",
+   count:out.count,
+   removed:out.removed
+  };
+  updateDownloadUI();
+  say("Company gerada e validada: "+out.count+" relações IN/OUT novas. Clique em Baixar Company .SCS para salvar o arquivo. Teste no ETS2 ainda necessário.",100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
- finally{busy=false;ui.run.disabled=false}
+ finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
 ui.run.addEventListener("click",generate);
+if(ui.download)ui.download.addEventListener("click",downloadCompany);
 if(el("companyCreateSaveDiagnostic"))el("companyCreateSaveDiagnostic").addEventListener("click",downloadDiagnostic);
-for(const id of ["companyCreateMapFile","companyCreateCargoFile"])el(id).addEventListener("change",()=>{const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
+for(const id of ["companyCreateMapFile","companyCreateCargoFile"])el(id).addEventListener("change",()=>{clearCompanyDownload();const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
+if(el("companyCreateOverrides"))el("companyCreateOverrides").addEventListener("input",clearCompanyDownload);
+updateDownloadUI();
 
 function renderSCSCatalog(){
  const input=el("companyCreateCatalogSearch"),root=el("companyCreateCatalogResults");
