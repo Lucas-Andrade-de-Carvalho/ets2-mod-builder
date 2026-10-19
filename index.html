@@ -601,6 +601,32 @@ function scsCatalogLookup(id,displayName){
  return null;
 }
 
+// Consulta por empresa REAL do mapa: nunca itera o catálogo para criar empresas.
+function catalogForMapCompany(company){
+ if(!company||!company.id)return null;
+ const byId=scsCatalogLookup(company.id,"");
+ if(byId)return{...byId,matchBy:"ID"};
+ const byName=company.name?scsCatalogLookup("",company.name):null;
+ return byName?{...byName,matchBy:"nome exato"}:null;
+}
+function checkMapCompanyAgainstSCS(company){
+ const reference=catalogForMapCompany(company);
+ company.catalogConsulted=true;
+ if(!reference){company.catalog=null;return null}
+ company.catalog=reference;
+ company.role=reference.role;
+ company.evidence="empresa padrão SCS reconhecida por "+reference.matchBy+": "+reference.name+" ("+reference.source+")";
+ return reference;
+}
+function consultCatalogForMapDistribution(map){
+ let consulted=0,matched=0;
+ for(const company of map.companies.values()){
+  consulted++;
+  if(checkMapCompanyAgainstSCS(company))matched++;
+ }
+ return{consulted,matched};
+}
+
 const sectors=[
 ["silo",/(silo|cooperativa|cerealista|armazem de graos|grain storage)/],
 ["fazenda",/(fazenda|faz0|faz1|faz2|faz3|faz4|faz5|agropecuaria|sitio agricola|cultivo agricola|farm|plantacao)/],
@@ -854,13 +880,7 @@ async function loadMap(zip){
  }
  for(const c of companies.values())c.categories=categorizeExistingCompanyLoads(c);
  for(const c of companies.values()){
-  const reference=scsCatalogLookup(c.id,c.name);
-  if(reference){
-   c.role=reference.role;
-   c.catalog=reference;
-   c.evidence="catálogo SCS: "+reference.name+" ("+reference.source+")";
-   continue;
-  }
+  if(checkMapCompanyAgainstSCS(c))continue;
   c.role=known(c.id,c.name);
   c.evidence=c.role==="desconhecida"?"nenhuma":"identificador/nome";
   if(c.role==="desconhecida"&&typeof rawClassification==="function"&&typeof finalizeClassification==="function"){
@@ -1035,6 +1055,10 @@ function chooseEndpoints(map,type,spec){
 }
 
 function simulate(map,cargo){
+ // Verifica cada empresa PRESENTE no mapa ao iniciar a distribuição.
+ // Se houver coincidência exata com empresa SCS, usa o setor do catálogo.
+ // Empresas customizadas mantêm a classificação específica do mapa.
+ const catalogChecks=consultCatalogForMapDistribution(map);
  const plan=new Map(),skipped=[],proof=[],assumptions=[];
  const grouped={alta:0,baixa:0,outros:0};
  for(const info of cargo.cargos.values()){
@@ -1063,9 +1087,9 @@ function simulate(map,cargo){
     plan.get(c.id).in.add(info.id);
   }
   for(const b of allowed)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
-  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes});
+  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes,scsSourceIds:outs.filter(c=>c.catalog).map(c=>c.id),scsDestIds:ins.filter(c=>c.catalog).map(c=>c.id)});
  }
- return{plan,skipped,grouped,proof,assumptions}
+ return{plan,skipped,grouped,proof,assumptions,catalogChecks}
 }
 
 const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"\"\n }\n}\n";
@@ -1120,8 +1144,9 @@ function audit(map,cargo,sim){
  const producers=companies.filter(c=>producerSectors.has(c.role));
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
  const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
- const matched=companies.filter(c=>c.catalog).length;
- if(matched)warning.push(matched+" empresas do mapa reconhecidas no catálogo de empresas padrão SCS.");
+ const matched=sim.catalogChecks?.matched??companies.filter(c=>c.catalog).length;
+ const inspected=sim.catalogChecks?.consulted??companies.length;
+ warning.push("Catálogo conferido somente nas "+inspected+" empresas existentes na DEF; "+matched+" correspondências exatas com empresas padrão SCS.");
  if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
  if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
  const manual=companies.filter(c=>c.evidence==="classificação informada pelo usuário").length;
@@ -1143,7 +1168,7 @@ function audit(map,cargo,sim){
  ". Empresas ainda sem classificação (amostra): "+escapeHTML(exampleUnknown.join(", "))+ ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
  const catalogCompanies=companies.filter(c=>c.catalog);
  const catalogSummary="<details class='creator-catalog'><summary>Empresas do mapa identificadas pela base SCS ("+catalogCompanies.length+")</summary>"+
- catalogCompanies.slice(0,120).map(c=>"<div class='creator-catalog-row'><b>"+escapeHTML(c.folder||c.id)+"</b><span>"+escapeHTML(c.catalog.name+" · "+c.catalog.role)+"</span><a href='"+escapeHTML(SCS_REFERENCE_URLS[c.catalog.source]||SCS_REFERENCE_URLS.wiki)+"' target='_blank' rel='noopener noreferrer'>Fonte</a></div>").join("")+
+ catalogCompanies.slice(0,120).map(c=>"<div class='creator-catalog-row'><b>"+escapeHTML(c.folder||c.id)+"</b><span>"+escapeHTML(c.catalog.name+" · "+c.catalog.role+" · "+c.catalog.matchBy)+"</span><a href='"+escapeHTML(SCS_REFERENCE_URLS[c.catalog.source]||SCS_REFERENCE_URLS.wiki)+"' target='_blank' rel='noopener noreferrer'>Fonte</a></div>").join("")+
  (catalogCompanies.length>120?"<p class='muted'>Exibindo os primeiros 120. O relatório TXT contém todos os registros.</p>":"")+
  "</details>";
  ui.detail.innerHTML="<details"+(sim.skipped.length===cargo.cargos.size?" open":"")+"><summary>Diagnóstico detalhado de cada carga</summary>"+
@@ -1160,7 +1185,8 @@ function createDiagnosticText(map,cargo,sim){
  const rows=[
   "ETS2 COMPANY LOGISTICS - DIAGNÓSTICO DE ARQUIVOS",
   "Catálogo consultado: "+SCS_COMPANY_CATALOG.length+" referências; somente para classificar empresas existentes.",
-  "Empresas padrão reconhecidas no mapa: "+(map.catalogMatched||0),
+  "Empresas existentes na DEF consultadas no catálogo durante a distribuição: "+(sim.catalogChecks?.consulted??map.companies.size),
+  "Empresas padrão reconhecidas entre elas: "+(sim.catalogChecks?.matched??0),
   "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
   "Empresas: "+map.companies.size,
   "Cargas personalizadas do Librelato: "+cargo.cargos.size,
@@ -1176,7 +1202,7 @@ function createDiagnosticText(map,cargo,sim){
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
  rows.push("","CARGAS LIBERADAS E RAZÕES (ID | NOME | EXPEDIDORES | RECEBEDORES | HIPÓTESES)");
- for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.notes.join("; ")].join(" | "));
+ for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
  rows.push("","CARGAS DESTINADAS A EMPRESAS (ID | IN | OUT)");
  for(const [id,p] of sim.plan)rows.push([id,[...p.in].join(","),[...p.out].join(",")].join(" | "));
  return rows.join("\n");
@@ -1229,7 +1255,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory};
+window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution};
 })();
 </script>
 </body>
