@@ -274,21 +274,71 @@ function categorizeExistingCompanyLoads(c){
  return result;
 }
 
-function inferConstructionSupplyFromINOUT(company){
- // Loja/depósito: recebe e reexpede variedade concreta de materiais, não só recebe como uma obra.
- if(!company||company.catalog||!(company.role==="obras"||company.role==="desconhecida"))return false;
- const construction=new Set(["areias","areia","brita","tijolos","tijolo","tubosconcret","tubosmg","madeira","pedra","marmore","calhas","b_reforco","ferroconst","chapaaco","calcario"]);
- const out=new Set(company.old.filter(x=>x.dir==="out"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
- const incoming=new Set(company.old.filter(x=>x.dir==="in"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
- // Extração de areia/brita sozinha não prova que o depósito venda cimento.
- const finished=out.has("tijolos")||out.has("tubosconcret")||out.has("madeira");
- if(out.size>=3&&incoming.size>=2&&finished){
-  company.role="materiais";
-  company.evidence="revenda/expedição comprovada na DEF: "+[...out].slice(0,8).join(", ");
-  company.supplyProof=[...out];
-  return true;
+// Uma mercadoria pode ser expedida de um estabelecimento de estoque ou revenda,
+// sem existir uma fábrica no mapa. Identificamos o ramo pelas cargas REAIS da DEF.
+const CONSTRUCTION_CARGO_MARKERS=[
+ ["areia",/\b(areias?|sand)\b/],
+ ["brita",/\b(brita|britas|gravel|cascalho)\b/],
+ ["tijolo",/\b(tijolos?|bricks?|ceramic ?bricks?)\b/],
+ ["piso",/\b(pisos?|floor(?:ing)?|azulejos?|revestimentos?)\b/],
+ ["telha",/\b(telhas?|roof(?:ing)?|roof ?tiles?)\b/],
+ ["tubo",/\b(tubos?|tubos? ?concret|tubos? ?mg|concrete ?pipes?|pipes?|tubulacoes?)\b/],
+ ["ferragem",/\b(ferro ?const|b ?reforco|vergalhoes?|rebars?|armaduras?|ferragens?)\b/],
+ ["calha",/\b(calhas?|gutters?)\b/],
+ ["madeira",/\b(madeira|madeirame|wood|timber|lumber|tabuas?|planks?)\b/],
+ ["granito",/\b(pedras?|granito|granite|marmore|marble|calcario|limestone)\b/],
+ ["cimento",/\b(cimento|cement|argamassa|reboco|blocos? ?concret|concrete ?blocks?)\b/],
+ ["aco",/\b(chapa ?aco|chapas? ?aco|steel ?plates?|sua?luminio)\b/]
+];
+const CONSTRUCTION_FINISHED=new Set(["tijolo","piso","telha","tubo","ferragem","calha","madeira","cimento","aco"]);
+function semanticConstructionType(raw){
+ const val=norm(String(raw||"").replace(/^cargo[.:]/i,"")).replace(/[^a-z0-9 ]/g," ").trim();
+ for(const [type,re]of CONSTRUCTION_CARGO_MARKERS)if(re.test(val))return type;
+ return null;
+}
+function constructionStockEvidence(company){
+ const results={in:new Set(),out:new Set(),otherIn:0,otherOut:0};
+ for(const item of company.old||[]){
+  const cargo=item.unit||item.stem;
+  const kind=semanticConstructionType(cargo);
+  if(kind)results[item.dir].add(kind);
+  else if(item.dir==="out")results.otherOut++;
+  else if(item.dir==="in")results.otherIn++;
  }
- return false;
+ const outKinds=results.out;
+ const totalOut=outKinds.size+results.otherOut;
+ const variety=outKinds.size>=2&&[...outKinds].some(x=>CONSTRUCTION_FINISHED.has(x));
+ const hasStockMovement=results.in.size>=1;
+ const concentration=totalOut>0?outKinds.size/totalOut:0;
+ return{
+  ...results,
+  isRetailProfile:variety&&hasStockMovement&&concentration>=.45,
+  category:"materiais_construcao",
+  outCount:outKinds.size,
+  inCount:results.in.size
+ };
+}
+function categoryOutletCandidate(company,type,direction){
+ if(!company||!["cimento","tijolo","granito","madeira"].includes(type))return false;
+ if(company.catalog&&company.role!=="materiais")return false;
+ if(["posto","correios","concessionaria","cana","cervejaria","supermercado","pecuaria","siderurgica","metalurgica","mineracao","pedreira","marmoraria","fazenda","ceramica"].includes(company.role))return false;
+ const profile=constructionStockEvidence(company);
+ if(direction==="out"){
+  return profile.isRetailProfile&&["materiais","obras","desconhecida","logistica"].includes(company.role);
+ }
+ // Recebedor por ramo: obras, depósitos e revendas com IN compatível,
+ // mesmo quando o ID da empresa é opaco.
+ return profile.inCount>=2&&
+        ["obras","materiais","desconhecida","logistica"].includes(company.role);
+}
+function inferConstructionSupplyFromINOUT(company){
+ if(!company||company.catalog||!(company.role==="obras"||company.role==="desconhecida"))return false;
+ const p=constructionStockEvidence(company);
+ if(!p.isRetailProfile)return false;
+ company.role="materiais";
+ company.evidence="ramo de materiais confirmado pela variedade IN/OUT: OUT "+[...p.out].join(", ")+"; IN "+[...p.in].join(", ");
+ company.supplyProof=[...p.out];
+ return true;
 }
 
 async function loadMap(zip){
@@ -472,17 +522,34 @@ function chooseEndpoints(map,type,spec){
  const allowed=(c,dir)=>roleSuitableForSpecificCargo(c,type,dir);
  const out=new Set(spec.out.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"out")));
  const inn=new Set(spec.in.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"in")));
- const notes=[];
- let historyOut=0,historyIn=0;
+ const notes=[],categoryReasons=[];
+ // Referência específica IN/OUT existente, sem copiar todos os fretes antigos.
  for(const c of companies){
-  if(legacyEvidence(c,type,"out")&&allowed(c,"out")&&!out.has(c)){out.add(c);historyOut++}
-  if(legacyEvidence(c,type,"in")&&allowed(c,"in")&&!inn.has(c)){inn.add(c);historyIn++}
+  if(legacyEvidence(c,type,"out")&&allowed(c,"out"))out.add(c);
+  if(legacyEvidence(c,type,"in")&&allowed(c,"in"))inn.add(c);
  }
- // Referências cargo: do mapa são evidências verificadas, não hipóteses a exibir como alerta.
-
- // Nunca inventar uma origem só para evitar uma carga vazia.
- // Expedições entre obras requerem evidência real ou classificação explicitamente informada.
- return{out:[...out],inn:[...inn],notes};
+ // Quando não há expedidor explícito, procurar pelo RAMO ECONÔMICO em
+ // OUT/IN existentes: areia, brita, tijolos, piso, telha, tubo, etc.
+ if(!out.size&&["cimento","tijolo","granito","madeira"].includes(type)){
+  for(const c of companies){
+   if(!allowed(c,"out")||!categoryOutletCandidate(c,type,"out"))continue;
+   out.add(c);
+   const proof=constructionStockEvidence(c);
+   categoryReasons.push(c.id+": estoque/revenda de construção (OUT "+[...proof.out].join(", ")+")");
+  }
+ }
+ // Sem destinatários explícitos, obras e depósitos que recebem materiais
+ // semelhantes podem receber o novo cargo correspondente.
+ if(!inn.size&&["cimento","tijolo","granito","madeira"].includes(type)){
+  for(const c of companies){
+   if(!allowed(c,"in")||!categoryOutletCandidate(c,type,"in"))continue;
+   inn.add(c);
+   const proof=constructionStockEvidence(c);
+   categoryReasons.push(c.id+": recebedor de materiais (IN "+[...proof.in].join(", ")+")");
+  }
+ }
+ if(categoryReasons.length)notes.push("compatibilidade por categoria econômica da DEF: "+categoryReasons.join("; "));
+ return{out:[...out],inn:[...inn],notes,categoryReasons};
 }
 
 function simulate(map,cargo){
@@ -500,7 +567,7 @@ function simulate(map,cargo){
   if(!allowed.length)problems.push("carroceria incompatível");
   const chosen=spec?chooseEndpoints(map,type,spec):{out:[],inn:[],notes:[]};
   let outs=chosen.out,ins=chosen.inn;
-  if(!outs.length&&spec)problems.push("sem expedidor compatível ou estoque comprovado (setores: "+spec.out.join(" / ")+")");
+  if(!outs.length&&spec)problems.push("não foi encontrada nenhuma empresa com atividade ou categoria de expedição compatível: "+spec.out.join(" / "));
   if(!ins.length&&spec)problems.push("sem recebedor compatível ou estoque comprovado (setores: "+spec.in.join(" / ")+")");
   if(outs.length===1&&ins.length===1&&outs[0].id===ins[0].id)
    problems.push("única origem e destino são a mesma empresa; nenhuma viagem identificável");
@@ -518,7 +585,7 @@ function simulate(map,cargo){
     plan.get(c.id).in.add(info.id);
   }
   for(const b of allowed)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
-  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes,scsSourceIds:outs.filter(c=>c.catalog).map(c=>c.id),scsDestIds:ins.filter(c=>c.catalog).map(c=>c.id)});
+  proof.push({id:info.id,name:info.name,type,origins:outs.length,destinations:ins.length,sourceIds:outs.map(c=>c.id),destIds:ins.map(c=>c.id),notes:chosen.notes,categoryReasons:chosen.categoryReasons||[],scsSourceIds:outs.filter(c=>c.catalog).map(c=>c.id),scsDestIds:ins.filter(c=>c.catalog).map(c=>c.id)});
  }
  return{plan,skipped,grouped,proof,assumptions,catalogChecks}
 }
