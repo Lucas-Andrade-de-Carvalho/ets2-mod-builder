@@ -879,6 +879,17 @@ function chooseEndpoints(map,type,spec){
      }
    }
  }
+ // Não inferir entrada e saída da MESMA mercadoria na mesma empresa
+ // só porque ela já recebe matérias-primas relacionadas.
+ // Revendas e depósitos podem ter ambas, ou quando IN explícito existe.
+ if(["racao","sorgo","algodao","bobinas_industriais"].includes(type)){
+   for(const c of [...inn]){
+     if(!out.has(c))continue;
+     if(["materiais","logistica","cooperativa"].includes(c.role))continue;
+     if(oldSpecificEvidence(c,type,"in"))continue;
+     inn.delete(c);
+   }
+ }
  if(categoryReasons.length)notes.push("expedição compatível por categoria da DEF: "+categoryReasons.join("; "));
  // Confiança: evidência direta > mercadorias da mesma categoria > inferência setorial.
  return{out:[...out],inn:[...inn],notes,categoryReasons,directOut:specificOut.length,directIn:specificIn.length};
