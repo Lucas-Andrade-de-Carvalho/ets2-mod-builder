@@ -652,7 +652,7 @@ async function readCargoDefinitions(file,ids,token){
  }
  for(let i=0;i<selected.length;i++){
   check(token);const entry=selected[i],txt=await entry.obj.async("text");
-  if(entry.manifest){const re=/@include\s+["'][^"']*cargo\/(carga[0-9]+)\.sui["']/ig;for(const m of txt.matchAll(re))registration.add(m[1].toLowerCase())}
+  if(entry.manifest){const re=/@include\s+["'][^"']*cargo\/(carga[0-9]+)\.(?:sui|sii)["']/ig;for(const m of txt.matchAll(re))registration.add(m[1].toLowerCase())}
   else{
    const id=normPath(entry.path).match(/(carga[0-9]+)\.(?:sui|sii)$/)?.[1];if(!id||!ids.has(id))continue;
    if(!new RegExp("cargo_data\\s*:\\s*cargo\\."+id+"\\b","i").test(txt))continue;
@@ -714,6 +714,7 @@ async function analyze(){
   progress("Abrindo a company do mapa…",5);await yieldUI();
   const mapZip=await readArchive(map,token);check(token);
   const scan=collectCompanies(mapZip);if(!scan.companies.size)throw new Error("Nenhuma empresa reconhecida em /def/company/ no ZIP do mapa");
+  if(!listEntries(mapZip).some(x=>normPath(x[0]).startsWith("def/company/")))throw new Error("A company precisa estar em def/company/ na raiz do ZIP.");
   progress("Encontradas "+scan.companies.size+" empresas. Indexando templates…",23);await yieldUI();
   const templates=await getTemplateLibrary(sources,token);check(token);
   progress("Lendo cargo_data e body_types reais…",52);await yieldUI();
