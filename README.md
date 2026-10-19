@@ -59,3 +59,17 @@ node tests/company-creator.smoke.cjs
 O teste usa DEFs sintéticas e confirma: Company sem prefixo como `alc_cle/editor`, ZIP na raiz e arquivos aninhados, rejeição de modelos sem Company, erros HashFS, caminhos repetidos, mudanças no conteúdo do mapa, cargo_data, grade alta/baixa, integridade dos arquivos `editor`, ausência de empresas/cargas inventadas e download.
 
 **Ainda é necessária a validação in-game no ETS2** com o mod principal do Librelato e a Company específica do mapa. Não mantenha as antigas DEF Companies genéricas 1 e 2 competindo pelas mesmas definições; confira `game.log` e ofertas do mercado após alterar a ordem/prioridade dos mods.
+
+## Busca por famílias comerciais (atualização 19/10/2026)
+
+A aba **Criação de Companys** procura primeiramente referências exatas de mercadorias em `cargo:` no histórico IN/OUT da DEF do mapa. Quando faltam, usa relações de **categorias econômicas relacionadas**, sem criar empresas nem cargos:
+
+- **Granito (carga14/15):** expedição por mineração/marmoraria com OUT de pedras ou mármore e recebimento por empresas de construção compatíveis.
+- **Ração, xerém e sacaria (carga17–20):** IN/OUT de ração, suplementos e matérias-primas para alimentação animal, com setores agropecuários coerentes.
+- **Sorgo (carga23):** fazendas que expedem cereais; silos/cooperativas e fábricas de ração que recebam insumos agrícolas.
+- **Pluma de algodão (carga5):** fazendas com algodão ou produção agrícola diversificada comprovada, e destinos de fibras/cooperativas.
+- **Bobinas (carga9):** empresas com IN/OUT de produtos siderúrgicos e empresas metalúrgicas receptoras. A interpretação física do conteúdo da carga continua sujeita a confirmação.
+
+A busca usa limites de empresas candidatas por carga, não inventa produto, não inclui postos/Correios em atividades incompatíveis e preserva o tratamento especial de **paletes** (até 3 origens e 6 destinos, sobretudo madeireiras). Empresas com IDs opacos são classificadas pelo conjunto de cargas IN e OUT somente quando os sinais são consistentes.
+
+A validação incluiu a geração e releitura de um ZIP/SCS de teste, com nove cargas anteriormente rejeitadas agora encontrando relações IN/OUT em um mapa sintético. Ainda é necessário conferir o resultado com o mapa específico e o mercado do ETS2.
