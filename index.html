@@ -46,6 +46,17 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 #creator .creator-manual p{margin:10px 0}
 #creator .creator-manual textarea{width:100%;box-sizing:border-box;background:#0a111b;color:var(--text);border:1px solid #30445d;border-radius:7px;padding:11px;font:13px/1.5 ui-monospace,Consolas,monospace}
 
+
+#creator .creator-catalog{background:#0d1520;border:1px solid var(--line);padding:12px;border-radius:10px;margin-top:14px}
+#creator .creator-catalog summary{font-weight:650;cursor:pointer}
+#creator .creator-catalog input{background:#0a111b;border:1px solid #31465f;color:var(--text);border-radius:7px;padding:9px;width:100%;box-sizing:border-box;margin:12px 0}
+#creator .creator-catalog-results{max-height:280px;overflow:auto}
+#creator .creator-catalog-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:12px;padding:8px 4px;border-bottom:1px solid var(--line);font-size:12px;align-items:center}
+#creator .creator-catalog-row span{color:var(--muted)}
+#creator .creator-catalog-row a{color:#8ec5ff}
+#creator .creator-catalog a{color:#8ec5ff}
+@media(max-width:640px){#creator .creator-catalog-row{grid-template-columns:minmax(0,1fr) auto}#creator .creator-catalog-row span{display:none}}
+
 </style>
 </head>
 <body>
@@ -102,6 +113,14 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
    <p class="muted small">Se algum ID não revela o tipo de empresa, informe apenas os ramos que você tem certeza. Isso não adiciona empresas ou cargas fictícias.</p>
    <textarea id="companyCreateOverrides" spellcheck="false" rows="4" placeholder="ID_da_empresa = obras&#10;outro_ID = serraria"></textarea>
    <p class="muted small">Exemplos de ramos: fazenda, silo, pecuaria, racoes, moinho, adubeira, serraria, ceramica, cimenteira, pedreira, obras, materiais, supermercado, hortifruti, cervejaria, siderurgica, metalurgica, textil, alimentos.</p>
+  </details>
+
+  <details class="creator-catalog">
+   <summary>Catálogo de empresas padrão SCS — consulta de setores e fontes</summary>
+   <p class="muted small">Base local pesquisada na comunidade SCS e no Truck Simulator Wiki. É usada somente quando uma empresa correspondente existir no arquivo do mapa. Os nomes do catálogo <strong>não são adicionados</strong> à Company gerada.</p>
+   <input id="companyCreateCatalogSearch" type="search" placeholder="Buscar empresa ou setor: EuroAcres, Kaarfor, logística…">
+   <div id="companyCreateCatalogResults" class="creator-catalog-results"></div>
+   <p class="muted small">Referências: <a href="https://forum.scssoft.com/viewtopic.php?p=195482" target="_blank" rel="noopener">Fórum da SCS — ramos das empresas</a> · <a href="https://forum.scssoft.com/viewtopic.php?t=285506" target="_blank" rel="noopener">Fórum da SCS — lista regional</a> · <a href="https://trucksimulator.wiki.gg/wiki/Companies/Euro_Truck_Simulator_2" target="_blank" rel="noopener">Truck Simulator Wiki</a>. Algumas classificações são históricas e podem ter mudado com atualizações.</p>
   </details>
 <div class="creator-actions">
    <button id="companyCreateGenerate" class="btn primary">Analisar e gerar Company</button>
@@ -565,6 +584,23 @@ const patterns=[
 ["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["bobinas_industriais",/\bbobinas?\b/],["palete_vazio",/\b(paletes? vazios?|pallets? vazios?|paletes? de madeira|pallets? de madeira)\b/],
 ["paletizado",/\b(paletes?|pallets?)\b/]
 ];
+// Catálogo somente de metadados. Nenhuma empresa/carga é criada a partir desta lista.
+const SCS_REFERENCE_URLS={"forum2014":"https://forum.scssoft.com/viewtopic.php?p=195482","forum2020":"https://forum.scssoft.com/viewtopic.php?t=285506","forum2013":"https://forum.scssoft.com/viewtopic.php?t=3897","wiki":"https://trucksimulator.wiki.gg/wiki/Companies/Euro_Truck_Simulator_2"};
+const SCS_COMPANY_CATALOG=[{"name":"EuroGoodies","role":"logistica","source":"forum2014"},{"name":"LKWLog GmbH","role":"logistica","source":"forum2014"},{"name":"LKW","role":"logistica","source":"forum2014"},{"name":"Stokes","role":"logistica","source":"forum2014"},{"name":"Tradeaux","role":"logistica","source":"forum2014"},{"name":"TransiNet","role":"logistica","source":"forum2014"},{"name":"Posped","role":"logistica","source":"forum2014","note":"Listas antigas divergem: há menção a logística e a processamento de alimentos. Priorizar IN/OUT do mapa."},{"name":"Trameri","role":"logistica","source":"forum2014"},{"name":"ACI SRL","role":"logistica","source":"forum2020"},{"name":"Cargotras","role":"logistica","source":"forum2020"},{"name":"FLE","role":"logistica","source":"forum2020"},{"name":"Lisette Logistics","role":"logistica","source":"forum2020"},{"name":"Polaris Lines","role":"logistica","source":"forum2020"},{"name":"RT Log","role":"logistica","source":"forum2020"},{"name":"Container Port","role":"logistica","source":"forum2020"},{"name":"Drekkar Trans","role":"logistica","source":"forum2020"},{"name":"GNT","role":"logistica","source":"forum2020"},{"name":"Norrsken","role":"logistica","source":"forum2020"},{"name":"Renar Logistik","role":"logistica","source":"forum2020"},{"name":"Eolo Lines","role":"logistica","source":"forum2020"},{"name":"Gallia Ferries","role":"logistica","source":"forum2020"},{"name":"Globeur","role":"logistica","source":"forum2020"},{"name":"Port de Conteneur","role":"logistica","source":"forum2020"},{"name":"Wilnet Transports","role":"logistica","source":"forum2020"},{"name":"Exomar","role":"logistica","source":"forum2020"},{"name":"TE Logistica","role":"logistica","source":"forum2020"},{"name":"Terminal Container","role":"logistica","source":"forum2020"},{"name":"Transporti Mediterraneo","role":"logistica","source":"forum2020"},{"name":"AeroBaltica","role":"logistica","source":"forum2020"},{"name":"Baltic Logistic Transport","role":"logistica","source":"forum2020"},{"name":"Nordic Cargo Handling","role":"logistica","source":"forum2020"},{"name":"Rosmark","role":"logistica","source":"forum2020"},{"name":"Sininen Aurinko Logistiikka","role":"logistica","source":"forum2020"},{"name":"Balkan Loco","role":"logistica","source":"forum2020"},{"name":"Baltrak Lojistik","role":"logistica","source":"forum2020"},{"name":"Brawen Transport","role":"logistica","source":"forum2020"},{"name":"Fallow Cargo","role":"logistica","source":"forum2020"},{"name":"Log n Stick","role":"logistica","source":"forum2020"},{"name":"Trade Market Istanbul","role":"logistica","source":"forum2020"},{"name":"TTK","role":"logistica","source":"forum2020"},{"name":"Almacenes y Paquetería Pablo","role":"logistica","source":"forum2020"},{"name":"Logística Atlântica","role":"logistica","source":"forum2020"},{"name":"Transportes Caballería","role":"logistica","source":"forum2020"},{"name":"TS Atlas","role":"logistica","source":"forum2020"},{"name":"APP","role":"logistica","source":"wiki"},{"name":"Adrica","role":"logistica","source":"wiki"},{"name":"Associated Nordic Ports","role":"logistica","source":"wiki"},{"name":"EuroAcres","role":"fazenda","source":"forum2014"},{"name":"Agronord","role":"fazenda","source":"forum2020"},{"name":"Dans le Jardin","role":"fazenda","source":"forum2020"},{"name":"Agrominta UAB","role":"fazenda","source":"forum2020"},{"name":"Evikši ZS","role":"fazenda","source":"forum2020"},{"name":"Lateds AS","role":"fazenda","source":"forum2020"},{"name":"Maatila Egres","role":"fazenda","source":"forum2020"},{"name":"Noskonitta","role":"fazenda","source":"forum2020"},{"name":"Agrominta","role":"fazenda","source":"forum2020"},{"name":"Nordic Crown","role":"pecuaria","source":"forum2020"},{"name":"Ateria AS","role":"pecuaria","source":"forum2020"},{"name":"Õnnelik Talu","role":"pecuaria","source":"forum2020"},{"name":"Tesoro Gustoso","role":"alimentos","source":"forum2020"},{"name":"Kolico","role":"alimentos","source":"forum2020"},{"name":"Subse","role":"alimentos","source":"forum2020"},{"name":"FUISpA","role":"alimentos","source":"forum2020"},{"name":"ARIA Food","role":"laticinio","source":"forum2020"},{"name":"Nos Pâturages","role":"laticinio","source":"forum2020"},{"name":"Fattoria Felice","role":"laticinio","source":"forum2020"},{"name":"Polar Fish","role":"pescado","source":"forum2020"},{"name":"Kaarfor","role":"supermercado","source":"forum2014"},{"name":"Cesare Supermercato","role":"supermercado","source":"forum2020"},{"name":"Norrfood","role":"supermercado","source":"forum2020"},{"name":"Suprema","role":"supermercado","source":"forum2020"},{"name":"Suprema RU","role":"supermercado","source":"forum2020"},{"name":"Cesta","role":"supermercado","source":"forum2020"},{"name":"SuperCesta","role":"supermercado","source":"forum2020"},{"name":"SellPlan","role":"varejo","source":"forum2014"},{"name":"Ika Bohag","role":"varejo","source":"forum2020"},{"name":"Renat","role":"varejo","source":"forum2020"},{"name":"BCP","role":"automotiva","source":"forum2014"},{"name":"FCP","role":"automotiva","source":"forum2014"},{"name":"Scout","role":"automotiva","source":"forum2014"},{"name":"BHV","role":"automotiva","source":"forum2020"},{"name":"Libellula","role":"automotiva","source":"forum2020"},{"name":"Spinelli","role":"automotiva","source":"forum2020"},{"name":"Voitureux","role":"automotiva","source":"forum2020"},{"name":"VPC","role":"automotiva","source":"forum2020"},{"name":"Gomme du Monde","role":"automotiva","source":"forum2020"},{"name":"AA - Auto di Alonso","role":"automotiva","source":"forum2020"},{"name":"Cantiere Navale","role":"automotiva","source":"forum2020"},{"name":"Comoto","role":"automotiva","source":"forum2020"},{"name":"PIAC","role":"automotiva","source":"forum2020"},{"name":"Balteus Yachts","role":"automotiva","source":"forum2020"},{"name":"Finnish Tyres","role":"automotiva","source":"forum2020"},{"name":"Ladoga Auto","role":"automotiva","source":"forum2020"},{"name":"Latvijas Vagonu Rūpnīca","role":"automotiva","source":"forum2020"},{"name":"Dulcis","role":"automotiva","source":"forum2020"},{"name":"Ocean Solution Group","role":"automotiva","source":"forum2020"},{"name":"Rump","role":"automotiva","source":"forum2020"},{"name":"Sporklift","role":"automotiva","source":"forum2020"},{"name":"The Train Foundry","role":"automotiva","source":"forum2020"},{"name":"Ortiz","role":"automotiva","source":"forum2020"},{"name":"TDC Auto Terminal","role":"automotiva","source":"forum2020"},{"name":"AI Automotive","role":"automotiva","source":"wiki"},{"name":"SanBuilders","role":"obras","source":"forum2014"},{"name":"Bâtisse","role":"obras","source":"forum2020"},{"name":"Konstnorr","role":"obras","source":"forum2020"},{"name":"Construzione di Edifici","role":"obras","source":"forum2020"},{"name":"Cemeltex","role":"obras","source":"forum2020"},{"name":"Cemeltex RU","role":"obras","source":"forum2020"},{"name":"Construcciones Elcano","role":"obras","source":"forum2020"},{"name":"Domdepo","role":"materiais","source":"forum2020"},{"name":"Domdepo RU","role":"materiais","source":"forum2020"},{"name":"Stein-Bruch","role":"pedreira","source":"forum2014"},{"name":"MS Stein","role":"pedreira","source":"forum2020"},{"name":"Nordic Stenbrott","role":"pedreira","source":"forum2020"},{"name":"MVM Carrière","role":"pedreira","source":"forum2020"},{"name":"Vanha Kivi","role":"pedreira","source":"forum2020"},{"name":"MarmoSpA","role":"marmoraria","source":"forum2020"},{"name":"QuadrelliSpA","role":"marmoraria","source":"forum2020"},{"name":"ACC","role":"metalurgica","source":"wiki"},{"name":"Alumcore","role":"metalurgica","source":"wiki"},{"name":"Aluxion Metal Solution","role":"metalurgica","source":"wiki"},{"name":"Oțel Impecabil","role":"metalurgica","source":"forum2020"},{"name":"Stomanena Roza","role":"metalurgica","source":"forum2020"},{"name":"Agregados, S.A.","role":"cimenteira","source":"wiki"},{"name":"Radus","role":"cimenteira","source":"forum2020"},{"name":"Radus RU","role":"cimenteira","source":"forum2020"},{"name":"NBFC","role":"quimica","source":"forum2014"},{"name":"WGCC","role":"quimica","source":"forum2014"},{"name":"ITCC","role":"industrial","source":"forum2014"},{"name":"Vitas Power","role":"industrial","source":"forum2020"},{"name":"Nucléon","role":"industrial","source":"forum2020"},{"name":"Severoatom","role":"industrial","source":"forum2020"},{"name":"UKKO Voima","role":"industrial","source":"forum2020"},{"name":"Engeron","role":"industrial","source":"forum2020"},{"name":"Iberatómica","role":"industrial","source":"forum2020"},{"name":"CGLA","role":"industrial","source":"forum2020"},{"name":"SCS Paper","role":"industrial","source":"forum2020"},{"name":"Estonian Paper AS","role":"industrial","source":"forum2020"},{"name":"Viljo paperitehdas Oy","role":"industrial","source":"forum2020"},{"name":"Vilniaus Popieriaus Fabrikas","role":"industrial","source":"forum2020"},{"name":"TREE-ET","role":"floresta","source":"forum2014"},{"name":"BHB - La Raffinerie","role":"petroleo","source":"wiki"},{"name":"NS Oil RU","role":"petroleo","source":"forum2020"}];
+const SCS_CATALOG_ALIASES={"eurogoodies":"eurogoodies","euroacres":"euroacres","lkwlog":"lkwloggmbh","lkw":"lkwloggmbh","treeet":"treeet","steinbruch":"steinbruch","sanbuilders":"sanbuilders","sellplan":"sellplan","kaarfor":"kaarfor","lognstick":"lognstick","nbfc":"nbfc","wgcc":"wgcc"};
+function scsKey(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+const SCS_CATALOG_BY_NAME=new Map(SCS_COMPANY_CATALOG.map(x=>[scsKey(x.name),x]));
+function scsCatalogLookup(id,displayName){
+ for(const candidate of [id,displayName]){
+  const key=scsKey(candidate);
+  if(!key)continue;
+  const actual=SCS_CATALOG_ALIASES[key]||key;
+  const item=SCS_CATALOG_BY_NAME.get(actual);
+  if(item)return item;
+ }
+ return null;
+}
+
 const sectors=[
 ["silo",/(silo|cooperativa|cerealista|armazem de graos|grain storage)/],
 ["fazenda",/(fazenda|faz0|faz1|faz2|faz3|faz4|faz5|agropecuaria|sitio agricola|cultivo agricola|farm|plantacao)/],
@@ -717,15 +753,15 @@ function entries(zip){return Object.entries(zip.files).filter(([,o])=>!o.dir)}
 
 function inferRoleFromHistoricalFreights(company){
  // O histórico serve somente para identificar setor; nunca é copiado como logística.
- const cargoSet=new Set(company.old.map(x=>x.stem.toLowerCase()));
+ const cargoSet=new Set(company.old.map(x=>String(x.unit||x.stem).toLowerCase()));
  if(!cargoSet.size||cargoSet.size>10||company.old.length>14)return null;
- const has=(dir,re)=>company.old.some(x=>x.dir===dir&&re.test(x.stem.replace(/[_-]/g," ")));
+ const has=(dir,re)=>company.old.some(x=>x.dir===dir&&re.test(String(x.unit||x.stem).replace(/[_-]/g," ")));
  const out=re=>has("out",re),inn=re=>has("in",re);
  const grain=/(wheat|trigo|maize|corn|milho|soybean|soja|barley|cevada|sunflower|girassol|rapeseed|canola|sorghum|sorgo|rice|arroz|grain|graos)/i;
  const crop=/(potat|batata|beet|beterraba|cotton|algodao|orange|laranja|vegetable|hortalica|fruit|fruta|cereals?|sementes?|seeds?)/i;
  const fert=/(fertiliz|adubo|seed|sement|pesticid|defensivo)/i;
- const reGrain=company.old.filter(x=>x.dir==="out"&&grain.test(x.stem)).map(x=>x.stem.toLowerCase());
- const inGrain=new Set(company.old.filter(x=>x.dir==="in"&&grain.test(x.stem)).map(x=>x.stem.toLowerCase()));
+ const reGrain=company.old.filter(x=>x.dir==="out"&&grain.test(x.unit||x.stem)).map(x=>String(x.unit||x.stem).toLowerCase());
+ const inGrain=new Set(company.old.filter(x=>x.dir==="in"&&grain.test(x.unit||x.stem)).map(x=>String(x.unit||x.stem).toLowerCase()));
  const sharedGrain=reGrain.some(x=>inGrain.has(x));
  const evidence=[
  ["silo",sharedGrain],
@@ -744,6 +780,42 @@ function inferRoleFromHistoricalFreights(company){
  for(const [role,ok] of evidence)if(ok)return{role,method:"combinação IN/OUT anterior"};
  return null;
 }
+const SCS_CARGO_CATEGORY_MAP=[
+ ["milho",/(?:^|[_ ]|\.)(?:corn(?:_b)?|maize|milho(?:alto)?)(?:$|[_ ]|\.)/],
+ ["soja",/(?:^|[_ ]|\.)(?:soybeans?(?:_b)?|soja(?:alto)?)(?:$|[_ ]|\.)/],
+ ["sorgo",/(?:^|[_ ]|\.)(?:sorghum|sorgo(?:alto)?)(?:$|[_ ]|\.)/],
+ ["batata",/(?:^|[_ ]|\.)(?:potatoes?(?:_b)?|batatas?)(?:$|[_ ]|\.)/],
+ ["laranja",/(?:^|[_ ]|\.)(?:oranges?|laranjas?|citrus)(?:$|[_ ]|\.)/],
+ ["adubo",/(?:^|[_ ]|\.)(?:fertilizers?|fertilizantes?|adubo|ureia|urea)(?:$|[_ ]|\.)/],
+ ["madeira",/(?:^|[_ ]|\.)(?:logs?|lumber|timber|wood|planks?|boards?|madeira|toras?)(?:$|[_ ]|\.)/],
+ ["algodao",/(?:^|[_ ]|\.)(?:cotton(?:_bales?)?|algodao|pluma)(?:$|[_ ]|\.)/],
+ ["cimento",/(?:^|[_ ]|\.)(?:cement(?:_bag|_pallet)?|cimento)(?:$|[_ ]|\.)/],
+ ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?|tiles?|telhas?)(?:$|[_ ]|\.)/],
+ ["granito",/(?:^|[_ ]|\.)(?:granite|granito|marble|marmore)(?:$|[_ ]|\.)/],
+ ["cerveja",/(?:^|[_ ]|\.)(?:beer|cervejas?)(?:$|[_ ]|\.)/],
+ ["racao",/(?:^|[_ ]|\.)(?:animal_?feed|feedmeal|racao|xerem)(?:$|[_ ]|\.)/],
+ ["bobinas_industriais",/(?:^|[_ ]|\.)(?:steel_?coils?|metal_?coils?|bobinas?)(?:$|[_ ]|\.)/],
+ ["combustivel",/(?:^|[_ ]|\.)(?:gasoline|diesel|petrol|fuel|combustivel)(?:$|[_ ]|\.)/],
+ ["maquinas",/(?:^|[_ ]|\.)(?:excavators?|tractors?|machinery|equipment|digger)(?:$|[_ ]|\.)/],
+ ["quimicos",/(?:^|[_ ]|\.)(?:chemical|chemicals|acids?|quimicos?)(?:$|[_ ]|\.)/],
+ ["alimentos",/(?:^|[_ ]|\.)(?:food|groceries|processed_food|comida|alimentos)(?:$|[_ ]|\.)/]
+];
+function oldCargoCategory(stemOrUnit){
+ const x=norm(String(stemOrUnit||"").replace(/^cargo[.:]/i,"")).replace(/\s+/g,"_");
+ for(const [k,re] of SCS_CARGO_CATEGORY_MAP)if(re.test(x))return k;
+ return null;
+}
+function categorizeExistingCompanyLoads(c){
+ const result={in:new Map(),out:new Map(),unknownIn:0,unknownOut:0};
+ for(const x of c.old){
+  const role=oldCargoCategory(x.unit)||oldCargoCategory(x.stem);
+  x.category=role;
+  if(role)result[x.dir].set(role,(result[x.dir].get(role)||0)+1);
+  else if(x.dir==="in")result.unknownIn++;
+  else result.unknownOut++;
+ }
+ return result;
+}
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  for(const [raw,obj] of entries(zip)){
@@ -754,7 +826,7 @@ async function loadMap(zip){
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
   if(m.type==="editor")c.editor++;
-  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,"")});
+  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
  }
  if(!companies.size)throw Error("Nenhuma empresa na Company informada.");
  let i=0;
@@ -765,7 +837,30 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
+ let parsedRelations=0;
+ for(const item of files.values()){
+  const m=companyMeta(item.p);
+  if(!m||(m.type!=="in"&&m.type!=="out"))continue;
+  const obj=item.obj;
+  if((obj._data?.uncompressedSize||0)>100000)continue;
+  const raw=await obj.async("text");
+  const match=raw.match(/^\s*cargo\s*:\s*["']?cargo\.([a-z0-9_]+)["']?/mi);
+  if(match){
+   const c=companies.get(m.id);
+   const relation=c?.old.find(x=>x.p===item.p);
+   if(relation){relation.unit=match[1].toLowerCase();parsedRelations++}
+  }
+  if(parsedRelations%180===0)await yieldUI();
+ }
+ for(const c of companies.values())c.categories=categorizeExistingCompanyLoads(c);
  for(const c of companies.values()){
+  const reference=scsCatalogLookup(c.id,c.name);
+  if(reference){
+   c.role=reference.role;
+   c.catalog=reference;
+   c.evidence="catálogo SCS: "+reference.name+" ("+reference.source+")";
+   continue;
+  }
   c.role=known(c.id,c.name);
   c.evidence=c.role==="desconhecida"?"nenhuma":"identificador/nome";
   if(c.role==="desconhecida"&&typeof rawClassification==="function"&&typeof finalizeClassification==="function"){
@@ -783,7 +878,7 @@ async function loadMap(zip){
   }
  }
 
- return{companies,files}
+ return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length}
 }
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
@@ -854,7 +949,7 @@ function legacyEvidence(c,type,dir){
  if(LEGACY_INCOMPATIBLE_ROLES.has(c.role))return false;
  const flow=flows[type],re=LEGACY_EVIDENCE[type];
  if(!flow||!re)return false;
- if(!c.old.some(x=>x.dir===dir&&re.test(x.stem)))return false;
+ if(!c.old.some(x=>x.dir===dir&&(re.test(x.unit||"")||re.test(x.stem))))return false;
  // Setores confirmados não podem expedir produtos de um ramo alheio.
  if(c.role!=="desconhecida"&&!flow[dir].includes(c.role))return false;
  // Uma fazenda inferida pelo histórico só tem autorização para o cultivo
@@ -1025,6 +1120,8 @@ function audit(map,cargo,sim){
  const producers=companies.filter(c=>producerSectors.has(c.role));
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
  const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
+ const matched=companies.filter(c=>c.catalog).length;
+ if(matched)warning.push(matched+" empresas do mapa reconhecidas no catálogo de empresas padrão SCS.");
  if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
  if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
  const manual=companies.filter(c=>c.evidence==="classificação informada pelo usuário").length;
@@ -1057,6 +1154,9 @@ let latestDiagnostic=null;
 function createDiagnosticText(map,cargo,sim){
  const rows=[
   "ETS2 COMPANY LOGISTICS - DIAGNÓSTICO DE ARQUIVOS",
+  "Catálogo consultado: "+SCS_COMPANY_CATALOG.length+" referências; somente para classificar empresas existentes.",
+  "Empresas padrão reconhecidas no mapa: "+(map.catalogMatched||0),
+  "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
   "Empresas: "+map.companies.size,
   "Cargas personalizadas do Librelato: "+cargo.cargos.size,
   "Definições de carroceria: "+[...cargo.cargos.values()].map(c=>c.id+" = "+(c.body.join("|")||"SEM BODY_TYPES")).join(", "),
@@ -1066,7 +1166,7 @@ function createDiagnosticText(map,cargo,sim){
  for(const c of map.companies.values()){
   const ins=c.old.filter(x=>x.dir==="in").map(x=>x.stem);
   const outs=c.old.filter(x=>x.dir==="out").map(x=>x.stem);
-  rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(",")].join(" | "));
+  rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(","),"categorias IN: "+[...(c.categories?.in||new Map())].map(x=>x.join("=")).join(","),"categorias OUT: "+[...(c.categories?.out||new Map())].map(x=>x.join("=")).join(",")].join(" | "));
  }
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
@@ -1111,7 +1211,20 @@ async function generate(){
 ui.run.addEventListener("click",generate);
 if(el("companyCreateSaveDiagnostic"))el("companyCreateSaveDiagnostic").addEventListener("click",downloadDiagnostic);
 for(const id of ["companyCreateMapFile","companyCreateCargoFile"])el(id).addEventListener("change",()=>{const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
+
+function renderSCSCatalog(){
+ const input=el("companyCreateCatalogSearch"),root=el("companyCreateCatalogResults");
+ if(!root)return;
+ const query=scsKey(input?.value);
+ const rows=SCS_COMPANY_CATALOG.filter(c=>!query||scsKey(c.name+" "+c.role).includes(query));
+ root.innerHTML="<p class='muted'>"+rows.length+" de "+SCS_COMPANY_CATALOG.length+" referências. Apenas metadados: nenhum ID é adicionado ao SCS.</p>"+
+ rows.slice(0,75).map(c=>"<div class='creator-catalog-row'><b>"+escapeHTML(c.name)+"</b><span>"+escapeHTML(c.role)+"</span><a href='"+escapeHTML(SCS_REFERENCE_URLS[c.source]||SCS_REFERENCE_URLS.wiki)+"' target='_blank' rel='noopener noreferrer'>Fonte</a></div>").join("")+
+ (rows.length>75?"<p class='muted'>Mostrando as primeiras 75. Use a busca para filtrar.</p>":"");
+}
+if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
+renderSCSCatalog();
+
+window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory};
 })();
 </script>
 </body>
