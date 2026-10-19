@@ -144,9 +144,9 @@ const cargoPath=raw=>{
 };
 const companyMeta=path=>{
  const a=path.match(/^def\/company\/([a-z0-9_]+)\/(in|out|editor)\/(.+)$/i);
- if(a)return{id:a[1].toLowerCase(),type:a[2].toLowerCase(),name:a[3]};
+ if(a)return{id:a[1].toLowerCase(),rawId:a[1],type:a[2].toLowerCase(),name:a[3]};
  const b=path.match(/^def\/company\/([a-z0-9_]+)\.sii$/i);
- return b?{id:b[1].toLowerCase(),type:"permanent",name:b[1]}:null
+ return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null
 };
 function zipRead(file){
  return file.slice(0,6).arrayBuffer().then(arr=>{
@@ -193,7 +193,7 @@ async function loadMap(zip){
   const key=p.toLowerCase();if(files.has(key))throw Error("Caminho duplicado no mapa: "+p);
   files.set(key,{p,obj});
   const m=companyMeta(p);if(!m)continue;
-  if(!companies.has(m.id))companies.set(m.id,{id:m.id,name:"",role:"desconhecida",old:[],editor:0});
+  if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
   if(m.type==="editor")c.editor++;
   if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,"")});
@@ -353,7 +353,8 @@ async function build(map,cargo,sim){
  }
  for(const [co,ps] of sim.plan){
   for(const dir of ["in","out"])for(const id of ps[dir]){
-   const p="def/company/"+co+"/"+dir+"/"+id+".sii";
+   const folder=map.companies.get(co)?.folder||co;
+   const p="def/company/"+folder+"/"+dir+"/"+id+".sii";
    generated.set(p.toLowerCase(),cargoSii(id));
   }
  }
