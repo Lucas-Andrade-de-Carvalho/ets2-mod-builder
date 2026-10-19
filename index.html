@@ -807,7 +807,7 @@ const cargoPath=raw=>{
 };
 const companyMeta=path=>{
  // Caminhos de empresas customizadas podem conter hífen e ponto.
- const a=path.match(/^def\/company\/([a-z0-9_.-]+)\/(in|out|editor)\/(.+)$/i);
+ const a=path.match(/^def\/company\/([a-z0-9_.-]+)\/(in|out|editor)\/([^/]+\.sii)$/i);
  if(a)return{id:a[1].toLowerCase(),rawId:a[1],type:a[2].toLowerCase(),name:a[3]};
  const b=path.match(/^def\/company\/([a-z0-9_.-]+)\.sii$/i);
  return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null;
