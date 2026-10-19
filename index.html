@@ -667,25 +667,38 @@ async function getTemplateLibrary(files,token){
 }
 async function readCargoDefinitions(file,ids,token){
  const z=await readArchive(file,token),body=new Map(),registration=new Set(),found=new Set();
- const selected=[];
- for(const [path,obj] of listEntries(z)){
-  const p=normPath(path);
-  if((/(?:^|\/)cargo\.[^/]+\.sii$/i.test(p)||p.endsWith("cargo.librelato.sii"))&&obj._data?.uncompressedSize<250000)selected.push({path,obj,manifest:true});
-  else if(/(?:^|\/)cargo\/(?:carga[0-9]+)\.(sui|sii)$/i.test(p)&&obj._data?.uncompressedSize<250000)selected.push({path,obj,manifest:false});
- }
- for(let i=0;i<selected.length;i++){
-  check(token);const entry=selected[i],txt=await entry.obj.async("text");
-  if(entry.manifest){const re=/@include\s+["'][^"']*cargo\/(carga[0-9]+)\.(?:sui|sii)["']/ig;for(const m of txt.matchAll(re))registration.add(m[1].toLowerCase())}
-  else{
-   const id=normPath(entry.path).match(/(carga[0-9]+)\.(?:sui|sii)$/)?.[1];if(!id||!ids.has(id))continue;
-   if(!new RegExp("cargo_data\\s*:\\s*cargo\\."+id+"\\b","i").test(txt))continue;
-   found.add(id);
-   const b=[...txt.matchAll(/^\s*body_types\s*\[\s*\]\s*:\s*([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
-   body.set(id,[...new Set(b)]);
+ const examined=[],manifestNames=[],invalid=[];
+ const files=listEntries(z);
+ const candidates=files.filter(([p,obj])=>{
+   const n=normPath(p),size=obj._data?.uncompressedSize||0;
+   return /\.(?:sii|sui)$/i.test(n)&&size<=500000&&(/(?:^|\/)cargo\.[^/]+\.sii$/i.test(n)||/(?:^|\/)cargo\/(?:carga[0-9]+)\.(?:sii|sui)$/i.test(n)||/cargo\.librelato\.sii$/i.test(n));
+ });
+ for(let i=0;i<candidates.length;i++){
+  check(token);
+  const [path,obj]=candidates[i],p=normPath(path),txt=await obj.async("text");
+  examined.push(path);
+  const isManifest=/cargo\.[^/]+\.sii$/.test(p)||p.endsWith("cargo.librelato.sii");
+  if(isManifest){
+   manifestNames.push(path);
+   for(const m of txt.matchAll(/@include\s+["'][^"']*\/?(carga[0-9]+)\.(?:sui|sii)["']/gi))registration.add(m[1].toLowerCase());
+   for(const m of txt.matchAll(/cargo_data\s*:\s*cargo\.(carga[0-9]+)\b/gi)){
+    const id=m[1].toLowerCase();if(ids.has(id)){registration.add(id);found.add(id);}
+   }
   }
-  if(i%30===0)await yieldUI();
+  const match=p.match(/(?:^|\/)cargo\/(carga[0-9]+)\.(?:sii|sui)$/i);
+  if(match){
+   const id=match[1].toLowerCase();
+   if(!ids.has(id))continue;
+   if(!new RegExp("cargo_data\\s*:\\s*(?:cargo\\.)?"+id+"\\b","i").test(txt)){invalid.push(path+" sem unidade cargo_data");continue;}
+   found.add(id);
+   const types=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(m=>m[1].toLowerCase());
+   // Names quoted, unquoted, and body_types[0]: value.
+   const indexed=[...txt.matchAll(/^\s*body_types\s*\[\s*\d+\s*\]\s*:\s*["']?([a-z0-9_]+)/gim)].map(m=>m[1].toLowerCase());
+   body.set(id,[...new Set([...types,...indexed])]);
+  }
+  if(i%35===0)await yieldUI();
  }
- return{body,found,registration}
+ return{body,found,registration,examined,manifestNames,invalid,entryCount:files.length};
 }
 function buildCandidate(companies,labels,templates,cargoData,bodyToken,overrides){
  const report=[],plan=new Map();
