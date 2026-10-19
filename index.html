@@ -96,7 +96,7 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 <section id="creator" class="page">
  <div class="card">
   <h2>Criação de Companys — Librelato e qualquer mapa compatível</h2>
-  <p class="muted">Funciona com DEF Company de diferentes mapas (company/ ou def/company/, inclusive ZIPs com subpastas). Anexe a DEF do mapa e as cargas do Librelato. O sistema utiliza apenas empresas existentes e pode gerar uma ou as duas grades, conforme as ofertas realmente compatíveis.</p>
+  <p class="muted">Suporta DEF Company de vários mapas: ZIP/SCS ZIP na raiz, em subpastas ou dentro de outros ZIP/SCS. Arquivos HashFS precisam ser extraídos. Anexe a DEF do mapa e as cargas do Librelato. O sistema utiliza apenas empresas existentes e pode gerar uma ou as duas grades, conforme as ofertas realmente compatíveis.</p>
   <div class="creator-uploads">
    <label class="creator-file"><strong><span class="creator-count">1</span> DEF Company do mapa</strong>
     <span id="companyCreateMapFileName" class="muted">Selecione a company em ZIP ou SCS.</span>
@@ -794,14 +794,77 @@ function mapFingerprint(map){
  }
  return(hash>>>0).toString(16).padStart(8,"0");
 }
-function zipRead(file){
- return file.slice(0,6).arrayBuffer().then(arr=>{
-  const a=new Uint8Array(arr);
-  if(a[0]!==80||a[1]!==75)throw Error("O arquivo "+file.name+" não está em ZIP/SCS ZIP. Se for HashFS, extraia a DEF.");
-  return JSZip.loadAsync(file,{createFolders:false,checkCRC32:false})
- })
+// Leitor de pacotes ZIP, inclusive SCS/ZIP guardados dentro de outro ZIP.
+// Mantém os nomes internos: prefixos de pastas só são removidos na projeção
+// canonizada de def/company e def/cargo, nunca nos dados originais.
+const ARCHIVE_LIMITS=Object.freeze({
+ maxDepth:3,
+ maxNestedFiles:32,
+ maxEntries:120000,
+ maxNestedBytes:320*1024*1024
+});
+const ARCHIVE_FILE=/\.(?:zip|scs)$/i;
+const ZIP_SIGNATURES=new Set(["504b0304","504b0506","504b0708"]);
+function isZipMagic(data){
+ const a=data instanceof Uint8Array?data:new Uint8Array(data);
+ if(a.length<4)return false;
+ return ZIP_SIGNATURES.has(Array.from(a.slice(0,4),v=>v.toString(16).padStart(2,"0")).join(""));
 }
-function entries(zip){return Object.entries(zip.files).filter(([,o])=>!o.dir)}
+async function zipRead(file){
+ if(!file||typeof file.slice!=="function")throw Error("Selecione um ZIP/SCS válido.");
+ if(file.size>700*1024*1024)throw Error("Arquivo maior que 700 MB. Envie apenas a DEF Company ou a DEF das cargas, sem modelos e texturas.");
+ const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
+ if(!isZipMagic(header)){
+  throw Error("O arquivo "+file.name+" não é ZIP/SCS ZIP legível. Pacotes HashFS precisam ser extraídos com ferramenta compatível antes do upload.");
+ }
+ return JSZip.loadAsync(file,{createFolders:false,checkCRC32:false});
+}
+async function resolveEntries(zip,kind){
+ const matched=[],stack=[{zip,level:0,source:"arquivo enviado"}];
+ let entryCount=0,nestedCount=0,skippedHashFS=0;
+ const isRelevant=kind==="map"?companyPath:cargoPath;
+ while(stack.length){
+  const frame=stack.pop();
+  const nested=[];
+  for(const [raw,obj] of Object.entries(frame.zip.files)){
+   if(obj.dir)continue;
+   if(++entryCount>ARCHIVE_LIMITS.maxEntries)throw Error("Pacote muito grande: limite de "+ARCHIVE_LIMITS.maxEntries+" entradas alcançado. Selecione só a DEF do mapa.");
+   if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
+     throw Error("Caminho inseguro encontrado no arquivo "+frame.source);
+   const name=pathNorm(raw);
+   const canonical=isRelevant(name);
+   if(canonical){
+    matched.push([name,obj,frame.source]);
+   }else if(frame.level<ARCHIVE_LIMITS.maxDepth&&ARCHIVE_FILE.test(name)){
+    nested.push({name,obj});
+   }
+  }
+  // Não vasculhar dezenas de outras modificações embutidas se já existe
+  // uma DEF Company reconhecível no arquivo principal.
+  // Mesmo que existam definições na raiz, validar e juntar outras DEF internas;
+  // caminhos repetidos serão rejeitados na etapa de normalização.
+  for(const entry of nested){
+   if(++nestedCount>ARCHIVE_LIMITS.maxNestedFiles)
+     throw Error("O arquivo contém muitos pacotes internos. Separe a DEF do mapa (máximo "+ARCHIVE_LIMITS.maxNestedFiles+").");
+   const size=entry.obj._data?.uncompressedSize;
+   if(size&&size>ARCHIVE_LIMITS.maxNestedBytes)
+     throw Error("Arquivo interno grande demais: "+entry.name+". Envie somente a DEF do mapa.");
+   const data=await entry.obj.async("uint8array");
+   if(data.byteLength>ARCHIVE_LIMITS.maxNestedBytes)
+     throw Error("Pacote interno excede o limite de tamanho: "+entry.name);
+   if(!isZipMagic(data)){skippedHashFS++;continue}
+   let inner;
+   try{
+    inner=await JSZip.loadAsync(data,{createFolders:false,checkCRC32:false});
+   }catch(err){
+    throw Error("Falha ao abrir ZIP/SCS interno "+entry.name+": "+(err?.message||err));
+   }
+   stack.push({zip:inner,level:frame.level+1,source:entry.name});
+   if(nestedCount%4===0)await yieldUI();
+  }
+ }
+ return {matched,nestedCount,skippedHashFS};
+}
 
 function inferRoleFromHistoricalFreights(company){
  // O histórico serve somente para identificar setor; nunca é copiado como logística.
@@ -993,17 +1056,21 @@ function farmCargoEvidence(c,type){
 
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
- for(const [raw,obj] of entries(zip)){
+ const resolution=await resolveEntries(zip,"map");
+ for(const [raw,obj,source] of resolution.matched){
   const p=companyPath(raw);if(!p)continue;
-  const key=p.toLowerCase();if(files.has(key))throw Error("Caminho duplicado no mapa: "+p);
-  files.set(key,{p,obj});
+  const key=p.toLowerCase();if(files.has(key))throw Error("Definição duplicada: "+p+" (em "+files.get(key).source+" e "+source+"). Remova um dos pacotes repetidos; nenhuma entrada será sobrescrita.");
+  files.set(key,{p,obj,source});
   const m=companyMeta(p);if(!m)continue;
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
   if(m.type==="editor")c.editor++;
   if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
  }
- if(!companies.size)throw Error("Nenhuma empresa reconhecida. Inclua company/ ou def/company/ com pastas de empresas e arquivos .sii. Se você enviou um pacote contendo vários .scs internos, extraia a DEF antes.");
+ if(!companies.size){
+  const sample=Object.keys(zip.files).filter(p=>!zip.files[p].dir).slice(0,6);
+  throw Error("Não encontrei definições de empresas. A DEF deve ter company/<id>/editor, in ou out (ou def/company/). Pacotes internos ZIP/SCS examinados: "+resolution.nestedCount+"; HashFS não legíveis: "+resolution.skippedHashFS+". Arquivos visíveis: "+(sample.join(", ")||"nenhum")+". Selecione a DEF Company, não apenas o mapa/modelos.");
+ }
  let i=0;
  for(const v of files.values()){
   const m=companyMeta(v.p);if(!m||m.type!=="permanent")continue;
@@ -1012,7 +1079,7 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
- let parsedRelations=0;
+ let parsedRelations=0,scannedRelations=0;
  for(const item of files.values()){
   const m=companyMeta(item.p);
   if(!m||(m.type!=="in"&&m.type!=="out"))continue;
@@ -1025,7 +1092,7 @@ async function loadMap(zip){
    const relation=c?.old.find(x=>x.p===item.p);
    if(relation){relation.unit=match[1].toLowerCase();parsedRelations++}
   }
-  if(parsedRelations%180===0)await yieldUI();
+  if(++scannedRelations%180===0)await yieldUI();
  }
  for(const c of companies.values())c.categories=categorizeExistingCompanyLoads(c);
  for(const c of companies.values()){
@@ -1051,16 +1118,17 @@ async function loadMap(zip){
   inferConstructionSupplyFromINOUT(c);
  }
 
- return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length}
+ return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
- for(const [raw,obj] of entries(zip)){
+ const resolution=await resolveEntries(zip,"cargo");
+ for(const [raw,obj,source] of resolution.matched){
   const p=cargoPath(raw);if(!p)continue;
-  if(files.has(p.toLowerCase()))throw Error("Caminho duplicado na DEF de cargas: "+p);
-  files.set(p.toLowerCase(),{p,obj})
+  if(files.has(p.toLowerCase()))throw Error("Definição de carga duplicada: "+p+" (em "+files.get(p.toLowerCase()).source+" e "+source+").");
+  files.set(p.toLowerCase(),{p,obj,source})
  }
- if(!files.size)throw Error("A DEF do Librelato não contém cargo/ nem vehicle/.");
+ if(!files.size)throw Error("Não foi localizada a DEF das cargas. Procure cargo/, vehicle/ ou def/cargo/ dentro do ZIP/SCS, inclusive pacotes internos.");
  let i=0;
  for(const f of files.values()){
   if(!/\.(sii|sui)$/i.test(f.p))continue;
@@ -1083,7 +1151,7 @@ async function loadCargo(zip){
   if((++i)%100===0)await yieldUI();
  }
  for(const c of cargos.values())c.trailer=trailer.get(c.id)||new Set();
- return{files,cargos,manifests}
+ return{files,cargos,manifests,archivesRead:resolution.nestedCount}
 }
 
 const LEGACY_EVIDENCE={
@@ -1357,7 +1425,6 @@ function simulate(map,cargo){
 }
 
 const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"\"\n }\n}\n";
-const emptySii=name=>"SiiNunit\n{\n cargo_def : ."+(name.match(/^[a-z0-9_]{1,60}$/i)?name:"v11empty")+" {\n  cargo: \"\"\n }\n}\n";
 async function build(map,cargo,sim){
  const out=new JSZip(),keys=new Set(),generated=new Map(),removed=[];
  async function put(p,v){
@@ -1385,7 +1452,7 @@ async function build(map,cargo,sim){
   if((++count)%150===0){say("Preservando arquivos do mapa… "+count,54);await yieldUI()}
  }
  for(const [p,t]of generated)await put(p,t);
- await put("description.txt","DEF Company personalizada por mapa. Requer mod principal do Librelato ativo. Nao usar DEF Companies genericas 1/2.\n");
+
  const blob=await out.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:4},streamFiles:true},info=>say("Compactando Company… "+Math.round(info.percent)+"%",62+Math.round(info.percent*.28)));
  const check=await JSZip.loadAsync(blob,{createFolders:false});
  for(const p of generated.keys()){
@@ -1517,7 +1584,7 @@ async function generate(){
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
-  if(!sim.plan.size)throw Error("Sem cadeias de carga verificadas. Confira o diagnóstico. Não vou gerar SCS vazio.");
+  if(!sim.plan.size)throw Error("Nenhuma relação IN/OUT válida encontrada. Consulte o diagnóstico de empresas e cargas; o site não gera pacotes vazios.");
   // Não inventar fretes para completar uma grade ausente neste mapa.
   // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);
@@ -1533,7 +1600,7 @@ async function generate(){
    removed:out.removed
   };
   updateDownloadUI();
-  say("Company do mapa gerada: "+out.count+" relações IN/OUT; "+sim.grouped.baixa+" cargas grade baixa, "+sim.grouped.alta+" grade alta. Clique em Baixar Company .SCS. Teste no ETS2 necessário.",100);
+  say("Company pronta: "+out.count+" associações IN/OUT, "+map.companies.size+" empresas analisadas, "+map.archivesRead+" arquivo(s) interno(s) processado(s). Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Clique em Baixar Company .SCS.",100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
@@ -1556,7 +1623,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution};
+window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic};
 })();
 </script>
 </body>
