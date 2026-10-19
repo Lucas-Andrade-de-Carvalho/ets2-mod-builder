@@ -47,7 +47,7 @@ const flows={
  milho:{out:["fazenda"],in:["silo","moinho","racoes","pecuaria"]},
  soja:{out:["fazenda"],in:["silo","moinho"]},
  sorgo:{out:["fazenda"],in:["silo","racoes","pecuaria"]},
- adubo:{out:["adubeira","agroinsumos","materiais","logistica"],in:["fazenda","pecuaria","agroinsumos","materiais","logistica"]},
+ adubo:{out:["adubeira","agroinsumos","materiais","logistica"],in:["fazenda","cana","pecuaria","agroinsumos","materiais","logistica"]},
  madeira:{out:["serraria","floresta","materiais","logistica"],in:["obras","materiais","logistica","metalurgica"]},
  algodao:{out:["fazenda","algodoeira","logistica"],in:["textil","algodoeira","logistica"]},
  cimento:{out:["cimenteira","materiais","logistica"],in:["obras","materiais","logistica"]},
