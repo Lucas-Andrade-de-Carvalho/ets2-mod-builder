@@ -130,6 +130,21 @@ Exemplo: um mapa com 300 empresas customizadas mais EuroAcres e Kaarfor usa os s
 
 O relatório indica quantas empresas existentes foram consultadas, quantas correspondências exatas houve e quais cargos envolveram locais SCS. No teste sintético com 9 empresas (7 customizadas + 2 SCS), o arquivo foi gerado com ambas grades, sem criar empresas ou IDs de carga fora dos arquivos de entrada.
 
+
+## Expedição e recebimento sem fábrica obrigatória
+
+A aba **Criação de Companys** NÃO exige cimenteira, olaria, algodoeira ou exploração florestal para disponibilizar cargas. As regras usam empresas **que já existem na DEF do mapa**:
+
+- **Cimento (inclusive palete e cinta)**: OUT de loja/depósito de materiais; IN de construtora/obra ou outra loja compatível.
+- **Tijolos**: OUT de loja/depósito de materiais ou olaria (quando existir); IN de obra e revenda de materiais.
+- **Madeira**: OUT de madeireira, serraria ou loja de materiais; IN de obra, madeireira ou depósito de materiais.
+- **Pluma de algodão**: OUT de fazendas; IN de cooperativas agrícolas, algodoeiras e tecelagens quando existirem.
+- **Sacos de batata e laranja**: OUT de fazendas e centrais de hortifrúti; IN de supermercados, atacados e centrais alimentícias. Uma fazenda sem especialidade explícita pode expedir essas cargas; uma fazenda de batata identificada não vira fazenda de laranja.
+
+O histórico `cargo:` da DEF pode oferecer evidência específica mesmo com um ID de empresa opaco, desde que o arquivo não distribua indiscriminadamente grandes quantidades de cargas. Nenhum novo cargo_data ou empresa é criado.
+
+**Teste automatizado desta regra:** 8 tipos de carga com dois graus de carroceria e mapa sem fábricas, 14 verificações de IN/OUT/editor, ausência de cargas antigas e download do SCS confirmado. Ainda sem validação dentro do ETS2.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
