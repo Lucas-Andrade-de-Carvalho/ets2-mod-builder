@@ -226,19 +226,27 @@ const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"
 const emptySii=name=>"SiiNunit\n{\n cargo_def : ."+(name.match(/^[a-z0-9_]{1,60}$/i)?name:"v11empty")+" {\n  cargo: \"\"\n }\n}\n";
 async function build(map,cargo,sim){
  const out=new JSZip(),keys=new Set(),generate=new Map();
- function put(p,v){const key=p.toLowerCase();if(keys.has(key))throw Error("Colisão de caminho "+p);keys.add(key);out.file(p,v,{createFolders:true})}
- for(const [co,ps] of sim.plan)for(const dir of ["in","out"])for(const id of ps[dir])generate.set("def/company/"+co+"/"+dir+"/"+id+".sii",cargoSii(id));
- for(const x of map.files.values()){
-  const m=companyMeta(x.p),gen=generate.has(x.p);
-  if(m&&(m.type==="in"||m.type==="out")){if(!generate.has(x.p.toLowerCase()))put(x.p,emptySii(m.name.replace(/\.sii$/i,"")))}
-  else put(x.p,x.obj)
+ async function put(p,v){
+  const key=p.toLowerCase();if(keys.has(key))throw Error("Colisão de caminho "+p);
+  const bytes=v&&typeof v.async==="function"?await v.async("uint8array"):v;
+  keys.add(key);out.file(p,bytes,{createFolders:true});
  }
- for(const [p,t] of generate)put(p,t);
- for(const x of cargo.files.values())put(x.p,x.obj);
- put("description.txt","Company Logistics Universal. Requer o reboque Librelato. Nao habilitar as DEF Companies 1 e 2.\n");
+ for(const [co,ps] of sim.plan)for(const dir of ["in","out"])for(const id of ps[dir])generate.set("def/company/"+co+"/"+dir+"/"+id+".sii",cargoSii(id));
+ let copied=0;
+ for(const x of map.files.values()){
+  const m=companyMeta(x.p);
+  if(m&&(m.type==="in"||m.type==="out")){
+   if(!generate.has(x.p.toLowerCase()))await put(x.p,emptySii(m.name.replace(/\.sii$/i,"")));
+  }else await put(x.p,x.obj);
+  if((++copied)%200===0){say("Preparando arquivos do mapa… "+copied,54);await yieldUI()}
+ }
+ for(const [p,t] of generate)await put(p,t);
+ for(const x of cargo.files.values())await put(x.p,x.obj);
+ await put("description.txt","Company Logistics Universal. Requer o reboque Librelato. Nao habilitar as DEF Companies 1 e 2.\n");
  const blob=await out.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:4},streamFiles:true},m=>say("Compactando… "+Math.round(m.percent)+"%",60+Math.round(m.percent*.3)));
  const check=await JSZip.loadAsync(blob,{createFolders:false});
  for(const p of generate.keys())if(!check.file(p))throw Error("Falha ao validar "+p);
+ for(const c of cargo.cargos.values())if(!check.file(c.path))throw Error("Cargo_data faltando no ZIP final: "+c.path);
  return{blob,count:generate.size}
 }
 function audit(map,cargo,sim){
