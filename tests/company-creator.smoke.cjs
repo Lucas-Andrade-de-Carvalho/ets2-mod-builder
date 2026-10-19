@@ -111,6 +111,111 @@ async function makesFixtures(){
 
 async function main(){
  const f=await makesFixtures();
+
+ // As empresas devem ser selecionadas pelos produtos em IN/OUT, não por
+ // supostos ramos derivados do nome e do ID.
+ const cargoFlows=[
+  {id:"carga14",name:"Pedra Granito 1",type:"granito",from:"granitto",to:"marble"},
+  {id:"carga15",name:"Pedra Granito 2",type:"granito",from:"granitto",to:"marble"},
+  {id:"carga17",name:"Ração Mineral Laranja",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga18",name:"Xerém",type:"racao",from:"xerem",to:"animal_feed"},
+  {id:"carga19",name:"Sacaria Ração",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga20",name:"Sacaria Ração 2",type:"racao",from:"racao",to:"animal_feed"},
+  {id:"carga23",name:"Sorgoalto",type:"sorgo",from:"corn",to:"soybeans"},
+  {id:"carga5",name:"Carga Pluma de Algodão",type:"algodao",from:"cotton",to:"cotton"},
+  {id:"carga9",name:"Bobinas 2",type:"bobinas_industriais",from:"chapaaco",to:"ferroconst"}
+ ];
+ for(const [i,item] of cargoFlows.entries()){
+  const made=(id,dir,units)=>({id,folder:id,role:"desconhecida",old:units.map((unit,k)=>({
+   p:"def/company/"+id+"/"+dir+"/old"+k+".sii",dir,stem:"old"+k,unit
+  }))});
+  const src=made("empresa_origem"+i,"out",item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from]);
+  const dest=made("empresa_destino"+i,"in",item.id==="carga9"?["chapaaco","ferroconst"]:[item.to]);
+  const map={companies:new Map([[src.id,src],[dest.id,dest]])};
+  const endpoints=creator.chooseEndpoints(map,item.type,creator.flows[item.type],item.id);
+  assert.ok(endpoints.out.some(x=>x.id===src.id),"Sem origem provada "+item.id);
+  assert.ok(endpoints.inn.some(x=>x.id===dest.id),"Sem destino provado "+item.id);
+ }
+
+
+ // Evidência IN/OUT deve superar ID/nome que aparenta outro setor.
+ for(const [dir,type,unit] of [["out","racao","racao"],["out","granito","granito"],
+  ["in","granito","marmore"],["out","bobinas_industriais","bobinas"],
+  ["out","algodao","algodao"]]){
+  const co={id:"identificador_opaco",name:"",role:"desconhecida",
+   old:[{dir,unit,stem:"arquivo_sem_significado"}]};
+  assert.ok(creator.relatedCargoCandidate(co,type,dir),
+   "IN/OUT real ignorado para "+type);
+ }
+ const unrelated={id:"metal_comercial",name:"Metal",role:"metalurgica",
+  old:[{dir:"out",unit:"adubo",stem:"adubo"}]};
+ assert.equal(creator.relatedCargoCandidate(unrelated,"bobinas_industriais","out"),null,
+  "Nome ou ramo não pode justificar carga sem evidência");
+
+
+ // Regressões: IDs opacos com provas nos cargos IN/OUT não devem ser
+ // descartados só porque a empresa não tem nome de fábrica conhecido.
+ function opaque(id,dir,goods){
+  return {id,name:"",role:"desconhecida",old:goods.map((unit,i)=>({dir,unit,stem:"arquivo_"+i}))};
+ }
+ for(const [type,dir,goods] of [
+  ["granito","out",["granito"]],["granito","in",["marmore"]],
+  ["racao","out",["racao"]],["racao","out",["farelo"]],
+  ["algodao","out",["pluma"]],["bobinas_industriais","out",["bobinas"]]
+ ]){
+  const candidate=opaque("empresa_sem_nome",dir,goods);
+  assert.ok(creator.relatedCargoCandidate(candidate,type,dir),
+   "Evidência explícita não reconhecida: "+type+" "+dir);
+ }
+ const incompatible={...opaque("posto01","out",["granito"]),role:"posto"};
+ assert.equal(creator.relatedCargoCandidate(incompatible,"granito","out"),null,"Posto não pode expedir granito");
+
+
+ // Integração completa: nove cargos, 18 empresas com nomes opacos, DEFs ZIP
+ // reais em memória, geração de .SCS e auditoria dos caminhos gerados.
+ const criticalMap=new JSZip(),criticalLib=new JSZip(),criticalAllowed=new Set();
+ for(const [i,item]of cargoFlows.entries()){
+  const origin="anon_origem_"+i,dest="anon_destino_"+i;
+  criticalAllowed.add(origin);criticalAllowed.add(dest);
+  for(const co of [origin,dest]){
+   criticalMap.file("def/company/"+co+"/editor/cidade.sii","SiiNunit\n{}\n");
+  }
+  const outs=item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from];
+  const ins=item.id==="carga9"?["chapaaco","ferroconst"]:[item.to];
+  for(const [dir,co,goods]of [["out",origin,outs],["in",dest,ins]])
+   for(const [k,unit]of goods.entries())
+    companyFile(criticalMap,co,dir,"evidencia_"+k,unit);
+  criticalLib.file("cargo/"+item.id+".sui",
+   'cargo_data : cargo.'+item.id+' {\n name: "'+item.name+'"\n body_types[]: alta\n}\n');
+ }
+ const parsedMap=await creator.loadMap(criticalMap);
+ const parsedLib=await creator.loadCargo(criticalLib);
+ assert.equal(parsedMap.companies.size,18,"Não deve importar empresas externas ao mapa");
+ assert.equal(parsedLib.cargos.size,9,"Não deve inventar cargas de reboque");
+ const criticalSim=creator.simulate(parsedMap,parsedLib);
+ assert.deepEqual(criticalSim.skipped.map(x=>x.id),[],
+  "Cargas com provas IN/OUT válidas não podem ficar sem rota: "+JSON.stringify(criticalSim.skipped));
+ assert.equal(criticalSim.proof.length,9);
+ for(const p of criticalSim.proof){
+  assert.ok(p.origins>0&&p.destinations>0,p.id+" sem ambos os sentidos");
+  assert.ok(p.sourceIds.every(id=>criticalAllowed.has(id))&&p.destIds.every(id=>criticalAllowed.has(id)),
+   p.id+" tem empresa inventada");
+ }
+ const built=await creator.build(parsedMap,parsedLib,criticalSim);
+ const reread=await JSZip.loadAsync(built.blob);
+ for(const item of cargoFlows){
+  const i=cargoFlows.indexOf(item);
+  assert.ok(reread.file("def/company/anon_origem_"+i+"/out/"+item.id+".sii"),item.id+" sem OUT");
+  assert.ok(reread.file("def/company/anon_destino_"+i+"/in/"+item.id+".sii"),item.id+" sem IN");
+ }
+ for(const p of Object.keys(reread.files)){
+  const ref=/^def[/]company[/]([^/]+)[/](?:in|out)[/](carga[0-9]+)[.]sii$/i.exec(p);
+  if(ref){
+   assert.ok(criticalAllowed.has(ref[1]),"Empresa não autorizada no .SCS: "+ref[1]);
+   assert.ok(cargoFlows.some(x=>x.id===ref[2]),"Cargo inexistente no .SCS: "+ref[2]);
+  }
+ }
+
  for(const [label,archive,expectedDepth] of [
   ["raiz",f.map,0],
   ["ZIP/SCS aninhado",f.wrapper,2]
