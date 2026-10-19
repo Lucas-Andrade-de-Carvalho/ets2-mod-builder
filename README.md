@@ -29,6 +29,14 @@ O gerador original continua disponível, porém o modo normal não inventa mais 
 
 Isso pode reduzir o número de ofertas, propositalmente: empresa não reconhecida não passa a transportar produtos incompatíveis para aumentar cobertura.
 
+## Identificação de empresas e correção opcional
+
+Alguns IDs do mapa são abreviações e não identificam claramente o ramo econômico. A aba **Criação de Companys** foi ajustada para reconhecer casos claros, como `abconstru` (construção), `araserr` (serraria), `arnasuino` (pecuária) e `belgo2` (siderurgia). Uma empresa como `acero` continua incerta sem evidência adicional, para evitar inventar sua operação exata.
+
+Na própria aba existe agora a seção opcional **Corrigir identificação de empresas**. Ao saber o ramo de uma empresa, informe, por exemplo, `empresa_olaria = ceramica`. Os dois arquivos ZIP/SCS continuam sendo as únicas entradas obrigatórias.
+
+As rejeições de carga especificam quais setores de origem e destino ainda não foram reconhecidos. A correção é no motor de classificação, não exige obrigatoriamente modificar os arquivos originais do mapa.
+
 ## Limitações técnicas
 
 - O navegador abre arquivos `.scs` em formato ZIP. HashFS precisa ser extraído antes.
