@@ -55,7 +55,7 @@ const flows={
  laranja:{out:["fazenda","hortifruti","alimentos","logistica"],in:["hortifruti","alimentos","supermercado","logistica"]},
  cerveja:{out:["cervejaria","bebidas","alimentos","logistica"],in:["bebidas","supermercado","alimentos","logistica"]},
  tijolo:{out:["ceramica","materiais","logistica"],in:["obras","materiais","logistica"]},
- granito:{out:["pedreira","mineracao","materiais","logistica"],in:["obras","materiais","logistica"]},
+ granito:{out:["pedreira","mineracao","marmoraria","materiais","logistica"],in:["obras","marmoraria","materiais","logistica"]},
  racao:{out:["racoes","logistica","alimentos"],in:["fazenda","pecuaria","logistica","alimentos"]},
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
  bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","obras","logistica"]},
@@ -71,6 +71,9 @@ const yieldUI=()=>new Promise(r=>setTimeout(r,0));
 const say=(msg,pct)=>{ui.message.textContent=msg;ui.bar.style.width=Math.max(0,Math.min(100,pct))+"%"};
 const known=(id,label)=>{
  const x=norm(id)+" "+norm(label);
+ const compact=norm(id).replace(/ /g,"");
+ if(/^(canavial|usinaluciana|usina.?cana|sucroalco)/.test(compact))return "cana";
+ if(/^(marmor|marmol|marbol|jbpedras)/.test(compact))return "marmoraria";
  for(const [r,re] of sectors)if(re.test(x))return r;
  const flat=norm(id).replace(/ /g,"");
  // Regras de abreviações atestáveis, sem tornar empresas genéricas em produtoras.
@@ -103,7 +106,7 @@ const known=(id,label)=>{
  for(const [r,re] of prefixes)if(re.test(flat))return r;
  return"desconhecida";
 };
-const ALLOWED_ROLES=new Set(["agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
+const ALLOWED_ROLES=new Set(["cana","marmoraria","agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
 function applyCompanyOverrides(map){
  const field=el("companyCreateOverrides"),raw=field?.value?.trim()||"";
  const accepted=[],errors=[];
@@ -261,6 +264,11 @@ async function loadCargo(zip){
 }
 
 const LEGACY_EVIDENCE={
+ milho:/^(?:vg_)?(?:corn(?:_b)?|maize|milho|milhoalto)$/i,
+ soja:/^(?:vg_)?(?:soybean(?:_b)?|soja|sojaalto)$/i,
+ sorgo:/^(?:vg_)?(?:sorghum|sorgo|sorgoalto)$/i,
+ batata:/^(?:vg_)?(?:potato(?:es)?(?:_b)?|batatas?)$/i,
+ laranja:/^(?:vg_)?(?:oranges?|laranjas?)$/i,
  cimento:/^(?:vg_)?(?:cement|cimento|cement_b|cement_pallet|cement_bag)$/i,
  tijolo:/^(?:vg_)?(?:bricks?|tijolos?|tijolaria|ceramic_bricks?)$/i,
  granito:/^(?:vg_)?(?:granite|granito|marble|marmore|marble_blocks?)$/i,
@@ -269,44 +277,93 @@ const LEGACY_EVIDENCE={
  algodao:/^(?:vg_)?(?:cotton|cotton_bales?|algodao|pluma|cottonlint)$/i,
  bobinas_industriais:/^(?:vg_)?(?:steel_coils?|steelcoil|metal_coils?|bobinas?|chapa_aco|rolled_steel)$/i
 };
-function legacyEvidence(c,type,dir){
- // Um catálogo antigo com dezenas de cargos atribuídos a tudo não é prova de atividade.
- if(!c||!Array.isArray(c.old)||!c.old.length||c.old.length>14)return false;
- if(new Set(c.old.map(x=>x.stem)).size>10)return false;
- const re=LEGACY_EVIDENCE[type];
- return !!re&&c.old.some(x=>x.dir===dir&&re.test(x.stem));
+const SPECIAL_CROPS=new Set(["milho","soja","sorgo","batata","laranja","algodao"]);
+const PERISHABLE_CROPS=new Set(["batata","laranja"]);
+const LEGACY_INCOMPATIBLE_ROLES=new Set(["posto","correios","concessionaria","cana"]);
+function cargoSpecificName(c,type){
+ const text=norm([c.id,c.name].join(" "));
+ const hints={
+  milho:/\b(milho|corn|maize)\b/,
+  soja:/\b(soja|soybean)\b/,
+  sorgo:/\b(sorgo|sorghum)\b/,
+  batata:/\b(batata|potato)\b/,
+  laranja:/\b(laranja|orange|citric|citrus)\b/,
+  algodao:/\b(algodao|cotton)\b/
+ };
+ return !!hints[type]?.test(text);
 }
-const BUILDING_REDEPLOY=new Set(["cimento","tijolo","madeira","granito"]);
+function legacyEvidence(c,type,dir){
+ // A informação antiga é uma pista, não permissão universal.
+ if(!c||!Array.isArray(c.old)||!c.old.length||c.old.length>12)return false;
+ if(new Set(c.old.map(x=>x.stem.toLowerCase())).size>7)return false;
+ if(LEGACY_INCOMPATIBLE_ROLES.has(c.role))return false;
+ const flow=flows[type],re=LEGACY_EVIDENCE[type];
+ if(!flow||!re)return false;
+ if(!c.old.some(x=>x.dir===dir&&re.test(x.stem)))return false;
+ // Setores confirmados não podem expedir produtos de um ramo alheio.
+ if(c.role!=="desconhecida"&&!flow[dir].includes(c.role))return false;
+ // Uma fazenda inferida pelo histórico só tem autorização para o cultivo
+ // específico citado nele, nunca para toda safra imaginável.
+ if(c.role==="fazenda"&&PERISHABLE_CROPS.has(type)&&!cargoSpecificName(c,type)&&!c.old.some(x=>x.dir===dir&&re.test(x.stem)))return false;
+ // Empresas sem setor precisam ter algum indício independente do ramo;
+ // a própria DEF antiga, isoladamente, não é suficiente.
+ if(c.role==="desconhecida"){
+  const context=norm(c.id+" "+c.name);
+  const concrete={
+   cimento:/\b(cimento|cimentoobra|material|deposito|obra|const)\b/,
+   tijolo:/\b(ceram|olaria|tijolo|material|deposito|const)\b/,
+   granito:/\b(granito|pedra|marmor|miner|const)\b/,
+   adubo:/\b(adubo|fertili|agro|insumo|coop)\b/,
+   madeira:/\b(madeir|serra|florest|lenha|pauta|madeira)\b/,
+   algodao:/\b(algod|cotton|fiacao|textil)\b/,
+   milho:/\b(milho|agro|fazenda|rural|grao)\b/,
+   soja:/\b(soja|agro|fazenda|rural|grao)\b/,
+   sorgo:/\b(sorgo|agro|fazenda|rural|grao)\b/,
+   batata:/\b(batata|horti|legume|agro|fazenda)\b/,
+   laranja:/\b(laranja|citrus|horti|fruta|agro|fazenda)\b/,
+   bobinas_industriais:/\b(metal|aco|sider|industr|bobin)\b/
+  };
+  return !!concrete[type]?.test(context);
+ }
+ return true;
+}
 function getCandidateMap(map){
  const companies=[...map.companies.values()],byRole=new Map();
- for(const c of companies){if(!byRole.has(c.role))byRole.set(c.role,[]);byRole.get(c.role).push(c)}
+ for(const c of companies){
+  if(!byRole.has(c.role))byRole.set(c.role,[]);
+  byRole.get(c.role).push(c);
+ }
  return{companies,byRole};
+}
+function roleSuitableForSpecificCargo(c,type,direction){
+ if(c.role==="cana"&&SPECIAL_CROPS.has(type))return false;
+ if(c.role==="cana"&&type==="adubo")return direction==="in";
+ if(c.role==="marmoraria"&&type==="tijolo")return false;
+ if(c.role==="fazenda"&&PERISHABLE_CROPS.has(type)){
+  // Produtores rurais genéricos não passam a cultivar batata ou laranja
+  // sem que a especialidade esteja no nome ou nas ofertas antigas específicas.
+  return cargoSpecificName(c,type)||legacyEvidence(c,type,direction);
+ }
+ if(c.role==="fazenda"&&c.evidence==="combinação IN/OUT anterior"&&SPECIAL_CROPS.has(type)){
+  return cargoSpecificName(c,type)||legacyEvidence(c,type,direction);
+ }
+ return true;
 }
 function chooseEndpoints(map,type,spec){
  const {companies,byRole}=getCandidateMap(map);
- const out=new Set(spec.out.flatMap(r=>byRole.get(r)||[]));
- const inn=new Set(spec.in.flatMap(r=>byRole.get(r)||[]));
+ const allowed=(c,dir)=>roleSuitableForSpecificCargo(c,type,dir);
+ const out=new Set(spec.out.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"out")));
+ const inn=new Set(spec.in.flatMap(r=>byRole.get(r)||[]).filter(c=>allowed(c,"in")));
  const notes=[];
- // Trabalhar com as permissões antigas como evidência pontual, não como regra a preservar.
  let historyOut=0,historyIn=0;
  for(const c of companies){
-  if(legacyEvidence(c,type,"out")){if(!out.has(c)){out.add(c);historyOut++}}
-  if(legacyEvidence(c,type,"in")){if(!inn.has(c)){inn.add(c);historyIn++}}
+  if(legacyEvidence(c,type,"out")&&allowed(c,"out")&&!out.has(c)){out.add(c);historyOut++}
+  if(legacyEvidence(c,type,"in")&&allowed(c,"in")&&!inn.has(c)){inn.add(c);historyIn++}
  }
- if(historyOut||historyIn)notes.push("histórico limitado: "+historyOut+" expedidores e "+historyIn+" recebedores adicionais");
- // Canteiros e construtoras podem redistribuir estoque para outras obras,
- // mas apenas quando não há expedidor melhor. Nunca tornam posto ou concessionária fonte.
- if(!out.size&&BUILDING_REDEPLOY.has(type)){
-  const works=(byRole.get("obras")||[]).filter(c=>c.id&&c.evidence!=="nenhuma");
-  if(works.length>=2){out.add(works[0]);notes.push("remanejamento eventual de estoque entre construtoras/obras; hipótese logística")}
- }
- // Cooperativas agrícolas costumam fornecer insumos, mas não basta ser silo de grãos.
- if(!out.size&&type==="adubo"){
-  const coop=(byRole.get("silo")||[]).filter(c=>/coop|cooperativ|agro/.test(norm(c.id+" "+c.name)));
-  for(const c of coop.slice(0,3))out.add(c);
-  if(coop.length)notes.push("fornecimento de insumos por cooperativa; hipótese de estoque");
- }
- return{out:[...out],inn:[...inn],notes}
+ if(historyOut||historyIn)notes.push("histórico com setor confirmado: "+historyOut+" expedidores e "+historyIn+" recebedores adicionais");
+ // Nunca inventar uma origem só para evitar uma carga vazia.
+ // Expedições entre obras requerem evidência real ou classificação explicitamente informada.
+ return{out:[...out],inn:[...inn],notes};
 }
 
 function simulate(map,cargo){
