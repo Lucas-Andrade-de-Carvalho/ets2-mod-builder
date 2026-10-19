@@ -178,7 +178,7 @@ async function main(){
   const origin="anon_origem_"+i,dest="anon_destino_"+i;
   criticalAllowed.add(origin);criticalAllowed.add(dest);
   for(const co of [origin,dest]){
-   criticalMap.file("def/company/"+co+"/editor/cidade.sii","SiiNunit\\n{}\\n");
+   criticalMap.file("def/company/"+co+"/editor/cidade.sii","SiiNunit\n{}\n");
   }
   const outs=item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from];
   const ins=item.id==="carga9"?["chapaaco","ferroconst"]:[item.to];
@@ -186,7 +186,7 @@ async function main(){
    for(const [k,unit]of goods.entries())
     companyFile(criticalMap,co,dir,"evidencia_"+k,unit);
   criticalLib.file("cargo/"+item.id+".sui",
-   'cargo_data : cargo.'+item.id+' {\\n name: "'+item.name+'"\\n body_types[]: alta\\n}\\n');
+   'cargo_data : cargo.'+item.id+' {\n name: "'+item.name+'"\n body_types[]: alta\n}\n');
  }
  const parsedMap=await creator.loadMap(criticalMap);
  const parsedLib=await creator.loadCargo(criticalLib);
@@ -209,7 +209,7 @@ async function main(){
   assert.ok(reread.file("def/company/anon_destino_"+i+"/in/"+item.id+".sii"),item.id+" sem IN");
  }
  for(const p of Object.keys(reread.files)){
-  const ref=p.match(/^def\\/company\\/([^/]+)\\/(?:in|out)\\/(carga\\d+)\\.sii$/i);
+  const ref=/^def[/]company[/]([^/]+)[/](?:in|out)[/](carga[0-9]+)[.]sii$/i.exec(p);
   if(ref){
    assert.ok(criticalAllowed.has(ref[1]),"Empresa não autorizada no .SCS: "+ref[1]);
    assert.ok(cargoFlows.some(x=>x.id===ref[2]),"Cargo inexistente no .SCS: "+ref[2]);
