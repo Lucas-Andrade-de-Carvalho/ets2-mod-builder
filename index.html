@@ -630,13 +630,15 @@ function consultCatalogForMapDistribution(map){
 }
 
 const sectors=[
-["silo",/(silo|cooperativa|cerealista|armazem de graos|grain storage)/],
+["cooperativa",/(cooperativa|cooperativa agricola|agrocooperativa|agrocoop|cooperagro|coopercentro)/],
+["silo",/(silo|cerealista|armazem de graos|grain storage)/],
 ["fazenda",/(fazenda|faz0|faz1|faz2|faz3|faz4|faz5|agropecuaria|sitio agricola|cultivo agricola|farm|plantacao)/],
 ["pecuaria",/(pecuaria|granja|criatorio de gado|confinamento)/],
 ["racoes",/(fabrica de racao|industria de racao|nutricao animal|feed mill)/],
 ["moinho",/(moinho|esmagadora de soja|beneficiadora de graos)/],
 ["adubeira",/(industria de fertilizantes|fabrica de adubo|yara|mosaic)/],
 ["serraria",/(serraria|industria madeireira|sawmill)/],
+["madeireira",/(madeireira|madeiraria|deposito de madeira|comercio de madeira|loja de madeira|deposito madeireiro)/],
 ["floresta",/(florestal|reflorestamento|extracao de madeira)/],
 ["textil",/(textil|tecelagem|fiacao|fabrica de tecidos)/],
 ["algodoeira",/(algodoeira|beneficiamento de algodao)/],
@@ -663,17 +665,17 @@ const sectors=[
 const flows={
  // O ETS2 usa OUT (expedição) e IN (recebimento), não apenas fábricas e consumidores.
  // Um distribuidor/depósito pode ter IN e OUT da mesma mercadoria.
- milho:{out:["fazenda"],in:["silo","moinho","racoes","pecuaria"]},
- soja:{out:["fazenda"],in:["silo","moinho"]},
- sorgo:{out:["fazenda"],in:["silo","racoes","pecuaria"]},
+ milho:{out:["fazenda"],in:["cooperativa","silo","moinho","racoes","pecuaria"]},
+ soja:{out:["fazenda"],in:["cooperativa","silo","moinho"]},
+ sorgo:{out:["fazenda"],in:["cooperativa","silo","racoes","pecuaria"]},
  adubo:{out:["adubeira","agroinsumos","logistica"],in:["fazenda","cana","pecuaria","agroinsumos","logistica"]},
- madeira:{out:["serraria","floresta","materiais","logistica"],in:["obras","materiais","logistica","metalurgica"]},
- algodao:{out:["fazenda","algodoeira","logistica"],in:["textil","algodoeira","logistica"]},
- cimento:{out:["cimenteira","materiais","logistica"],in:["obras","materiais","logistica"]},
- batata:{out:["fazenda","hortifruti","alimentos","logistica"],in:["hortifruti","alimentos","supermercado","logistica"]},
- laranja:{out:["fazenda","hortifruti","alimentos","logistica"],in:["hortifruti","alimentos","supermercado","logistica"]},
+ madeira:{out:["madeireira","serraria","floresta","materiais","logistica"],in:["obras","madeireira","materiais","logistica"]},
+ algodao:{out:["fazenda","algodoeira","logistica"],in:["cooperativa","algodoeira","textil","logistica"]},
+ cimento:{out:["materiais","logistica","cimenteira"],in:["obras","materiais","logistica"]},
+ batata:{out:["fazenda","hortifruti","alimentos","logistica"],in:["supermercado","hortifruti","alimentos","logistica"]},
+ laranja:{out:["fazenda","hortifruti","alimentos","logistica"],in:["supermercado","hortifruti","alimentos","logistica"]},
  cerveja:{out:["cervejaria","bebidas","alimentos","logistica"],in:["bebidas","supermercado","alimentos","logistica"]},
- tijolo:{out:["ceramica","materiais","logistica"],in:["obras","materiais","logistica"]},
+ tijolo:{out:["materiais","logistica","ceramica"],in:["obras","materiais","logistica"]},
  granito:{out:["pedreira","mineracao","marmoraria","materiais","logistica"],in:["obras","marmoraria","materiais","logistica"]},
  racao:{out:["racoes","logistica","alimentos"],in:["fazenda","pecuaria","logistica","alimentos"]},
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
@@ -697,13 +699,15 @@ const known=(id,label)=>{
  const flat=norm(id).replace(/ /g,"");
  // Regras de abreviações atestáveis, sem tornar empresas genéricas em produtoras.
  const prefixes=[
- ["silo",/^(silos?|coop(?:erativa)?|cerealista|graos)/],
+ ["cooperativa",/^(coop(?:erativa)?|cooper|agrocoop)/],
+ ["silo",/^(silos?|cerealista|graos)/],
  ["racoes",/^(racoes?|feedmill|nutricaoanimal)/],
  ["adubeira",/^(fertilizantes?|adubeira)/],
  ["fazenda",/^(faz(?:enda|[_0-9])|farm|finca|hacienda|agropec|agricol|agricult|rural|plantacao|plantation|cultivo|rancho)/],
  ["pecuaria",/^(arnasuino|pecuaria|granja|ganaderia|gado)/],
  ["floresta",/^(florestal|reflorestamento)/],
  ["serraria",/^(araserr|serraria|serradero|sawmill)/],
+ ["madeireira",/^(madeireira|madeiraria|lojamadeira|depomadeira|betimmadeira)/],
  ["moinho",/^(moinho|molino)/],
  ["hortifruti",/^(ceasa|hortifruti)/],
  ["ceramica",/^(olaria|ceramica|tijolaria)/],
@@ -725,7 +729,7 @@ const known=(id,label)=>{
  for(const [r,re] of prefixes)if(re.test(flat))return r;
  return"desconhecida";
 };
-const ALLOWED_ROLES=new Set(["cana","marmoraria","agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
+const ALLOWED_ROLES=new Set(["cooperativa","madeireira","cana","marmoraria","agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
 function applyCompanyOverrides(map){
  const field=el("companyCreateOverrides"),raw=field?.value?.trim()||"";
  const accepted=[],errors=[];
@@ -793,6 +797,7 @@ function inferRoleFromHistoricalFreights(company){
  const sharedGrain=reGrain.some(x=>inGrain.has(x));
  const evidence=[
  ["silo",sharedGrain],
+ ["cooperativa",out(/(cotton|algodao|pluma)/i)&&inn(/(fertiliz|adubo|racao|feed)/i)],
  ["fazenda",out(grain)&&!inn(grain)&&(inn(fert)||out(crop)||reGrain.length>=2)],
  ["fazenda",out(crop)&&!inn(crop)&&inn(fert)],
  ["pecuaria",out(/(cattle|gado|sheep|ovelha|wool|la|animals?|livestock|milk|leite)/i)&&inn(/(feed|racao|hay|feno)/i)],
@@ -965,39 +970,24 @@ function cargoSpecificName(c,type){
  return !!hints[type]?.test(text);
 }
 function legacyEvidence(c,type,dir){
- // A informação antiga é uma pista, não permissão universal.
- if(!c||!Array.isArray(c.old)||!c.old.length||c.old.length>12)return false;
- if(new Set(c.old.map(x=>x.stem.toLowerCase())).size>7)return false;
+ // Histórico IN/OUT funciona como comprovante de expedição/recebimento,
+ // nunca como obrigação de encontrar fabricante no mapa.
+ if(!c||!Array.isArray(c.old)||!c.old.length||c.old.length>14)return false;
+ const distinct=new Set(c.old.map(x=>String(x.unit||x.stem).toLowerCase()));
+ if(distinct.size>9)return false; // Bloqueia company genérica cheia de todos os cargos.
  if(LEGACY_INCOMPATIBLE_ROLES.has(c.role))return false;
- const flow=flows[type],re=LEGACY_EVIDENCE[type];
- if(!flow||!re)return false;
- if(!c.old.some(x=>x.dir===dir&&(re.test(x.unit||"")||re.test(x.stem))))return false;
- // Setores confirmados não podem expedir produtos de um ramo alheio.
- if(c.role!=="desconhecida"&&!flow[dir].includes(c.role))return false;
- // Uma fazenda inferida pelo histórico só tem autorização para o cultivo
- // específico citado nele, nunca para toda safra imaginável.
- if(c.role==="fazenda"&&PERISHABLE_CROPS.has(type)&&!cargoSpecificName(c,type)&&!c.old.some(x=>x.dir===dir&&re.test(x.stem)))return false;
- // Empresas sem setor precisam ter algum indício independente do ramo;
- // a própria DEF antiga, isoladamente, não é suficiente.
- if(c.role==="desconhecida"){
-  const context=norm(c.id+" "+c.name);
-  const concrete={
-   cimento:/\b(cimento|cimentoobra|material|deposito|obra|const)\b/,
-   tijolo:/\b(ceram|olaria|tijolo|material|deposito|const)\b/,
-   granito:/\b(granito|pedra|marmor|miner|const)\b/,
-   adubo:/\b(adubo|fertili|agro|insumo|coop)\b/,
-   madeira:/\b(madeir|serra|florest|lenha|pauta|madeira)\b/,
-   algodao:/\b(algod|cotton|fiacao|textil)\b/,
-   milho:/\b(milho|agro|fazenda|rural|grao)\b/,
-   soja:/\b(soja|agro|fazenda|rural|grao)\b/,
-   sorgo:/\b(sorgo|agro|fazenda|rural|grao)\b/,
-   batata:/\b(batata|horti|legume|agro|fazenda)\b/,
-   laranja:/\b(laranja|citrus|horti|fruta|agro|fazenda)\b/,
-   bobinas_industriais:/\b(metal|aco|sider|industr|bobin)\b/
-  };
-  return !!concrete[type]?.test(context);
+ const match=c.old.some(x=>x.dir===dir&&
+   ((x.unit&&oldCargoCategory(x.unit)===type)||
+    (!x.unit&&(oldCargoCategory(x.stem)===type||LEGACY_EVIDENCE[type]?.test(x.stem)))));
+ if(!match)return false;
+ if(!roleSuitableForSpecificCargo(c,type,dir))return false;
+ if(c.role!=="desconhecida"){
+  const sectors=flows[type]?.[dir]||[];
+  return sectors.includes(c.role);
  }
- return true;
+ // Se o setor do ID é opaco, uma associação ESPECÍFICA de cargo: dentro do SII
+ // é evidência direta do tipo de atividade, sem fabricar empresas.
+ return c.old.some(x=>x.dir===dir&&x.unit&&oldCargoCategory(x.unit)===type);
 }
 function getCandidateMap(map){
  const companies=[...map.companies.values()],byRole=new Map();
@@ -1021,21 +1011,15 @@ function specificFarmCrop(c){
  return found.length===1?found[0]:null;
 }
 function roleSuitableForSpecificCargo(c,type,direction){
- if(c.role==="fazenda"&&direction==="out"&&SPECIAL_CROPS.has(type)){
-  const focus=specificFarmCrop(c);
-  if(focus&&focus!==type)return false;
-  if(focus===type)return true;
- }
+ // Avalia o ramo e especializações reais, não a existência de uma fábrica.
  if(c.role==="cana"&&SPECIAL_CROPS.has(type))return false;
  if(c.role==="cana"&&type==="adubo")return direction==="in";
  if(c.role==="marmoraria"&&type==="tijolo")return false;
- if(c.role==="fazenda"&&PERISHABLE_CROPS.has(type)){
-  // Produtores rurais genéricos não passam a cultivar batata ou laranja
-  // sem que a especialidade esteja no nome ou nas ofertas antigas específicas.
-  return cargoSpecificName(c,type)||legacyEvidence(c,type,direction);
- }
- if(c.role==="fazenda"&&c.evidence==="combinação IN/OUT anterior"&&SPECIAL_CROPS.has(type)){
-  return cargoSpecificName(c,type)||legacyEvidence(c,type,direction);
+ if(c.role==="fazenda"&&direction==="out"&&SPECIAL_CROPS.has(type)){
+  const specific=specificFarmCrop(c);
+  // Uma fazenda explicitamente de batatas não vira fornecedora de laranja e milho.
+  // Fazenda genérica pode expedir batatas, laranjas ou pluma quando há destinatários reais.
+  if(specific&&specific!==type)return false;
  }
  return true;
 }
@@ -1142,7 +1126,7 @@ function audit(map,cargo,sim){
  if(sim.grouped.baixa===0)warning.push("Grade baixa sem cargas correspondentes.");
  if(sim.grouped.alta===0)warning.push("Grade alta sem cargas correspondentes.");
  const unknown=companies.filter(c=>c.role==="desconhecida").length;
- const producerSectors=new Set(["fazenda","adubeira","racoes","serraria","floresta","algodoeira","cimenteira","ceramica","pedreira","mineracao","cervejaria","siderurgica","paletes","materiais","logistica"]);
+ const producerSectors=new Set(["fazenda","cooperativa","madeireira","adubeira","racoes","serraria","floresta","algodoeira","cimenteira","ceramica","pedreira","mineracao","cervejaria","siderurgica","paletes","materiais","logistica"]);
  const producers=companies.filter(c=>producerSectors.has(c.role));
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
  const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
@@ -1153,7 +1137,7 @@ function audit(map,cargo,sim){
  if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
  const manual=companies.filter(c=>c.evidence==="classificação informada pelo usuário").length;
  if(manual)warning.push(manual+" empresas classificadas manualmente.");
- if(!producers.length)warning.push("Nenhum ponto de expedição foi identificado neste mapa. Confira o diagnóstico.");
+ if(!producers.length)warning.push("Nenhuma empresa expedidora foi classificada; o sistema não exige fabricantes, mas precisa de locais reais com expedição plausível.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  const reasons=new Map();
  for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
