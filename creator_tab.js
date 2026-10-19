@@ -706,6 +706,91 @@ function roleSuitableForSpecificCargo(c,type,direction){
  }
  return true;
 }
+
+const RELATED_FREIGHT_PATTERNS={
+ stone:/^(?:granito|granite|marmore|marble|pedras?|blocos?pedra|lajotas?)$/i,
+ stoneReceiver:/^(?:pedras?|marmore|granito|granite|tijolos?|areias?|brita|tubosconcret|pisos?|telhas?|revestimentos?)$/i,
+ feed:/^(?:racao|racoes|xerem|farelo|animal_?feed|feedmeal|nutricaoanimal|suplementomineral|salmineral)$/i,
+ feedInput:/^(?:milho|soja|sorgo|trigo|graos?|farelo|racao|racoes|feno|alfafa|salmineral|leite)$/i,
+ grain:/^(?:milho|soja|sorgo|trigo|cevada|arroz|wheat|corn|soybean|sorghum|grain|graos?)$/i,
+ cotton:/^(?:algodao|pluma|cotton|cotton_?bales?)$/i,
+ cottonReceive:/^(?:pluma|algodao|cotton|cotton_?bales?|fibra|fios?|tecidos?|adubo|racao|milho|soja)$/i,
+ steel:/^(?:bobinas?|steel_?coils?|metal_?coils?|chapaaco|chapasaco|ferroconst|b_reforco|vergalhao|vergalhoes|sumetal|sualuminio|steel|aco)$/i
+};
+function countRelated(c,dir,pattern){
+ return new Set((c.old||[]).filter(x=>x.dir===dir&&pattern.test(String(x.unit||x.stem).toLowerCase()))
+  .map(x=>String(x.unit||x.stem).toLowerCase())).size;
+}
+function relatedCargoCandidate(c,type,dir){
+ if(!c||["desconhecida","posto","correios","concessionaria","cana"].includes(c.role))return null;
+ const n=(p,d=dir)=>countRelated(c,d,p);
+ let score=0,reason="";
+ if(type==="granito"){
+  if(dir==="out"&&["mineracao","pedreira","marmoraria","materiais"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.stone)){
+   score=90+n(RELATED_FREIGHT_PATTERNS.stone)*10;reason="expede pedra ou mármore";
+  }
+  if(dir==="in"&&["obras","materiais","marmoraria"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.stoneReceiver)){
+   score=75+n(RELATED_FREIGHT_PATTERNS.stoneReceiver)*3;reason="recebe produtos de construção ou pedras";
+  }
+ }
+ if(type==="racao"){
+  if(dir==="out"&&["racoes","agroinsumos","cooperativa","alimentos"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.feed)){
+   score=100+n(RELATED_FREIGHT_PATTERNS.feed)*5;reason="expede ração, xerém ou suplementos";
+  }
+  if(dir==="out"&&c.role==="racoes"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2){
+   score=Math.max(score,70);reason="beneficia insumos de alimentação animal";
+  }
+  if(dir==="in"&&["fazenda","pecuaria","cooperativa","racoes"].includes(c.role)&&
+     (n(RELATED_FREIGHT_PATTERNS.feedInput,"in")||c.role==="pecuaria")){
+    score=80+n(RELATED_FREIGHT_PATTERNS.feedInput,"in")*4;reason="recebe insumos agropecuários";
+  }
+ }
+ if(type==="sorgo"){
+  if(dir==="out"&&c.role==="fazenda"&&n(RELATED_FREIGHT_PATTERNS.grain,"out")){
+   const focus=specificFarmCrop(c);
+   if(!focus||["milho","soja","sorgo"].includes(focus)){
+    score=65+n(RELATED_FREIGHT_PATTERNS.grain,"out")*4;reason="fazenda que expede grãos";
+   }
+  }
+  if(dir==="in"&&["cooperativa","silo","moinho","racoes","pecuaria"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")){
+   score=70+n(RELATED_FREIGHT_PATTERNS.feedInput,"in")*4;reason="recebe grãos ou insumos para ração";
+  }
+ }
+ if(type==="algodao"){
+  if(dir==="out"&&c.role==="fazenda"&&
+     (n(RELATED_FREIGHT_PATTERNS.cotton,"out")||(n(RELATED_FREIGHT_PATTERNS.grain,"out")>=2&&!specificFarmCrop(c)))){
+    score=n(RELATED_FREIGHT_PATTERNS.cotton,"out")?100:55;
+    reason=score===100?"expede algodão":"fazenda agrícola diversificada (hipótese de pluma)";
+  }
+  if(dir==="in"&&["cooperativa","textil","algodoeira"].includes(c.role)&&
+     (n(RELATED_FREIGHT_PATTERNS.cottonReceive,"in")||
+       (c.role==="cooperativa"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2))){
+    score=80+n(RELATED_FREIGHT_PATTERNS.cottonReceive,"in")*5;reason="recebe produtos agrícolas ou fibras";
+  }
+ }
+ if(type==="bobinas_industriais"){
+  if(dir==="out"&&["siderurgica","metalurgica"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.steel,"out")){
+    score=85+n(RELATED_FREIGHT_PATTERNS.steel,"out")*5;reason="expede produtos siderúrgicos";
+  }
+  if(dir==="in"&&["siderurgica","metalurgica","obras"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.steel,"in")){
+    score=75+n(RELATED_FREIGHT_PATTERNS.steel,"in")*5;reason="recebe produtos siderúrgicos";
+  }
+ }
+ return score?{company:c,score,reason}:null;
+}
+const CATEGORY_FALLBACK_LIMITS={granito:{out:6,in:9},racao:{out:5,in:12},sorgo:{out:6,in:9},algodao:{out:6,in:10},bobinas_industriais:{out:6,in:9}};
+function relatedCargoFallback(companies,type,dir){
+ const limit=CATEGORY_FALLBACK_LIMITS[type]?.[dir]||0;
+ if(!limit)return{companies:[],notes:[]};
+ const matches=companies.map(c=>relatedCargoCandidate(c,type,dir)).filter(Boolean);
+ matches.sort((a,b)=>b.score-a.score||a.company.id.localeCompare(b.company.id));
+ const choices=matches.slice(0,limit);
+ return{
+  companies:choices.map(x=>x.company),
+  notes:choices.length?[dir.toUpperCase()+" por categoria: "+choices.map(x=>x.company.id+" ("+x.reason+")").join("; ")]:[]
+ };
+}
+
 function chooseEndpoints(map,type,spec){
  const {companies,byRole}=getCandidateMap(map);
  const allowed=(c,dir)=>roleSuitableForSpecificCargo(c,type,dir);
@@ -736,7 +821,10 @@ function chooseEndpoints(map,type,spec){
  for(const c of specificOut)out.add(c);
  for(const c of specificIn)inn.add(c);
  if(!out.size){
-   if(["cimento","tijolo","madeira","granito"].includes(type)){
+   const related=relatedCargoFallback(companies,type,"out");
+   for(const c of related.companies)if(allowed(c,"out"))out.add(c);
+   notes.push(...related.notes);
+   if(!out.size&&["cimento","tijolo","madeira","granito"].includes(type)){
      for(const c of companies)if(allowed(c,"out")&&categoryOutletCandidate(c,type,"out")){
        out.add(c);
        const proof=constructionStockEvidence(c);
@@ -772,7 +860,10 @@ function chooseEndpoints(map,type,spec){
    }
  }
  if(!inn.size){
-   if(["cimento","tijolo","madeira","granito"].includes(type))
+   const related=relatedCargoFallback(companies,type,"in");
+   for(const c of related.companies)if(allowed(c,"in"))inn.add(c);
+   notes.push(...related.notes);
+   if(!inn.size&&["cimento","tijolo","madeira","granito"].includes(type))
       for(const c of companies)if(allowed(c,"in")&&categoryOutletCandidate(c,type,"in"))inn.add(c);
    if(!inn.size)for(const role of spec.in){
      for(const c of byRole.get(role)||[]){
@@ -863,7 +954,7 @@ function simulate(map,cargo){
  const plan=new Map(),skipped=[],proof=[],assumptions=[];
  const grouped={alta:0,baixa:0,outros:0};
  for(const info of cargo.cargos.values()){
-  const type=kind(info.name),spec=flows[type],problems=[];
+  const type=kind(info.name)||(info.id==="carga9"?"bobinas_industriais":null),spec=flows[type],problems=[];
   if(!spec)problems.push("identificação econômica da carga incerta");
   if(!info.body.length)problems.push("sem body_types");
   const allowed=info.body.filter(b=>!info.trailer.size||info.trailer.has(b));
