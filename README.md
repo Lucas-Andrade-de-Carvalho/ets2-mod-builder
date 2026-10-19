@@ -73,3 +73,13 @@ A aba **Criação de Companys** procura primeiramente referências exatas de mer
 A busca usa limites de empresas candidatas por carga, não inventa produto, não inclui postos/Correios em atividades incompatíveis e preserva o tratamento especial de **paletes** (até 3 origens e 6 destinos, sobretudo madeireiras). Empresas com IDs opacos são classificadas pelo conjunto de cargas IN e OUT somente quando os sinais são consistentes.
 
 A validação incluiu a geração e releitura de um ZIP/SCS de teste, com nove cargas anteriormente rejeitadas agora encontrando relações IN/OUT em um mapa sintético. Ainda é necessário conferir o resultado com o mapa específico e o mercado do ETS2.
+
+## Continuidade e testes do último ajuste (19/10/2026)
+
+O contexto consolidado para outra conversa está em [HANDOFF_COMPANY_LOGISTICS.md](HANDOFF_COMPANY_LOGISTICS.md).
+
+Última correção do motor: ao analisar granito, ração, pluma e bobinas, utilizar pistas fortes dos cargos `IN/OUT` existentes **mesmo quando o ID da empresa é opaco**. O filtro mantém restrições para impedir areia/brita→granito automático, posto→bobinas ou fazenda de uma única cultura→pluma sem evidência.
+
+- Testes unitários/simulados: oito cenários de evidência por mercadoria passaram.
+- Teste integral do `index.html` com ZIP de mapa em subpasta, DEF do Librelato também em subpasta, cinco cargas das duas grades e 11 empresas: pacote SCS aberto novamente, 13 relações IN/OUT, 14 verificações de integridade e regras concluídas, download funcionando, nenhuma empresa ou cargo inventado.
+- **Pendente:** análise da DEF do mapa real que apresentou oito cargas sem rota e teste com o `game.log` no ETS2. Os testes automatizados não comprovam ofertas in-game.
