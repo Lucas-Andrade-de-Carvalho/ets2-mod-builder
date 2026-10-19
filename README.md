@@ -194,6 +194,26 @@ Esses limites restringem **quais empresas podem gerar ofertas**. O volume exato 
 
 Teste de regressão: 14 condições do motor e 10 verificações de um SCS gerado e reaberto (origens, destinos, editor, botão de download e ausência de novos IDs), incluindo carga de cimento paletizado sem alteração.
 
+
+## Compatibilidade com outros mapas — versão universal
+
+A aba **Criação de Companys** foi testada com quatro estruturas diferentes de arquivos de mapas:
+
+| Estrutura fornecida | Comportamento |
+|---|---|
+| `def/company/<empresa>/...` | Lê, classifica e gera a Company normalmente |
+| `company/<empresa>/...` na raiz | Reconhece automaticamente e converte para `def/company/` no SCS |
+| `Pasta exportada/def/company/<empresa>/...` | Ignora a pasta envolvente e identifica as empresas reais |
+| `mapa/assets/def/company/<empresa>/...` | Lê a DEF dentro do ZIP e usa os mesmos IDs originais |
+
+Também aceita nomes de pastas de empresas com hífens ou pontos, desde que as definições sejam válidas no mapa. O nome de download contém um identificador gerado com base nos caminhos e IDs da Company, para distinguir diferentes mapas cujos arquivos se chamem simplesmente `def_company.zip`.
+
+**Uma grade sem ofertas não bloqueia a outra.** A geração mantém somente as cargas economicamente compatíveis e indica no diagnóstico quando a grade alta ou baixa não tem relações de origem/destino. Não cria empresas ou `cargo_data` adicionais para preencher essa lacuna. A carga de paletes continua limitada a até **3 pontos expedidores e 6 recebedores**, priorizando madeireiras e serrarias quando disponíveis.
+
+**Limitações:** arquivos `.scs` em HashFS (não ZIP) precisam ser extraídos antes. Um arquivo compactado contendo outros arquivos `.scs` aninhados também deve ser descompactado para revelar a DEF. Uma empresa com ID opaco e sem evidências de mercadoria pode permanecer sem cargas. A geração estrutural no navegador não substitui teste in-game e revisão do `game.log`.
+
+**Verificações de regressão:** 4 cenários de mapa com DEFs em diferentes posições dentro de ZIPs, seleção de grade baixa isolada, grade alta isolada e ambas, preservação dos arquivos `editor`, nenhum ID novo de empresa/carga, reabertura do pacote gerado e quatro downloads com nomes distintos. Testes simulados, não confirmação in-game em todos os mapas.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
