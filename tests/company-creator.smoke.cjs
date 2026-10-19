@@ -112,6 +112,21 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Evidência IN/OUT deve superar ID/nome que aparenta outro setor.
+ for(const [dir,type,unit] of [["out","racao","racao"],["out","granito","granito"],
+  ["in","granito","marmore"],["out","bobinas_industriais","bobinas"],
+  ["out","algodao","algodao"]]){
+  const co={id:"identificador_opaco",name:"",role:"desconhecida",
+   old:[{dir,unit,stem:"arquivo_sem_significado"}]};
+  assert.ok(creator.relatedCargoCandidate(co,type,dir),
+   "IN/OUT real ignorado para "+type);
+ }
+ const unrelated={id:"metal_comercial",name:"Metal",role:"metalurgica",
+  old:[{dir:"out",unit:"adubo",stem:"adubo"}]};
+ assert.equal(creator.relatedCargoCandidate(unrelated,"bobinas_industriais","out"),null,
+  "Nome ou ramo não pode justificar carga sem evidência");
+
+
  // Regressões: IDs opacos com provas nos cargos IN/OUT não devem ser
  // descartados só porque a empresa não tem nome de fábrica conhecido.
  function opaque(id,dir,goods){
