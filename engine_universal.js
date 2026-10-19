@@ -288,18 +288,47 @@ function audit(map,cargo,sim){
  "</details>";
 }
 
+let latestDiagnostic=null;
+function createDiagnosticText(map,cargo,sim){
+ const rows=[
+  "ETS2 COMPANY LOGISTICS - DIAGNÓSTICO DE ARQUIVOS",
+  "Empresas: "+map.companies.size,
+  "Cargas personalizadas do Librelato: "+cargo.cargos.size,
+  "Definições de carroceria: "+[...cargo.cargos.values()].map(c=>c.id+" = "+(c.body.join("|")||"SEM BODY_TYPES")).join(", "),
+  "",
+  "EMPRESAS (ID | SETOR IDENTIFICADO | EVIDÊNCIA | CARGAS IN ANTIGAS | CARGAS OUT ANTIGAS)"
+ ];
+ for(const c of map.companies.values()){
+  const ins=c.old.filter(x=>x.dir==="in").map(x=>x.stem);
+  const outs=c.old.filter(x=>x.dir==="out").map(x=>x.stem);
+  rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(",")].join(" | "));
+ }
+ rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
+ for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
+ rows.push("","CARGAS DESTINADAS A EMPRESAS (ID | IN | OUT)");
+ for(const [id,p] of sim.plan)rows.push([id,[...p.in].join(","),[...p.out].join(",")].join(" | "));
+ return rows.join("\n");
+}
+function downloadDiagnostic(){
+ if(!latestDiagnostic)return;
+ const blob=new Blob([latestDiagnostic],{type:"text/plain;charset=utf-8"});
+ const u=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=u;a.download="ETS2_Company_Logistics_Diagnostico.txt";
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),50000);
+}
 let busy=false;
 async function generate(){
  if(busy)return;
  const one=ui.map.files?.[0],two=ui.cargo.files?.[0];
  if(!one||!two){say("Anexe a Company do mapa e a DEF das cargas do Librelato.",0);return}
- busy=true;ui.run.disabled=true;ui.report.innerHTML="";ui.detail.innerHTML="";
+ busy=true;ui.run.disabled=true;ui.report.innerHTML="";ui.detail.innerHTML="";latestDiagnostic=null;
  try{
   say("Identificando empresas do mapa…",8);
   const map=await loadMap(await zipRead(one));await yieldUI();
   say("Identificando cargas e carrocerias…",28);
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
+  latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("saveDiagnostic");if(diag)diag.hidden=false;
   if(!sim.plan.size)throw Error("Sem cadeias de carga verificadas. Confira o diagnóstico. Não vou gerar SCS vazio.");
   if(!sim.grouped.alta||!sim.grouped.baixa)throw Error("Uma das grades ficou sem cargas. Confira a auditoria antes de gerar.");
   say("Criando DEF Company completa…",60);
@@ -313,6 +342,7 @@ async function generate(){
  finally{busy=false;ui.run.disabled=false}
 }
 ui.run.addEventListener("click",generate);
+if(el("saveDiagnostic"))el("saveDiagnostic").addEventListener("click",downloadDiagnostic);
 for(const id of ["mapFile","cargoFile"])el(id).addEventListener("change",()=>{const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
-window.CompanyLogisticsTest={kind,known,inferRoleFromHistoricalFreights,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
+window.CompanyLogisticsTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build};
 })();
