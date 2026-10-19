@@ -809,7 +809,13 @@ window.V10SelfTest=function(){
   classify("correios")==="correios",
   !FLOWS.milho.in.includes("cervejaria"),
   !FLOWS.tijolo.out.includes("posto"),
-  parseCargoText("carga1 = Soja").get("carga1")==="Soja"
+  parseCargoText("carga1 = Soja").get("carga1")==="Soja",
+  kindOf("Sacos de Batata")==="batata",
+  classify("refinaria01")==="refinaria",
+  classify("empresa123")==="incerta",
+  !FLOWS.sorgo.out.includes("laticinio"),
+  !FLOWS.cimento.in.includes("refinaria"),
+  !FLOWS.tijolo.in.includes("posto")
  ];
  return{passed:assertions.filter(Boolean).length,total:assertions.length,ok:assertions.every(Boolean)}
 };
