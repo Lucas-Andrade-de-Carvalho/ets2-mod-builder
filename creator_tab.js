@@ -218,14 +218,74 @@ function mapFingerprint(map){
  }
  return(hash>>>0).toString(16).padStart(8,"0");
 }
-function zipRead(file){
- return file.slice(0,6).arrayBuffer().then(arr=>{
-  const a=new Uint8Array(arr);
-  if(a[0]!==80||a[1]!==75)throw Error("O arquivo "+file.name+" não está em ZIP/SCS ZIP. Se for HashFS, extraia a DEF.");
-  return JSZip.loadAsync(file,{createFolders:false,checkCRC32:false})
- })
+// Leitor de pacotes ZIP, inclusive SCS/ZIP guardados dentro de outro ZIP.
+// Mantém os nomes internos: prefixos de pastas só são removidos na projeção
+// canonizada de def/company e def/cargo, nunca nos dados originais.
+const ARCHIVE_LIMITS=Object.freeze({
+ maxDepth:3,
+ maxNestedFiles:32,
+ maxEntries:120000,
+ maxNestedBytes:320*1024*1024
+});
+const ARCHIVE_FILE=/\.(?:zip|scs)$/i;
+const ZIP_SIGNATURES=new Set(["504b0304","504b0506","504b0708"]);
+function isZipMagic(data){
+ const a=data instanceof Uint8Array?data:new Uint8Array(data);
+ if(a.length<4)return false;
+ return ZIP_SIGNATURES.has(Array.from(a.slice(0,4),v=>v.toString(16).padStart(2,"0")).join(""));
 }
-function entries(zip){return Object.entries(zip.files).filter(([,o])=>!o.dir)}
+async function zipRead(file){
+ const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
+ if(!isZipMagic(header)){
+  throw Error("O arquivo "+file.name+" não é ZIP/SCS ZIP legível. Pacotes HashFS precisam ser extraídos com ferramenta compatível antes do upload.");
+ }
+ return JSZip.loadAsync(file,{createFolders:false,checkCRC32:false});
+}
+async function resolveEntries(zip,kind){
+ const matched=[],stack=[{zip,level:0,source:"arquivo enviado"}];
+ let entryCount=0,nestedCount=0,skippedHashFS=0;
+ const isRelevant=kind==="map"?companyPath:cargoPath;
+ while(stack.length){
+  const frame=stack.pop();
+  const nested=[];
+  for(const [raw,obj] of Object.entries(frame.zip.files)){
+   if(obj.dir)continue;
+   if(++entryCount>ARCHIVE_LIMITS.maxEntries)throw Error("Pacote muito grande: limite de "+ARCHIVE_LIMITS.maxEntries+" entradas alcançado. Selecione só a DEF do mapa.");
+   if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
+     throw Error("Caminho inseguro encontrado no arquivo "+frame.source);
+   const name=pathNorm(raw);
+   const canonical=isRelevant(name);
+   if(canonical){
+    matched.push([name,obj,frame.source]);
+   }else if(frame.level<ARCHIVE_LIMITS.maxDepth&&ARCHIVE_FILE.test(name)){
+    nested.push({name,obj});
+   }
+  }
+  // Não vasculhar dezenas de outras modificações embutidas se já existe
+  // uma DEF Company reconhecível no arquivo principal.
+  if(frame.level===0&&matched.length&&kind==="map")continue;
+  for(const entry of nested){
+   if(++nestedCount>ARCHIVE_LIMITS.maxNestedFiles)
+     throw Error("O arquivo contém muitos pacotes internos. Separe a DEF do mapa (máximo "+ARCHIVE_LIMITS.maxNestedFiles+").");
+   const size=entry.obj._data?.uncompressedSize;
+   if(size&&size>ARCHIVE_LIMITS.maxNestedBytes)
+     throw Error("Arquivo interno grande demais: "+entry.name+". Envie somente a DEF do mapa.");
+   const data=await entry.obj.async("uint8array");
+   if(data.byteLength>ARCHIVE_LIMITS.maxNestedBytes)
+     throw Error("Pacote interno excede o limite de tamanho: "+entry.name);
+   if(!isZipMagic(data)){skippedHashFS++;continue}
+   let inner;
+   try{
+    inner=await JSZip.loadAsync(data,{createFolders:false,checkCRC32:false});
+   }catch(err){
+    throw Error("Falha ao abrir ZIP/SCS interno "+entry.name+": "+(err?.message||err));
+   }
+   stack.push({zip:inner,level:frame.level+1,source:entry.name});
+   if(nestedCount%4===0)await yieldUI();
+  }
+ }
+ return {matched,nestedCount,skippedHashFS};
+}
 
 function inferRoleFromHistoricalFreights(company){
  // O histórico serve somente para identificar setor; nunca é copiado como logística.
@@ -417,9 +477,10 @@ function farmCargoEvidence(c,type){
 
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
- for(const [raw,obj] of entries(zip)){
+ const resolution=await resolveEntries(zip,"map");
+ for(const [raw,obj,source] of resolution.matched){
   const p=companyPath(raw);if(!p)continue;
-  const key=p.toLowerCase();if(files.has(key))throw Error("Caminho duplicado no mapa: "+p);
+  const key=p.toLowerCase();if(files.has(key))throw Error("A DEF contém o mesmo caminho em mais de um pacote: "+p+". Separe o mapa das Companys duplicadas; o sistema não sobrescreve dados silenciosamente.");
   files.set(key,{p,obj});
   const m=companyMeta(p);if(!m)continue;
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
@@ -427,7 +488,7 @@ async function loadMap(zip){
   if(m.type==="editor")c.editor++;
   if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
  }
- if(!companies.size)throw Error("Nenhuma empresa reconhecida. Inclua company/ ou def/company/ com pastas de empresas e arquivos .sii. Se você enviou um pacote contendo vários .scs internos, extraia a DEF antes.");
+ if(!companies.size)throw Error("Nenhuma empresa reconhecida neste arquivo. Procure def/company/<empresa>/editor, in ou out na DEF do mapa. Foram examinados "+resolution.nestedCount+" ZIP/SCS internos"+(resolution.skippedHashFS?" ("+resolution.skippedHashFS+" HashFS não legíveis)":"")+". Um arquivo só com map/, model/ ou prefab/ não contém as definições Company.");
  let i=0;
  for(const v of files.values()){
   const m=companyMeta(v.p);if(!m||m.type!=="permanent")continue;
@@ -475,16 +536,17 @@ async function loadMap(zip){
   inferConstructionSupplyFromINOUT(c);
  }
 
- return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length}
+ return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
- for(const [raw,obj] of entries(zip)){
+ const resolution=await resolveEntries(zip,"cargo");
+ for(const [raw,obj] of resolution.matched){
   const p=cargoPath(raw);if(!p)continue;
   if(files.has(p.toLowerCase()))throw Error("Caminho duplicado na DEF de cargas: "+p);
   files.set(p.toLowerCase(),{p,obj})
  }
- if(!files.size)throw Error("A DEF do Librelato não contém cargo/ nem vehicle/.");
+ if(!files.size)throw Error("Não foi localizada a DEF das cargas. Procure cargo/, vehicle/ ou def/cargo/ dentro do ZIP/SCS, inclusive pacotes internos.");
  let i=0;
  for(const f of files.values()){
   if(!/\.(sii|sui)$/i.test(f.p))continue;
@@ -507,7 +569,7 @@ async function loadCargo(zip){
   if((++i)%100===0)await yieldUI();
  }
  for(const c of cargos.values())c.trailer=trailer.get(c.id)||new Set();
- return{files,cargos,manifests}
+ return{files,cargos,manifests,archivesRead:resolution.nestedCount}
 }
 
 const LEGACY_EVIDENCE={
@@ -980,5 +1042,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution};
+window.CompanyCreatorTest={kind,known,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic};
 })();
