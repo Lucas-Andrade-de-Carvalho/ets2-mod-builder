@@ -1317,7 +1317,7 @@ function countRelated(c,dir,pattern){
   .map(x=>String(x.unit||x.stem).toLowerCase())).size;
 }
 function relatedCargoCandidate(c,type,dir){
- if(!c||["desconhecida","posto","correios","concessionaria","cana"].includes(c.role))return null;
+ if(!c||["posto","correios","concessionaria","cana"].includes(c.role))return null;
  const n=(p,d=dir)=>countRelated(c,d,p);
  let score=0,reason="";
  if(type==="granito"){
@@ -1369,6 +1369,40 @@ function relatedCargoCandidate(c,type,dir){
   }
   if(dir==="in"&&["siderurgica","metalurgica","obras"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.steel,"in")){
     score=75+n(RELATED_FREIGHT_PATTERNS.steel,"in")*5;reason="recebe produtos siderúrgicos";
+  }
+ }
+
+ // Se o ID do mapa não indica o setor, use APENAS evidências reais do IN/OUT.
+ if(!score&&c.role==="desconhecida"){
+  const entries=(d)=>new Set((c.old||[]).filter(x=>x.dir===d).map(x=>String(x.unit||x.stem).toLowerCase()));
+  const goods=entries(dir),out=entries("out");
+  const num=(set,re)=>[...set].filter(x=>re.test(x)).length;
+  const name=norm((c.id||"")+" "+(c.name||""));
+  const stones=/^(?:granito|granite|marmore|marble|pedras?|blocos?pedra|lajotas?|revestimentos?)$/i;
+  const feeds=/^(?:racao|racoes|xerem|farelo|animal_?feed|feedmeal|salmineral|suplementomineral)$/i;
+  if(type==="granito"){
+   const n=num(goods,stones);
+   if(dir==="out"&&(n>=2||(n&&/marmor|pedra|granito|miner/.test(name)))){
+    score=86+6*n;reason="mercadorias de pedra/mármore documentadas no OUT";
+   }else if(dir==="in"&&n>=2){score=71+5*n;reason="mercadorias de pedra/mármore no IN"}
+  }
+  if(type==="racao"&&num(goods,feeds)){
+   score=95+5*num(goods,feeds);
+   reason="ração, farelo ou suplementação documentada no "+dir.toUpperCase();
+  }
+  if(type==="algodao"){
+   const cotton=num(goods,RELATED_FREIGHT_PATTERNS.cotton);
+   const grains=num(out,RELATED_FREIGHT_PATTERNS.grain);
+   if(cotton){score=98+cotton*5;reason="algodão/pluma documentado";}
+   else if(dir==="out"&&grains>=2&&/faz|agropec|agric|rural/.test(name)){
+    score=57+3*grains;reason="atividade de lavoura diversificada (pluma é hipótese)";
+   }
+  }
+  if(type==="bobinas_industriais"){
+   const metal=num(goods,RELATED_FREIGHT_PATTERNS.steel);
+   if(metal>=2||(metal&&/metal|sider|ferro|aco|steel|belgo/.test(name))){
+    score=82+5*metal;reason="materiais metálicos comprovados no "+dir.toUpperCase();
+   }
   }
  }
  return score?{company:c,score,reason}:null;
