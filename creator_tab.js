@@ -204,6 +204,20 @@ const companyMeta=path=>{
  const b=path.match(/^def\/company\/([a-z0-9_.-]+)\.sii$/i);
  return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null;
 };
+function mapFingerprint(map){
+ // Identificador estável do conteúdo da Company, sem depender do nome de ZIP.
+ // Evita sobrescrever arquivos de dois mapas diferentes chamados "def_company.zip".
+ const signature=[
+   ...[...map.companies.values()].map(c=>c.id).sort(),
+   ...[...map.files.values()].map(x=>x.p.toLowerCase()).sort()
+ ].join("|");
+ let hash=2166136261;
+ for(let i=0;i<signature.length;i++){
+  hash^=signature.charCodeAt(i);
+  hash=Math.imul(hash,16777619);
+ }
+ return(hash>>>0).toString(16).padStart(8,"0");
+}
 function zipRead(file){
  return file.slice(0,6).arrayBuffer().then(arr=>{
   const a=new Uint8Array(arr);
@@ -429,7 +443,7 @@ async function loadMap(zip){
   const obj=item.obj;
   if((obj._data?.uncompressedSize||0)>100000)continue;
   const raw=await obj.async("text");
-  const match=raw.match(/^\s*cargo\s*:\s*["']?cargo\.([a-z0-9_]+)["']?/mi);
+  const match=raw.replace(/\/\/[^\n]*/g,"").match(/\bcargo\s*:\s*["']?cargo\.([a-z0-9_]+)/i);
   if(match){
    const c=companies.get(m.id);
    const relation=c?.old.find(x=>x.p===item.p);
@@ -932,10 +946,13 @@ async function generate(){
   // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);
   const out=await build(map,cargo,sim);
-  const clean=(one.name.replace(/\.(scs|zip)$/i,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,55)||"Mapa");
+  const clean=(one.name.replace(/\.(scs|zip)$/i,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,40)||"Mapa");
+  const fingerprint=mapFingerprint(map);
+  // Arquivos chamados def_company.zip em mapas distintos não sobrescrevem o resultado.
+  const identifier=clean+"_"+fingerprint;
   lastCompany={
    blob:out.blob,
-   filename:"DEF_Company_Librelato_"+clean+"_Universal.scs",
+   filename:"DEF_Company_Librelato_"+identifier+"_Universal.scs",
    count:out.count,
    removed:out.removed
   };
