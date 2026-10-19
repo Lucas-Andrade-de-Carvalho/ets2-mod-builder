@@ -492,6 +492,25 @@ function reconcileSectorWithEvidence(c){
    c.evidence="metalurgia identificada por IN/OUT de ferragens e chapas: "+metalGoods.join(", ");
    return true;
  }
+
+ // IDs opacos em mapas diferentes: inferência apenas quando IN e OUT
+ // demonstram uma operação econômica coerente, não pelo nome inventado.
+ const metallic=/^(?:b_reforco|ferroconst|chapaaco|sumetal|sualuminio|bobinas?|steel_coils?)$/;
+ const stone=/^(?:pedra|granito|marmore|granite|marble|lajotas?)$/;
+ const metalOut=[...out].filter(x=>metallic.test(x));
+ const metalIn=[...incoming].filter(x=>metallic.test(x));
+ if(c.role==="desconhecida"&&metalOut.length>=2&&metalIn.length>=1){
+  c.role="metalurgica";
+  c.evidence="metalurgia por IN/OUT observados: OUT "+metalOut.join(", ")+"; IN "+metalIn.join(", ");
+  return true;
+ }
+ const stoneOut=[...out].filter(x=>stone.test(x));
+ const stoneIn=[...incoming].filter(x=>stone.test(x));
+ if(c.role==="desconhecida"&&stoneOut.length>=2&&stoneIn.length>=1){
+  c.role="marmoraria";
+  c.evidence="beneficiamento de pedras por IN/OUT observados: OUT "+stoneOut.join(", ");
+  return true;
+ }
  if(c.role==="desconhecida"&&out.has("racao")&&(incoming.has("milho")||incoming.has("soja")||incoming.has("feijao"))){
    c.role="racoes";c.evidence="fábrica/distribuidora de ração identificada por OUT ração e IN grãos";return true;
  }
