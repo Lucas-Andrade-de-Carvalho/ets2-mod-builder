@@ -20,6 +20,14 @@ Versão simplificada do gerador de Company para Euro Truck Simulator 2, usando *
 - Preserva empresas vazias quando não houver correspondência econômica reconhecível.
 - Não obriga o uso de uma cidade, empresa ou nome de mapa específico.
 
+## Diagnóstico aprimorado
+
+O motor cruza o ID e o nome da empresa com um conjunto conservador de funções econômicas. Quando não consegue reconhecer o ramo, usa as mercadorias **antigas** recebidas e expedidas, quando a combinação IN/OUT contém evidência suficiente (ex.: entrada de calcário e saída de cimento indica cimenteira). Isso serve só para inferir atividade; não copia a distribuição irreal anterior.
+
+O site também disponibiliza **Baixar relatório de diagnóstico TXT** depois de analisar. O documento lista todos os IDs encontrados, setores classificados, mercadorias originais e motivos das cargas não liberadas.
+
+A geração continua bloqueada quando faltam produtores ou destinatários comprováveis, evitando uma DEF Company vazia ou economicamente incoerente. Os arquivos originais permanecem intactos.
+
 ## Limites reais
 
 - O arquivo do mapa precisa ser um ZIP/SCS com pasta `company/` ou `def/company/`. Se for HashFS, deve ser extraído previamente.
