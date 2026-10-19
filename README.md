@@ -29,6 +29,14 @@ Versão simplificada do gerador de Company para Euro Truck Simulator 2, usando *
 - A validação em ZIP **não substitui** um teste real no ETS2 1.61.1, incluindo trailer_defs, métodos de carga, geografia, mercado de fretes e `game.log`.
 - No Gerenciador de Mods, mantenha o mod principal Librelato e a Company exclusiva gerada ativos e **desative as DEF Companies genéricas 1 e 2**.
 
+## Ajustes no reconhecimento das empresas e cargas
+
+- As cargas personalizadas do Librelato com IDs `carga1`, `carga2` etc. são identificadas separadamente das definições genéricas como `corn_b` e `soybean_b`.
+- Reconhecimento ajustado para `Sojaalto`, `Milhoalto`, `Sorgoalto`, `Cervejas`, `Sacos de Batatas` e `Sacos de Laranjas`.
+- IDs compactos rurais (`faz_01`, `agropec...`, `silos...`) são reconhecidos quando indicam atividade econômica concreta.
+- A auditoria apresenta exemplos de empresas desconhecidas e motivos de rejeição. Empresas incertas não são transformadas artificialmente em produtoras.
+- Teste estrutural adicional: uma DEF sintética com 23 cargas Librelato e cinco genéricas produziu ligações de grade alta e baixa, ignorando corretamente as cargas genéricas.
+
 ## Verificações
 
 - Sintaxe do motor JavaScript verificada.
