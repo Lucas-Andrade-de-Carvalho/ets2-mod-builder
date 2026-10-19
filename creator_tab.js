@@ -247,7 +247,8 @@ const SCS_CARGO_CATEGORY_MAP=[
  ["madeira",/(?:^|[_ ]|\.)(?:logs?|lumber|timber|wood|planks?|boards?|madeira|toras?)(?:$|[_ ]|\.)/],
  ["algodao",/(?:^|[_ ]|\.)(?:cotton(?:_bales?)?|algodao|pluma)(?:$|[_ ]|\.)/],
  ["cimento",/(?:^|[_ ]|\.)(?:cement(?:_bag|_pallet)?|cimento)(?:$|[_ ]|\.)/],
- ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?|tiles?|telhas?)(?:$|[_ ]|\.)/],
+ ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?)(?:$|[_ ]|\.)/],
+ ["telha",/(?:^|[_ ]|\.)(?:tiles?|telhas?|roof(?:ing)?)(?:$|[_ ]|\.)/],
  ["granito",/(?:^|[_ ]|\.)(?:granite|granito|marble|marmore)(?:$|[_ ]|\.)/],
  ["cerveja",/(?:^|[_ ]|\.)(?:beer|cervejas?)(?:$|[_ ]|\.)/],
  ["racao",/(?:^|[_ ]|\.)(?:animal_?feed|feedmeal|racao|xerem)(?:$|[_ ]|\.)/],
@@ -369,7 +370,7 @@ function oldSpecificEvidence(c,type,dir){
   racao:/^(racao|animal_?feed|xerem|farelo|feedmeal)$/,
   bobinas_industriais:/^(bobinas?|steel_?coils?|metal_?coils?|b_reforco|ferroconst|chapaaco)$/,
   granito:/^(granito|granite|marmore|marble|pedra)$/,
-  tijolo:/^(tijolos?|bricks?|telha|telhas)$/,
+  tijolo:/^(tijolos?|bricks?)$/,
   madeira:/^(madeira|lumber|timber|planks?)$/,
   cimento:/^(cimento|cement|cement_b|cement_pallet|cement_bag)$/
  };
@@ -612,6 +613,10 @@ function chooseEndpoints(map,type,spec){
        if(c.role==="materiais"&&c.old?.length&&!categoryOutletCandidate(c,type,"out")&&!oldSpecificEvidence(c,type,"out"))continue;
        if(c.role==="racoes"&&type!=="racao"&&!oldSpecificEvidence(c,type,"out"))continue;
        if(c.role==="agroinsumos"&&["racao","adubo"].includes(type)&&c.old?.length&&!oldSpecificEvidence(c,type,"out"))continue;
+       if(type==="granito"&&["mineracao","pedreira","marmoraria"].includes(c.role)&&c.old?.length){
+         const stones=c.old.filter(x=>x.dir==="out").some(x=>/^(pedra|marmore|granito|granite|marble)$/.test(String(x.unit||x.stem).toLowerCase()));
+         if(!stones)continue;
+       }
        if(c.role==="fazenda"&&type==="algodao"&&c.old?.length){
          const crops=c.old.filter(x=>x.dir==="out").map(x=>oldCargoCategory(x.unit||x.stem));
          if(!crops.some(x=>["milho","soja","sorgo","algodao"].includes(x)))continue;
