@@ -296,7 +296,7 @@ async function resolveEntries(zip,kind){
    const canonical=kind==="map"?companyPath(name,bareRoots):isRelevant(name);
    if(canonical){
     matched.push([name,obj,frame.source,bareRoots]);
-    matchedHere++;
+    if(kind!=="map"||companyMeta(canonical))matchedHere++;
    }else if(frame.level<ARCHIVE_LIMITS.maxDepth&&ARCHIVE_FILE.test(name)){
     nested.push({name,obj});
    }
