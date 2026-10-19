@@ -161,7 +161,7 @@ function applyCompanyOverrides(map){
  if(!raw)return{accepted};
  for(const [i,row]of raw.split(/\r?\n/).entries()){
   const line=row.trim();if(!line||line.startsWith("#"))continue;
-  const m=line.match(/^([a-z0-9_-]+)\s*[=:]\s*([a-z_]+)$/i);
+  const m=line.match(/^([a-z0-9_.-]+)\s*[=:]\s*([a-z_]+)$/i);
   if(!m){errors.push("Linha "+(i+1)+": formato esperado ID = setor");continue}
   const id=m[1].toLowerCase(),role=m[2].toLowerCase();
   if(!ALLOWED_ROLES.has(role)){errors.push("Setor inválido: "+role);continue}
@@ -183,21 +183,26 @@ const kind=name=>{
 };
 const companyPath=raw=>{
  const p=pathNorm(raw);
+ // Aceita def/company/ e company/ na raiz ou dentro de pastas de exportação.
+ // O sufixo após company/ não é modificado; os caminhos da saída são normalizados.
+ if(p.split("/").some(x=>x===".."||x==="."))throw Error("Caminho inválido no ZIP de empresas: "+raw);
  const m=p.match(/(?:^|\/)(?:def\/)?company\/(.+)$/i);
  if(m)return"def/company/"+m[1];
  const reg=p.match(/(?:^|\/)(company(?:\.[a-z0-9_-]+)?\.sii)$/i);
- return reg?"def/"+reg[1]:null
+ return reg?"def/"+reg[1]:null;
 };
 const cargoPath=raw=>{
  const p=pathNorm(raw);
+ if(p.split("/").some(x=>x===".."||x==="."))throw Error("Caminho inválido na DEF de cargas: "+raw);
  const m=p.match(/(?:^|\/)(?:def\/)?(cargo\/.+|vehicle\/.+|cargo\.[a-z0-9_-]+\.sii)$/i);
- return m?"def/"+m[1]:null
+ return m?"def/"+m[1]:null;
 };
 const companyMeta=path=>{
- const a=path.match(/^def\/company\/([a-z0-9_]+)\/(in|out|editor)\/(.+)$/i);
+ // Caminhos de empresas customizadas podem conter hífen e ponto.
+ const a=path.match(/^def\/company\/([a-z0-9_.-]+)\/(in|out|editor)\/(.+)$/i);
  if(a)return{id:a[1].toLowerCase(),rawId:a[1],type:a[2].toLowerCase(),name:a[3]};
- const b=path.match(/^def\/company\/([a-z0-9_]+)\.sii$/i);
- return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null
+ const b=path.match(/^def\/company\/([a-z0-9_.-]+)\.sii$/i);
+ return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null;
 };
 function zipRead(file){
  return file.slice(0,6).arrayBuffer().then(arr=>{
@@ -408,7 +413,7 @@ async function loadMap(zip){
   if(m.type==="editor")c.editor++;
   if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
  }
- if(!companies.size)throw Error("Nenhuma empresa na Company informada.");
+ if(!companies.size)throw Error("Nenhuma empresa reconhecida. Inclua company/ ou def/company/ com pastas de empresas e arquivos .sii. Se você enviou um pacote contendo vários .scs internos, extraia a DEF antes.");
  let i=0;
  for(const v of files.values()){
   const m=companyMeta(v.p);if(!m||m.type!=="permanent")continue;
@@ -806,8 +811,8 @@ async function build(map,cargo,sim){
 function audit(map,cargo,sim){
  const companies=[...map.companies.values()],assigned=[...sim.plan.values()].reduce((n,p)=>n+p.in.size+p.out.size,0);
  const warning=[];
- if(sim.grouped.baixa===0)warning.push("Grade baixa sem cargas correspondentes.");
- if(sim.grouped.alta===0)warning.push("Grade alta sem cargas correspondentes.");
+ if(sim.grouped.baixa===0)warning.push("Grade baixa sem ofertas verificadas neste mapa. As cargas incompatíveis não foram inventadas.");
+ if(sim.grouped.alta===0)warning.push("Grade alta sem ofertas verificadas neste mapa. As cargas incompatíveis não foram inventadas.");
  const unknown=companies.filter(c=>c.role==="desconhecida").length;
  const assignedCompanies=companies.filter(c=>sim.plan.get(c.id)?.out?.size).length;
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
@@ -923,7 +928,8 @@ async function generate(){
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
   if(!sim.plan.size)throw Error("Sem cadeias de carga verificadas. Confira o diagnóstico. Não vou gerar SCS vazio.");
-  if(!sim.grouped.alta||!sim.grouped.baixa)throw Error("Uma das grades ficou sem cargas. Confira a auditoria antes de gerar.");
+  // Não inventar fretes para completar uma grade ausente neste mapa.
+  // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);
   const out=await build(map,cargo,sim);
   const clean=(one.name.replace(/\.(scs|zip)$/i,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,55)||"Mapa");
@@ -934,7 +940,7 @@ async function generate(){
    removed:out.removed
   };
   updateDownloadUI();
-  say("Company gerada e validada: "+out.count+" relações IN/OUT novas. Clique em Baixar Company .SCS para salvar o arquivo. Teste no ETS2 ainda necessário.",100);
+  say("Company do mapa gerada: "+out.count+" relações IN/OUT; "+sim.grouped.baixa+" cargas grade baixa, "+sim.grouped.alta+" grade alta. Clique em Baixar Company .SCS. Teste no ETS2 necessário.",100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
