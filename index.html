@@ -614,6 +614,29 @@ async function readArchive(file,token){
  return JSZip.loadAsync(file,{createFolders:false,checkCRC32:false})
 }
 function listEntries(z){return Object.entries(z.files).filter(x=>!x[1].dir)}
+function canonicalCompanyPath(raw){
+ const p=normPath(raw);
+ if(p.startsWith("def/company/"))return p;
+ const m=p.match(/(?:^|\/)(?:def\/)?company\/(.+)$/);
+ return m?"def/company/"+m[1]:null
+}
+async function normalizeCompanyArchive(zip,token){
+ const changes=[];
+ for(const [raw,obj] of listEntries(zip)){
+  const dest=canonicalCompanyPath(raw);
+  if(!dest||dest===normPath(raw))continue;
+  if(zip.file(dest))throw new Error("Duas definições tentam ocupar o mesmo caminho: "+dest);
+  changes.push({raw,dest,obj});
+ }
+ for(let i=0;i<changes.length;i++){
+  if(token)check(token);
+  const {raw,dest,obj}=changes[i];
+  zip.file(dest,await obj.async("uint8array"),{createFolders:true,date:obj.date});
+  zip.remove(raw);
+  if(i%100===0)await yieldUI();
+ }
+ return changes.length
+}
 function collectCompanies(z){
  const companies=new Map(),existing=[];
  for(const [path] of listEntries(z)){
@@ -714,8 +737,8 @@ async function analyze(){
   progress("Abrindo a company do mapa…",5);await yieldUI();
   const mapZip=await readArchive(map,token);check(token);
   const scan=collectCompanies(mapZip);if(!scan.companies.size)throw new Error("Nenhuma empresa reconhecida em /def/company/ no ZIP do mapa");
-  if(!listEntries(mapZip).some(x=>normPath(x[0]).startsWith("def/company/")))throw new Error("A company precisa estar em def/company/ na raiz do ZIP.");
-  progress("Encontradas "+scan.companies.size+" empresas. Indexando templates…",23);await yieldUI();
+  const needsNormalization=listEntries(mapZip).filter(x=>canonicalCompanyPath(x[0])&&canonicalCompanyPath(x[0])!==normPath(x[0])).length;
+  progress("Encontradas "+scan.companies.size+" empresas"+(needsNormalization?" · "+needsNormalization+" caminhos serão organizados automaticamente":"")+". Indexando templates…",23);await yieldUI();
   const templates=await getTemplateLibrary(sources,token);check(token);
   progress("Lendo cargo_data e body_types reais…",52);await yieldUI();
   const cargoData=await readCargoDefinitions(cargoZip,new Set(labels.keys()),token);check(token);
@@ -738,6 +761,7 @@ async function exportArchive(){
  try{
   progress("Preparando a company específica…",10);await yieldUI();
   const z=await JSZip.loadAsync(el("v10-map-file").files[0],{createFolders:false});
+  const corrected=await normalizeCompanyArchive(z);
   const oldPaths=Object.keys(z.files).filter(x=>cargoRel(x)&&!z.files[x].dir);
   for(const [path,obj] of listEntries(z)){
    if(!/^def\/company\/[^/]+\.sii$/i.test(normPath(path)))continue;
@@ -815,7 +839,10 @@ window.V10SelfTest=function(){
   classify("empresa123")==="incerta",
   !FLOWS.sorgo.out.includes("laticinio"),
   !FLOWS.cimento.in.includes("refinaria"),
-  !FLOWS.tijolo.in.includes("posto")
+  !FLOWS.tijolo.in.includes("posto"),
+  canonicalCompanyPath("company/fazenda/in/carga1.sii")==="def/company/fazenda/in/carga1.sii",
+  canonicalCompanyPath("MeuMapa/def/company/silo/out/carga2.sii")==="def/company/silo/out/carga2.sii",
+  canonicalCompanyPath("def/company/silo/in/carga2.sii")==="def/company/silo/in/carga2.sii"
  ];
  return{passed:assertions.filter(Boolean).length,total:assertions.length,ok:assertions.every(Boolean)}
 };
