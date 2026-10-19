@@ -1,0 +1,29 @@
+name: Company Logistics smoke tests
+
+on:
+  push:
+    paths:
+      - "index.html"
+      - "creator_tab.js"
+      - "scs_company_catalog.js"
+      - "tests/**"
+      - ".github/workflows/company-smoke.yml"
+  pull_request:
+    paths:
+      - "index.html"
+      - "creator_tab.js"
+      - "scs_company_catalog.js"
+      - "tests/**"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate ZIP/SCS parser, Company generation and downloads
+        run: node tests/company-creator.smoke.cjs
