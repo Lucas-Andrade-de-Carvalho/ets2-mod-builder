@@ -273,6 +273,23 @@ function categorizeExistingCompanyLoads(c){
  }
  return result;
 }
+
+function inferConstructionSupplyFromINOUT(company){
+ // Loja/depósito: recebe e reexpede variedade concreta de materiais, não só recebe como uma obra.
+ if(!company||company.catalog||!(company.role==="obras"||company.role==="desconhecida"))return false;
+ const construction=new Set(["areias","areia","brita","tijolos","tijolo","tubosconcret","tubosmg","madeira","pedra","marmore","calhas","b_reforco","ferroconst","chapaaco","calcario"]);
+ const out=new Set(company.old.filter(x=>x.dir==="out"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
+ const incoming=new Set(company.old.filter(x=>x.dir==="in"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
+ const bulk=out.has("areias")||out.has("brita")||out.has("tijolos")||out.has("tubosconcret")||out.has("madeira")||out.has("pedra");
+ if(out.size>=3&&incoming.size>=2&&bulk){
+  company.role="materiais";
+  company.evidence="revenda/expedição comprovada na DEF: "+[...out].slice(0,8).join(", ");
+  company.supplyProof=[...out];
+  return true;
+ }
+ return false;
+}
+
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  for(const [raw,obj] of entries(zip)){
@@ -327,6 +344,8 @@ async function loadMap(zip){
    const guess=inferRoleFromHistoricalFreights(c);
    if(guess){c.role=guess.role;c.evidence=guess.method+" (catálogo enxuto)";}
   }
+  // A DEF real pode mostrar um depósito de materiais mesmo com ID de construtora.
+  inferConstructionSupplyFromINOUT(c);
  }
 
  return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length}
@@ -458,7 +477,8 @@ function chooseEndpoints(map,type,spec){
   if(legacyEvidence(c,type,"out")&&allowed(c,"out")&&!out.has(c)){out.add(c);historyOut++}
   if(legacyEvidence(c,type,"in")&&allowed(c,"in")&&!inn.has(c)){inn.add(c);historyIn++}
  }
- if(historyOut||historyIn)notes.push("histórico com setor confirmado: "+historyOut+" expedidores e "+historyIn+" recebedores adicionais");
+ // Referências cargo: do mapa são evidências verificadas, não hipóteses a exibir como alerta.
+
  // Nunca inventar uma origem só para evitar uma carga vazia.
  // Expedições entre obras requerem evidência real ou classificação explicitamente informada.
  return{out:[...out],inn:[...inn],notes};
@@ -550,8 +570,7 @@ function audit(map,cargo,sim){
  if(sim.grouped.baixa===0)warning.push("Grade baixa sem cargas correspondentes.");
  if(sim.grouped.alta===0)warning.push("Grade alta sem cargas correspondentes.");
  const unknown=companies.filter(c=>c.role==="desconhecida").length;
- const producerSectors=new Set(["fazenda","cooperativa","madeireira","adubeira","racoes","serraria","floresta","algodoeira","cimenteira","ceramica","pedreira","mineracao","cervejaria","siderurgica","paletes","materiais","logistica"]);
- const producers=companies.filter(c=>producerSectors.has(c.role));
+ const assignedCompanies=companies.filter(c=>sim.plan.get(c.id)?.out?.size).length;
  const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
  const inferred=companies.filter(c=>c.evidence==="combinação IN/OUT anterior").length;
  const matched=sim.catalogChecks?.matched??companies.filter(c=>c.catalog).length;
@@ -561,7 +580,7 @@ function audit(map,cargo,sim){
  if(inferred)warning.push(inferred+" empresas classificadas por produtos históricos IN/OUT, além dos nomes e IDs.");
  const manual=companies.filter(c=>c.evidence==="classificação informada pelo usuário").length;
  if(manual)warning.push(manual+" empresas classificadas manualmente.");
- if(!producers.length)warning.push("Nenhuma empresa expedidora foi classificada; o sistema não exige fabricantes, mas precisa de locais reais com expedição plausível.");
+ if(!assignedCompanies)warning.push("Nenhum ponto real de expedição foi encontrado. Confira a DEF do mapa.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  const reasons=new Map();
  for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
@@ -600,6 +619,7 @@ function createDiagnosticText(map,cargo,sim){
   "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
   "Empresas: "+map.companies.size,
   "Cargas personalizadas do Librelato: "+cargo.cargos.size,
+  "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
   "Definições de carroceria: "+[...cargo.cargos.values()].map(c=>c.id+" = "+(c.body.join("|")||"SEM BODY_TYPES")).join(", "),
   "",
   "EMPRESAS (ID | SETOR IDENTIFICADO | EVIDÊNCIA | CARGAS IN ANTIGAS | CARGAS OUT ANTIGAS)"
