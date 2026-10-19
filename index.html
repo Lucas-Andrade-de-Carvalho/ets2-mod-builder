@@ -1193,6 +1193,12 @@ function chooseEndpoints(map,type,spec){
          const stones=c.old.filter(x=>x.dir==="out").some(x=>/^(pedra|marmore|granito|granite|marble)$/.test(String(x.unit||x.stem).toLowerCase()));
          if(!stones)continue;
        }
+       if(type==="bobinas_industriais"&&c.old?.length&&!c.old.some(x=>
+         x.dir==="out"&&/^(b_reforco|ferroconst|chapaaco|steel_coils?|metal_coils?|bobinas?)$/i.test(String(x.unit||x.stem))))continue;
+       if(type==="cerveja"&&c.old?.length&&!c.old.some(x=>
+         x.dir==="out"&&/^(cervejas?|beer|amstel|antarctica|brahma|budweiser|devassa|heineken|schin|skol)$/i.test(String(x.unit||x.stem))))continue;
+       if(type==="tijolo"&&c.role==="ceramica"&&c.old?.length&&
+           !oldSpecificEvidence(c,"tijolo","out")&&!constructionStockEvidence(c).isRetailProfile)continue;
        if(c.role==="fazenda"&&type==="algodao"&&c.old?.length){
          const crops=c.old.filter(x=>x.dir==="out").map(x=>oldCargoCategory(x.unit||x.stem));
          if(!crops.some(x=>["milho","soja","sorgo","algodao"].includes(x)))continue;
