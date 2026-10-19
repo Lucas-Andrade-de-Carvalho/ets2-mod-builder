@@ -1315,97 +1315,73 @@ function countRelated(c,dir,pattern){
  return new Set((c.old||[]).filter(x=>x.dir===dir&&pattern.test(String(x.unit||x.stem).toLowerCase()))
   .map(x=>String(x.unit||x.stem).toLowerCase())).size;
 }
+// IN/OUT é a evidência principal. IDs e nomes servem apenas de contexto.
+// A leitura privilegia "cargo:" real; só usa o nome do arquivo se esse campo faltar.
+function freightEvidence(c,dir,re){
+ const hits=new Set();
+ for(const x of c.old||[]){
+  if(x.dir!==dir)continue;
+  const unit=String(x.unit||x.stem||"").toLowerCase();
+  if(re.test(unit))hits.add(unit);
+ }
+ return hits.size;
+}
 function relatedCargoCandidate(c,type,dir){
  if(!c||["posto","correios","concessionaria","cana"].includes(c.role))return null;
- const n=(p,d=dir)=>countRelated(c,d,p);
+ const n=(pattern,d=dir)=>freightEvidence(c,d,pattern);
+ const exact={
+  granito:/^(?:granito|granite|marmore|marble|pedras?)$/i,
+  racao:/^(?:racao|racoes|xerem|animal_?feed|feedmeal|salmineral|suplementomineral)$/i,
+  sorgo:/^(?:sorgo|sorghum)$/i,
+  algodao:/^(?:algodao|pluma|cotton|cotton_?bales?)$/i,
+  bobinas_industriais:/^(?:bobinas?|steel_?coils?|metal_?coils?)$/i
+ };
+ const exactCount=n(exact[type]||/$^/);
+ if(exactCount)return{company:c,score:110+exactCount*10,reason:"mercadoria correspondente declarada no "+dir.toUpperCase()+" da própria DEF"};
  let score=0,reason="";
+ // Evidência de produtos relacionados: exigir coerência da operação IN e OUT,
+ // evitando inventar uma fábrica só por um nome semelhante.
  if(type==="granito"){
-  if(dir==="out"&&["mineracao","pedreira","marmoraria","materiais"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.stone)){
-   score=90+n(RELATED_FREIGHT_PATTERNS.stone)*10;reason="expede pedra ou mármore";
-  }
-  if(dir==="in"&&["obras","materiais","marmoraria"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.stoneReceiver)){
-   score=75+n(RELATED_FREIGHT_PATTERNS.stoneReceiver)*3;reason="recebe produtos de construção ou pedras";
+  const stone=n(RELATED_FREIGHT_PATTERNS.stone);
+  if(dir==="out"&&stone){score=90+stone*5;reason="expedição documentada de rochas similares"}
+  if(dir==="in"&&n(RELATED_FREIGHT_PATTERNS.stoneReceiver)>=2){
+   score=75+n(RELATED_FREIGHT_PATTERNS.stoneReceiver)*3;reason="recebimento documentado de materiais de construção";
   }
  }
  if(type==="racao"){
-  if(dir==="out"&&["racoes","agroinsumos","cooperativa","alimentos"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.feed)){
-   score=100+n(RELATED_FREIGHT_PATTERNS.feed)*5;reason="expede ração, xerém ou suplementos";
-  }
-  if(dir==="out"&&c.role==="racoes"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2){
-   score=Math.max(score,70);reason="beneficia insumos de alimentação animal";
-  }
-  if(dir==="in"&&["fazenda","pecuaria","cooperativa","racoes"].includes(c.role)&&
-     (n(RELATED_FREIGHT_PATTERNS.feedInput,"in")||c.role==="pecuaria")){
-    score=80+n(RELATED_FREIGHT_PATTERNS.feedInput,"in")*4;reason="recebe insumos agropecuários";
+  const feed=n(RELATED_FREIGHT_PATTERNS.feed);
+  if(feed){score=85+feed*5;reason="movimentação documentada de farelo/insumo para alimentação animal"}
+  else if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2&&n(RELATED_FREIGHT_PATTERNS.feed,"out")){
+   score=75;reason="recebe insumos e expede alimentação animal";
   }
  }
  if(type==="sorgo"){
-  if(dir==="out"&&c.role==="fazenda"&&n(RELATED_FREIGHT_PATTERNS.grain,"out")){
-   const focus=specificFarmCrop(c);
-   if(!focus||["milho","soja","sorgo"].includes(focus)){
-    score=65+n(RELATED_FREIGHT_PATTERNS.grain,"out")*4;reason="fazenda que expede grãos";
-   }
+  if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.grain)>=2&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")===0){
+   score=65;reason="expede múltiplos cereais";
   }
-  if(dir==="in"&&["cooperativa","silo","moinho","racoes","pecuaria"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")){
-   score=70+n(RELATED_FREIGHT_PATTERNS.feedInput,"in")*4;reason="recebe grãos ou insumos para ração";
+  if(dir==="in"&&n(RELATED_FREIGHT_PATTERNS.grain)){
+   score=70;reason="recebe cereais";
   }
  }
  if(type==="algodao"){
-  if(dir==="out"&&c.role==="fazenda"&&
-     (n(RELATED_FREIGHT_PATTERNS.cotton,"out")||(n(RELATED_FREIGHT_PATTERNS.grain,"out")>=2&&!specificFarmCrop(c)))){
-    score=n(RELATED_FREIGHT_PATTERNS.cotton,"out")?100:55;
-    reason=score===100?"expede algodão":"fazenda agrícola diversificada (hipótese de pluma)";
+  if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.grain)>=2&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")===0&&c.role==="fazenda"){
+   score=55;reason="produção agrícola diversificada, compatibilidade hipotética";
   }
-  if(dir==="in"&&["cooperativa","textil","algodoeira"].includes(c.role)&&
-     (n(RELATED_FREIGHT_PATTERNS.cottonReceive,"in")||
-       (c.role==="cooperativa"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2))){
-    score=80+n(RELATED_FREIGHT_PATTERNS.cottonReceive,"in")*5;reason="recebe produtos agrícolas ou fibras";
+  if(dir==="in"&&n(RELATED_FREIGHT_PATTERNS.cottonReceive)&&["textil","algodoeira","cooperativa"].includes(c.role)){
+   score=75;reason="recebe fibras ou mercadorias agrícolas relacionadas";
   }
  }
  if(type==="bobinas_industriais"){
-  if(dir==="out"&&["siderurgica","metalurgica"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.steel,"out")){
-    score=85+n(RELATED_FREIGHT_PATTERNS.steel,"out")*5;reason="expede produtos siderúrgicos";
-  }
-  if(dir==="in"&&["siderurgica","metalurgica","obras"].includes(c.role)&&n(RELATED_FREIGHT_PATTERNS.steel,"in")){
-    score=75+n(RELATED_FREIGHT_PATTERNS.steel,"in")*5;reason="recebe produtos siderúrgicos";
-  }
- }
-
- // Se o ID do mapa não indica o setor, use APENAS evidências reais do IN/OUT.
- if(!score&&c.role==="desconhecida"){
-  const entries=(d)=>new Set((c.old||[]).filter(x=>x.dir===d).map(x=>String(x.unit||x.stem).toLowerCase()));
-  const goods=entries(dir),out=entries("out");
-  const num=(set,re)=>[...set].filter(x=>re.test(x)).length;
-  const name=norm((c.id||"")+" "+(c.name||""));
-  const stones=/^(?:granito|granite|marmore|marble|pedras?|blocos?pedra|lajotas?|revestimentos?)$/i;
-  const feeds=/^(?:racao|racoes|xerem|farelo|animal_?feed|feedmeal|salmineral|suplementomineral)$/i;
-  if(type==="granito"){
-   const n=num(goods,stones);
-   if(dir==="out"&&(n>=2||(n&&/marmor|pedra|granito|miner/.test(name))||(n&&c.old.some(x=>x.dir==="out"&&x.unit&&stones.test(String(x.unit).toLowerCase()))))){
-    score=86+6*n;reason="mercadorias de pedra/mármore documentadas no OUT";
-   }else if(dir==="in"&&(n>=2||(n&&c.old.some(x=>x.dir==="in"&&x.unit&&stones.test(String(x.unit).toLowerCase()))))){score=71+5*n;reason="mercadorias de pedra/mármore no IN"}
-  }
-  if(type==="racao"&&num(goods,feeds)){
-   score=95+5*num(goods,feeds);
-   reason="ração, farelo ou suplementação documentada no "+dir.toUpperCase();
-  }
-  if(type==="algodao"){
-   const cotton=num(goods,RELATED_FREIGHT_PATTERNS.cotton);
-   const grains=num(out,RELATED_FREIGHT_PATTERNS.grain);
-   if(cotton){score=98+cotton*5;reason="algodão/pluma documentado";}
-   else if(dir==="out"&&grains>=2&&/faz|agropec|agric|rural/.test(name)){
-    score=57+3*grains;reason="atividade de lavoura diversificada (pluma é hipótese)";
-   }
-  }
-  if(type==="bobinas_industriais"){
-   const metal=num(goods,RELATED_FREIGHT_PATTERNS.steel);
-   if(metal>=2||(metal&&/metal|sider|ferro|aco|steel|belgo/.test(name))||(metal&&c.old.some(x=>x.dir===dir&&x.unit&&/^(?:bobinas?|steel_?coils?|metal_?coils?)$/i.test(x.unit)))){
-    score=82+5*metal;reason="materiais metálicos comprovados no "+dir.toUpperCase();
-   }
+  const steel=n(RELATED_FREIGHT_PATTERNS.steel);
+  if(steel>=2){score=88+steel*4;reason="movimentação de vários produtos siderúrgicos"}
+  else if(steel&&["siderurgica","metalurgica"].includes(c.role)){
+   score=78;reason="produto siderúrgico e setor compatível";
   }
  }
+ // Um setor ou catálogo isolado não autoriza frete não presente nem relacionado.
  return score?{company:c,score,reason}:null;
 }
+
 const CATEGORY_FALLBACK_LIMITS={granito:{out:6,in:9},racao:{out:5,in:12},sorgo:{out:6,in:9},algodao:{out:6,in:10},bobinas_industriais:{out:6,in:9}};
 function relatedCargoFallback(companies,type,dir){
  const limit=CATEGORY_FALLBACK_LIMITS[type]?.[dir]||0;
