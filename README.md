@@ -73,6 +73,20 @@ A aba **Criação de Companys** passou a considerar múltiplas maneiras legítim
 
 O diagnóstico mostra exemplos de IDs de origem/destino e marca quaisquer hipóteses. Se um mapa realmente não tiver ao menos um par plausível, a carga permanece excluída; não são fabricadas empresas novas. A versão não garante fretes no ETS2 sem teste no jogo.
 
+## Correções após revisão de rotas do mapa
+
+As primeiras simulações de empresas reais revelaram expedições economicamente improváveis: adubo saindo de `acero`, batatas/laranjas saindo de canaviais ou usinas de cana, tijolos saindo de marmorarias e cimento saindo automaticamente de uma construtora. O motor foi alterado para:
+
+- Dar preferência à atividade econômica identificada sobre associações legadas e **impedir que o histórico contradiga um setor conhecido**.
+- Reconhecer usinas/canaviais de cana como especialidade própria; podem receber fertilizantes, mas não expedem automaticamente grãos, batatas ou laranjas.
+- Reconhecer marmorarias como expedidoras/recebedoras possíveis de granito, sem habilitá-las a fabricar tijolos.
+- Exigir especialização documentada para fazendas que expedem batatas ou laranjas; uma fazenda de batatas não expede milho automaticamente.
+- Remover a escolha arbitrária de uma construtora como expedidora de cimento ou tijolos quando o mapa não fornece fábrica/loja/depósito.
+- Não usar lojas de materiais como expedidoras de adubo agrícola pesado sem evidência de agroinsumos.
+- Identificar no diagnóstico cargas cuja única origem é um centro logístico, indicando que o estoque específico não está comprovado.
+
+**Teste de regressão:** geração integral de SCS com mapa sintético de 16 empresas e 9 cargos do Librelato, verificando 11 permissões válidas, 8 ausências obrigatórias e a exclusão das antigas referências do ZIP de entrada. Este teste não substitui validação com o mapa real no ETS2.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
