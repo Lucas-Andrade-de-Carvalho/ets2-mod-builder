@@ -255,16 +255,26 @@ function audit(map,cargo,sim){
  if(sim.grouped.baixa===0)warning.push("Grade baixa sem cargas correspondentes.");
  if(sim.grouped.alta===0)warning.push("Grade alta sem cargas correspondentes.");
  const unknown=companies.filter(c=>c.role==="desconhecida").length;
- if(unknown)warning.push(unknown+" empresas não identificadas permanecerão sem cargas.");
+ if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
+ const reasons=new Map();
+ for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
+ const ranked=[...reasons].sort((a,b)=>b[1]-a[1]);
+ const roles=new Map();
+ for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
  [["Empresas",companies.length],["Cargas do Librelato",cargo.cargos.size],["Cargas rejeitadas",sim.skipped.length],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
- (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"");
- ui.detail.innerHTML="<details><summary>Diagnóstico detalhado</summary>"+
+ (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
+ (ranked.length?"<div class='warning'><b>Por que as cargas foram rejeitadas?</b><div style='margin-top:9px'>"+ranked.map(([reason,count])=>"<div style='padding:3px 0'><strong>"+count+"x</strong> "+escapeHTML(reason)+"</div>").join("")+"</div></div>":"")+
+ "<p class='muted'>Empresas reconhecidas por atividade: "+
+ [...roles].filter(([k])=>k!=="desconhecida").sort((a,b)=>b[1]-a[1]).map(([role,n])=>escapeHTML(role)+": "+n).join(" · ")+
+ ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
+ ui.detail.innerHTML="<details"+(sim.skipped.length===cargo.cargos.size?" open":"")+"><summary>Diagnóstico detalhado de cada carga</summary>"+
  sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+
- "</details>"
+ "</details>";
 }
+
 let busy=false;
 async function generate(){
  if(busy)return;
