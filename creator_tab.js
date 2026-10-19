@@ -236,20 +236,28 @@ const companyMeta=path=>{
  const b=path.match(/^def\/company\/([a-z0-9_.-]+)\.sii$/i);
  return b?{id:b[1].toLowerCase(),rawId:b[1],type:"permanent",name:b[1]}:null;
 };
-function mapFingerprint(map){
- // Mesmo caminho em mapas diferentes não significa necessariamente mesmo conteúdo.
- // Inclui CRC32/tamanho da entrada no identificador determinístico.
- const signature=[
-   ...[...map.companies.values()].map(c=>c.id).sort(),
-   ...[...map.files.values()].map(x=>{
-    const meta=x.obj?._data;
-    return x.p.toLowerCase()+":"+(meta?.crc32??"unknown")+":"+(meta?.uncompressedSize??"unknown");
-   }).sort()
- ].join("|");
+async function mapFingerprint(map){
+ // Impressão digital de caminhos E conteúdo. Arquivos recém-criados ainda
+ // não possuem CRC32 no JSZip, por isso recebem hash direto de seus bytes.
  let hash=2166136261;
- for(let i=0;i<signature.length;i++){
-  hash^=signature.charCodeAt(i);
-  hash=Math.imul(hash,16777619);
+ const addByte=n=>{hash^=n;hash=Math.imul(hash,16777619)};
+ const addText=text=>{
+  for(let i=0;i<text.length;i++){
+   const n=text.charCodeAt(i);
+   addByte(n&255);addByte(n>>>8);
+  }
+ };
+ for(const c of [...map.companies.values()].sort((a,b)=>a.id.localeCompare(b.id)))addText("C:"+c.id);
+ for(const f of [...map.files.values()].sort((a,b)=>a.p.localeCompare(b.p))){
+  addText("P:"+f.p.toLowerCase());
+  const data=f.obj?._data;
+  if(typeof data?.crc32==="number"&&typeof data?.uncompressedSize==="number"){
+   addText("S:"+data.uncompressedSize+":CRC:"+data.crc32);
+  }else{
+   const bytes=await f.obj.async("uint8array");
+   addText("B:"+bytes.byteLength);
+   for(const x of bytes)addByte(x);
+  }
  }
  return(hash>>>0).toString(16).padStart(8,"0");
 }
@@ -1051,7 +1059,7 @@ async function generate(){
   say("Criando DEF Company completa…",60);
   const out=await build(map,cargo,sim);
   const clean=(one.name.replace(/\.(scs|zip)$/i,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,40)||"Mapa");
-  const fingerprint=mapFingerprint(map);
+  const fingerprint=await mapFingerprint(map);
   // Arquivos chamados def_company.zip em mapas distintos não sobrescrevem o resultado.
   const identifier=clean+"_"+fingerprint;
   lastCompany={
