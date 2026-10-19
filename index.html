@@ -599,7 +599,7 @@ const FLOWS={
  aco:{out:["siderurgia"],in:["metalurgica","obra"]}
 };
 const kindOf=label=>{const s=normalize(label);for(const [kind,re] of KINDS)if(re.test(s))return kind;return null};
-const classify=(id,override)=>{if(override){return FLOWS && RULES.some(x=>x[0]===override)?override:"incerta"}const s=normalize(id.replace(/_/g," "));for(const [role,re] of RULES)if(re.test(s))return role;return "incerta"};
+const classify=(id,override)=>{if(override)return RULES.some(x=>x[0]===override)?override:"incerta";const s=normalize(id.replace(/_/g," "));for(const [role,re] of RULES)if(re.test(s))return role;const compact=s.replace(/ /g,"");const known=[["silo",/^silos?/],["laticinio",/^laticinios?/],["fazenda",/^fazenda/],["ceramica",/^(ceramica|olaria)/],["obra",/^(construtora|construcao|obra|canteiro)/],["posto",/^posto/],["refinaria",/^(refinaria|petrobras)/],["correios",/^correios/],["pedreira",/^pedreira/],["serraria",/^serraria/],["moinho",/^moinho/]];for(const [role,re] of known)if(re.test(compact))return role;return "incerta"};
 const cargoRel=p=>{const m=normPath(p).match(/(?:^|\/)(?:def\/)?company\/([^/]+)\/(in|out)\/([^/]+)\.sii$/);return m?{company:m[1],dir:m[2],name:m[3]}:null};
 const companyFromPath=p=>{const n=normPath(p),a=n.match(/(?:^|\/)(?:def\/)?company\/([^/]+)\/(?:editor|in|out)\//),b=n.match(/(?:^|\/)(?:def\/)?company\/([^/.]+)\.sii$/);return a?a[1]:b?b[1]:null};
 const cargoContentId=t=>{const x=t.match(/^\s*cargo\s*:\s*["']?cargo\.([a-z0-9_]+)/im);return x?.[1]?.toLowerCase()||null};
