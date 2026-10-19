@@ -308,7 +308,7 @@ function constructionStockEvidence(company){
  const outKinds=results.out;
  const totalOut=outKinds.size+results.otherOut;
  const variety=outKinds.size>=2&&[...outKinds].some(x=>CONSTRUCTION_FINISHED.has(x));
- const hasStockMovement=results.in.size>=1;
+ const hasStockMovement=results.in.size>=1||outKinds.size>=3;
  const concentration=totalOut>0?outKinds.size/totalOut:0;
  return{
   ...results,
