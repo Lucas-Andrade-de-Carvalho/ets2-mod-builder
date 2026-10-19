@@ -1,38 +1,38 @@
-# ETS2 Company Logistics V10
+# ETS2 Company Logistics — Universal
 
-Sistema HTML de processamento local de DEF Company por mapa, derivado do arquivo `ETS2_Company_Logistics_ULTIMATE_UPDATE(2).html`.
+Versão simplificada do gerador de Company para Euro Truck Simulator 2, usando **dois arquivos**.
 
-## Como usar
+## Uso
 
-1. Abra `index.html` no navegador e selecione **V10 por mapa**.
-2. Selecione a **Company original do mapa** em ZIP/SCS com `def/company/` na raiz.
-3. Adicione as **DEF Company 1 e 2** como fonte de **templates** (não precisam ficar ativas no ETS2).
-4. Selecione o ZIP com **`def/cargo.librelato.sii` e `def/cargo/carga*.sui`** (ou estrutura equivalente do mod, mantendo `def/`).
-5. Confira os nomes das cargas e selecione **grade baixa** ou **grade alta**, informando o token `body_type` verdadeiro.
-6. Analise o relatório. Apenas cargas que têm origem, destino, templates e compatibilidade comprovados são habilitadas.
-7. Escolha **mod acima do mapa** para neutralizar definições antigas que continuam no mapa, ou **substituir company-base** para remover fisicamente os arquivos antigos do ZIP.
-8. Gere o SCS. **Não mantenha as DEF Companies genéricas 1 e 2 ativas junto do substituto.** Mantenha o mod principal do Librelato ativo.
+1. Abra `index.html` no Chrome ou Edge.
+2. No campo **DEF Company do mapa**, carregue o `.zip` ou `.scs` ZIP que contém as empresas (`company/` ou `def/company/`).
+3. Em **DEF das cargas do Librelato**, carregue o ZIP com `cargo/`, `vehicle/` e `cargo.librelato.sii`, como `def(1).zip`.
+4. Clique **Gerar Company simulada**. O site identifica o nome do mapa pelo arquivo e considera automaticamente cargas de **grade baixa** e **grade alta**.
+5. O arquivo `DEF_Company_Librelato_<MAPA>_Universal.scs` será baixado quando houver cargas e destinos válidos nas duas grades.
 
-## Decisões de segurança e realismo
+## O que faz
 
-- Empresas sem produtos compatíveis permanecem sem fretes.
-- A classificação de ramo exige nomes ou correções manuais verificáveis: nomes opacos permanecem como **incertos**.
-- Sorgo não sai de laticínios; milho não é destinado automaticamente a indústrias de refrigerantes.
-- Silos não expedem os mesmos grãos nessa configuração: isso evita fretes entre silos/cooperativas sem comprovação de transferência.
-- As relações são validadas por carga, origem, destino, `cargo_def` e `body_types`; cargas insuficientemente documentadas ficam fora da company, com motivo no relatório.
-- O modo complementar reutiliza os próprios arquivos `.sii` do mapa para neutralizar as definições antigas, preservando a sintaxe.
-- `in_cargo`/`out_cargo` legados bloqueiam a geração, porque podem reintroduzir cargas antigas.
-- `index.html` mantém o motor anterior na aba **Modo legado**.
+- Classifica as empresas a partir de IDs e nomes encontrados nos arquivos.
+- Atribui cargas apenas a setores compatíveis, por exemplo milho: fazenda → silo, moinho ou fábrica de ração.
+- Conserva arquivos das empresas e editores do mapa, neutralizando as antigas referências `IN/OUT` que constem no arquivo fornecido.
+- Cria os arquivos `def/company/<empresa>/in|out/<carga>.sii` sem precisar anexar as antigas DEF Companies 1 e 2.
+- Inclui no SCS resultante a DEF das cargas (cargo_data e definições de veículo presentes no ZIP da segunda entrada).
+- Preserva empresas vazias quando não houver correspondência econômica reconhecível.
+- Não obriga o uso de uma cidade, empresa ou nome de mapa específico.
 
-## Validação
+## Limites reais
 
-- 16/16 testes internos de classificação e preservação de regras econômicas.
-- Teste de ZIP em memória: fazenda → silo com milho compatível, templates reais simulados e geração/reabertura da saída de sobreposição.
-- Sintaxe JS da V10 verificada.
-- **Pendente:** teste dentro do ETS2 com os arquivos completos do usuário e compatibilidade de modelos/métodos de carga da versão 1.54+. A validação de `body_types` não basta para garantir que os fretes aparecerão na carroceria.
+- O arquivo do mapa precisa ser um ZIP/SCS com pasta `company/` ou `def/company/`. Se for HashFS, deve ser extraído previamente.
+- Não é possível inferir com segurança o setor de toda empresa de qualquer mapa apenas de um ID opaco. Empresas não reconhecidas permanecem vazias, e o diagnóstico mostra as cargas não distribuídas.
+- A geração é bloqueada se não houver ao menos uma carga economicamente válida para cada uma das carrocerias `alta` e `baixa`.
+- O sistema reproduz cadeias por mercadoria, mas o ETS2 combina qualquer origem OUT válida com qualquer destino IN válido para a mesma carga. Para evitar fretes silo→silo, esta versão não autoriza automaticamente silos a expedir grãos que também recebem.
+- A validação em ZIP **não substitui** um teste real no ETS2 1.61.1, incluindo trailer_defs, métodos de carga, geografia, mercado de fretes e `game.log`.
+- No Gerenciador de Mods, mantenha o mod principal Librelato e a Company exclusiva gerada ativos e **desative as DEF Companies genéricas 1 e 2**.
 
-## Referências
+## Verificações
 
-- https://modding.scssoft.com/wiki/Documentation/Engine/Units/cargo_def
-- https://modding.scssoft.com/wiki/Documentation/Engine/Units/cargo_data
-- https://modding.scssoft.com/wiki/Games/ETS2/Modding_guides/1.54
+- Sintaxe do motor JavaScript verificada.
+- Teste de ponta a ponta com ZIPs simulados: milho grade baixa (fazenda → silo), tijolos grade alta (olaria → construtora).
+- SCS resultante foi reaberto e confirmou `cargo_data`, manifest, empresas, arquivos editor e neutralizadores, sem modificar os originais.
+
+**Status:** gerador funcional em testes estruturais; teste in-game com o mod e mapa reais ainda pendente.
