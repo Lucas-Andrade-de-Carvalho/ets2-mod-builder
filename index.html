@@ -874,7 +874,7 @@ function simulate(map,cargo){
   const allowed=info.body.filter(b=>!info.trailer.size||info.trailer.has(b));
   if(!allowed.length)problems.push("carroceria incompatível");
   const chosen=spec?chooseEndpoints(map,type,spec):{out:[],inn:[],notes:[]};
-  let outs=chosen.out,ins=chosen.in;
+  let outs=chosen.out,ins=chosen.inn;
   if(!outs.length&&spec)problems.push("sem expedidor compatível ou estoque comprovado (setores: "+spec.out.join(" / ")+")");
   if(!ins.length&&spec)problems.push("sem recebedor compatível ou estoque comprovado (setores: "+spec.in.join(" / ")+")");
   if(outs.length===1&&ins.length===1&&outs[0].id===ins[0].id)
