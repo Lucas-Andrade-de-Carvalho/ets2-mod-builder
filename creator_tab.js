@@ -281,7 +281,7 @@ function inferConstructionSupplyFromINOUT(company){
  const out=new Set(company.old.filter(x=>x.dir==="out"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
  const incoming=new Set(company.old.filter(x=>x.dir==="in"&&construction.has(String(x.unit||x.stem).toLowerCase())).map(x=>String(x.unit||x.stem).toLowerCase()));
  // Extração de areia/brita sozinha não prova que o depósito venda cimento.
- const finished=out.has("tijolos")||out.has("tubosconcret")||out.has("tubosmg")||out.has("madeira")||out.has("calhas");
+ const finished=out.has("tijolos")||out.has("tubosconcret")||out.has("madeira");
  if(out.size>=3&&incoming.size>=2&&finished){
   company.role="materiais";
   company.evidence="revenda/expedição comprovada na DEF: "+[...out].slice(0,8).join(", ");
