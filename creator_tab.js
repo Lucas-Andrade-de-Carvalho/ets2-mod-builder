@@ -47,7 +47,7 @@ const flows={
  milho:{out:["fazenda"],in:["silo","moinho","racoes","pecuaria"]},
  soja:{out:["fazenda"],in:["silo","moinho"]},
  sorgo:{out:["fazenda"],in:["silo","racoes","pecuaria"]},
- adubo:{out:["adubeira","agroinsumos","materiais","logistica"],in:["fazenda","cana","pecuaria","agroinsumos","materiais","logistica"]},
+ adubo:{out:["adubeira","agroinsumos","logistica"],in:["fazenda","cana","pecuaria","agroinsumos","logistica"]},
  madeira:{out:["serraria","floresta","materiais","logistica"],in:["obras","materiais","logistica","metalurgica"]},
  algodao:{out:["fazenda","algodoeira","logistica"],in:["textil","algodoeira","logistica"]},
  cimento:{out:["cimenteira","materiais","logistica"],in:["obras","materiais","logistica"]},
@@ -335,7 +335,25 @@ function getCandidateMap(map){
  }
  return{companies,byRole};
 }
+function specificFarmCrop(c){
+ const value=norm((c.id||"")+" "+(c.name||"")).replace(/[_-]/g," ");
+ const special=[
+ ["batata",/(?:batata|potato)/],
+ ["laranja",/(?:laranja|citrus|orange)/],
+ ["algodao",/(?:algodao|cotton)/],
+ ["soja",/(?:soja|soybean)/],
+ ["milho",/(?:milho|maize|corn)/],
+ ["sorgo",/(?:sorgo|sorghum)/]
+ ];
+ const found=special.filter(([,re])=>re.test(value)).map(([type])=>type);
+ return found.length===1?found[0]:null;
+}
 function roleSuitableForSpecificCargo(c,type,direction){
+ if(c.role==="fazenda"&&direction==="out"&&SPECIAL_CROPS.has(type)){
+  const focus=specificFarmCrop(c);
+  if(focus&&focus!==type)return false;
+  if(focus===type)return true;
+ }
  if(c.role==="cana"&&SPECIAL_CROPS.has(type))return false;
  if(c.role==="cana"&&type==="adubo")return direction==="in";
  if(c.role==="marmoraria"&&type==="tijolo")return false;
@@ -384,7 +402,8 @@ function simulate(map,cargo){
   if(problems.length){skipped.push({id:info.id,name:info.name,problems});continue}
   if(type==="bobinas_industriais")chosen.notes.push("Bobinas 2 tratadas provisoriamente como bobinas industriais; conteúdo 3D não confirmado");
   if(type==="paletizado")chosen.notes.push("paletes de conteúdo não identificado: distribuição industrial/comercial plausível");
-  if(chosen.notes.length)assumptions.push({id:info.id,notes:chosen.notes});
+  if(outs.every(c=>c.role==="logistica"))chosen.notes.push("expedição baseada em capacidade logística presumida; estoque específico não confirmado");
+ if(chosen.notes.length)assumptions.push({id:info.id,notes:chosen.notes});
   for(const c of outs){
     if(!plan.has(c.id))plan.set(c.id,{in:new Set(),out:new Set()});
     plan.get(c.id).out.add(info.id);
