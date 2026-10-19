@@ -5,8 +5,8 @@ const el=id=>document.getElementById(id),ui={map:el("mapFile"),cargo:el("cargoFi
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
-["adubo",/\b(adubo|fertilizante)\b/],["algodao",/\b(pluma|algodao)\b/],["batata",/\bbatata\b/],["laranja",/\blaranja\b/],
-["cerveja",/\b(cerveja|beer)\b/],["cimento",/\bcimento\b/],["tijolo",/\btijolo[s]?\b/],["granito",/\bgranito\b/],
+["adubo",/\b(adubos?|fertilizantes?)\b/],["algodao",/\b(pluma|algodao)\b/],["batata",/\bbatatas?\b/],["laranja",/\blaranjas?\b/],
+["cerveja",/\b(cervejas?|beer)\b/],["cimento",/\bcimento\b/],["tijolo",/\btijolo[s]?\b/],["granito",/\b(granito|granitto)\b/],
 ["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["palete",/\b(palete vazio|palete de madeira)\b/]
 ];
 const sectors=[
@@ -59,8 +59,42 @@ const pathNorm=s=>String(s).replace(/\\/g,"/").replace(/^\/+/,"").replace(/^\.\/
 const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const yieldUI=()=>new Promise(r=>setTimeout(r,0));
 const say=(msg,pct)=>{ui.message.textContent=msg;ui.bar.style.width=Math.max(0,Math.min(100,pct))+"%"};
-const known=(id,label)=>{const x=norm(id)+" "+norm(label);for(const [r,re] of sectors)if(re.test(x))return r;const flat=norm(id).replace(/ /g,"");if(/^silos?/.test(flat))return"silo";if(/^ceasa/.test(flat))return"hortifruti";if(/^olaria/.test(flat))return"ceramica";if(/^fazenda/.test(flat))return"fazenda";if(/^posto/.test(flat))return"posto";return"desconhecida"};
-const kind=name=>{const x=norm(name);for(const [k,re] of patterns)if(re.test(x))return k;return null};
+const known=(id,label)=>{
+ const x=norm(id)+" "+norm(label);
+ for(const [r,re] of sectors)if(re.test(x))return r;
+ const flat=norm(id).replace(/ /g,"");
+ // Regras de abreviações atestáveis, sem tornar empresas genéricas em produtoras.
+ const prefixes=[
+ ["silo",/^(silos?|coop(?:erativa)?|cerealista|graos)/],
+ ["racoes",/^(racoes?|feedmill|nutricaoanimal)/],
+ ["adubeira",/^(fertilizantes?|adubeira)/],
+ ["fazenda",/^(faz(?:enda|[_0-9])|farm|finca|hacienda|agropec|agricol|agricult|rural|plantacao|plantation|cultivo|rancho)/],
+ ["pecuaria",/^(pecuaria|granja|ganaderia|gado)/],
+ ["floresta",/^(florestal|reflorestamento)/],
+ ["serraria",/^(serraria|serradero|sawmill)/],
+ ["moinho",/^(moinho|molino)/],
+ ["hortifruti",/^(ceasa|hortifruti)/],
+ ["ceramica",/^(olaria|ceramica|tijolaria)/],
+ ["cimenteira",/^(cimenteira|fabrica.?cimento)/],
+ ["obras",/^(construtora|construcao|construction|obra|canteiro)/],
+ ["pedreira",/^(pedreira|quarry|cantera|marmoraria)/],
+ ["cervejaria",/^(ambev|heineken|cervejaria)/],
+ ["supermercado",/^(supermercado|hipermercado|atacadao|assai|carrefour)/],
+ ["posto",/^(posto|refinaria|petrobras|ipiranga)/],
+ ["concessionaria",/^(concessionaria|dealer)/],
+ ["correios",/^(correios|sedex)/],
+ ];
+ for(const [r,re] of prefixes)if(re.test(flat))return r;
+ return"desconhecida";
+};
+const kind=name=>{
+ const x=norm(name)
+   .replace(/\b(soja|milho|sorgo)alto\b/g,"$1 alto")
+   .replace(/\b(soja|milho|sorgo)alta\b/g,"$1 alta")
+   .replace(/\b(batata|laranja|cerveja)s\b/g,"$1");
+ for(const [k,re] of patterns)if(re.test(x))return k;
+ return null;
+};
 const companyPath=raw=>{
  const p=pathNorm(raw);
  const m=p.match(/(?:^|\/)(?:def\/)?company\/(.+)$/i);
@@ -126,7 +160,7 @@ async function loadCargo(zip){
   const txt=await f.obj.async("text"),p=f.p;
   if(/^def\/cargo\.[a-z0-9_-]+\.sii$/i.test(p))manifests.push(p);
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
-  if(id){
+  if(id&&/^carga\d+$/i.test(id)){
    let label=(txt.match(/^\s*name\s*:\s*"([^"]+)"/mi)||[])[1]||"";
    if(!label||label.includes("@@")){const n=id.match(/^carga(\d+)$/i);label=n?names[Number(n[1])-1]||id:id}
    const bs=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\d*\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
@@ -198,7 +232,11 @@ function audit(map,cargo,sim){
  if(sim.grouped.baixa===0)warning.push("Grade baixa sem cargas correspondentes.");
  if(sim.grouped.alta===0)warning.push("Grade alta sem cargas correspondentes.");
  const unknown=companies.filter(c=>c.role==="desconhecida").length;
+ const producerSectors=new Set(["fazenda","adubeira","racoes","serraria","floresta","algodoeira","cimenteira","ceramica","pedreira","cervejaria","siderurgica","paletes"]);
+ const producers=companies.filter(c=>producerSectors.has(c.role));
+ const exampleUnknown=companies.filter(c=>c.role==="desconhecida").slice(0,24).map(c=>c.id);
  if(unknown)warning.push(unknown+" empresas sem atividade identificada.");
+ if(!producers.length)warning.push("Nenhuma atividade produtora foi reconhecida neste mapa. Confira os IDs desconhecidos no diagnóstico.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  const reasons=new Map();
  for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
@@ -212,7 +250,7 @@ function audit(map,cargo,sim){
  (ranked.length?"<div class='warning'><b>Por que as cargas foram rejeitadas?</b><div style='margin-top:9px'>"+ranked.map(([reason,count])=>"<div style='padding:3px 0'><strong>"+count+"x</strong> "+escapeHTML(reason)+"</div>").join("")+"</div></div>":"")+
  "<p class='muted'>Empresas reconhecidas por atividade: "+
  [...roles].filter(([k])=>k!=="desconhecida").sort((a,b)=>b[1]-a[1]).map(([role,n])=>escapeHTML(role)+": "+n).join(" · ")+
- ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
+ ". Empresas ainda sem classificação (amostra): "+escapeHTML(exampleUnknown.join(", "))+ ". Não reconhecer a atividade de uma empresa não significa que ela não tenha cargas no mundo real.</p>";
  ui.detail.innerHTML="<details"+(sim.skipped.length===cargo.cargos.size?" open":"")+"><summary>Diagnóstico detalhado de cada carga</summary>"+
  sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+
  "</details>";
