@@ -679,7 +679,7 @@ const flows={
  granito:{out:["pedreira","mineracao","marmoraria","materiais","logistica"],in:["obras","marmoraria","materiais","logistica"]},
  racao:{out:["racoes","logistica","alimentos"],in:["fazenda","pecuaria","logistica","alimentos"]},
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
- bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","obras","logistica"]},
+ bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","siderurgica","logistica"]},
  // Paletes vazios: fabricantes e operadores logísticos expedem, várias empresas recebem.
  palete_vazio:{out:["paletes","logistica","materiais"],in:["fazenda","racoes","moinho","serraria","textil","ceramica","materiais","cervejaria","bebidas","hortifruti","alimentos","supermercado","logistica"]},
  // Pallets Alto/mercadoria paletizada sem conteúdo detalhado: uso amplo, mas não irrestrito.
@@ -944,7 +944,7 @@ function oldSpecificEvidence(c,type,dir){
   cerveja:/^(cervejas?|beer|ambev|amstel|antarctica|brahma|budweiser|devassa|heineken|schin|skol)$/,
   algodao:/^(algodao|cotton|pluma|cotton_bales?)$/,
   racao:/^(racao|animal_?feed|xerem|farelo|feedmeal)$/,
-  bobinas_industriais:/^(bobinas?|steel_?coils?|metal_?coils?|b_reforco|ferroconst|chapaaco)$/,
+  bobinas_industriais:/^(bobinas?|steel_?coils?|metal_?coils?)$/,
   granito:/^(granito|granite|marmore|marble|pedra)$/,
   tijolo:/^(tijolos?|bricks?)$/,
   madeira:/^(madeira|lumber|timber|planks?)$/,
@@ -1217,6 +1217,8 @@ function chooseEndpoints(map,type,spec){
            !(["cimento","tijolo","madeira","granito"].includes(type)&&categoryOutletCandidate(c,type,"in")))continue;
        if(c.role==="materiais"&&c.old?.length&&!oldSpecificEvidence(c,type,"in")&&
            !(["cimento","tijolo","madeira","granito"].includes(type)&&categoryOutletCandidate(c,type,"in")))continue;
+       if(type==="bobinas_industriais"&&c.old?.length&&!c.old.some(x=>
+         x.dir==="in"&&/^(b_reforco|ferroconst|chapaaco|steel_coils?|metal_coils?|bobinas?)$/i.test(String(x.unit||x.stem))))continue;
        if(c.role==="supermercado"&&["batata","laranja","cerveja"].includes(type)&&c.old?.length&&!oldSpecificEvidence(c,type,"in"))continue;
        inn.add(c);
      }
