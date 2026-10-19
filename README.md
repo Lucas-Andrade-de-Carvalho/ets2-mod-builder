@@ -155,6 +155,18 @@ O cenário real enviado foi analisado com `def_company.zip` e `def(2).zip`. A DE
 
 **Limite importante:** os 556 vínculos e a integridade do arquivo são validações estáticas; não houve teste no mercado de fretes dentro do ETS2. Prioridade de mod, compatibilidade dos modelos de reboque, DEF principal e combinação de cargas precisam de teste in-game antes de chamar o pacote de definitivo.
 
+## Fallback semântico por categoria da carga — materiais de construção
+
+Quando uma carga **não tem expedidor direto identificado**, a aba **Criação de Companys** consulta os arquivos `IN/OUT` existentes no mapa antes de rejeitá-la.
+
+Para **cimento, tijolos, granito e madeira**, o motor identifica empresas que já movimentam artigos de construção, como areia, brita, pisos, telhas, azulejos, tubos de concreto, calhas, ferragens, tijolos e madeiras. Uma loja ou depósito pode expedir cimento sem fabricá-lo. O destino pode ser uma obra ou outra revenda que já recebe materiais desse ramo.
+
+As condições são deliberadamente verificáveis: é exigida variedade de mercadorias correlatas e presença de pelo menos um produto acabado; operações excessivamente genéricas ou apenas extração de areia/brita não bastam para inferir estoque de cimento. A presença de movimentos IN relacionados aumenta a confiança, mas três tipos distintos de material expedido também podem demonstrar revenda quando não há IN no pacote.
+
+A classificação por categoria opera **somente entre empresas reais do mapa**. Não cria IDs, não adiciona `cargo_data`, não presume que posto de combustível seja depósito de cimento e não altera a geometria das cargas. A auditoria mostra os sinais usados; compatibilidade de carroceria e oferta no ETS2 exigem verificação em jogo.
+
+Teste automatizado de integração com dois ZIPs sintéticos: cimento e tijolos expedidos por lojas reconhecidas via areia/brita/pisos/telhas; construções recebem; empresas incompatíveis não expedem; arquivo SCS reaberto e botão de download acionado; nenhum ID extra inserido.
+
 ## Testes realizados
 
 - Verificação de sintaxe da aplicação original e do motor da aba nova.
