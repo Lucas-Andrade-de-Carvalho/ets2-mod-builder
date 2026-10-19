@@ -778,7 +778,7 @@ async function exportArchive(){
    if(expected.has(p))continue;
    const obj=checkZip.file(p);
    if(mode==="replacement"&&obj)throw new Error("Carga antiga sobreviveu: "+p);
-   if(mode==="overlay"&&obj&&/^\s*cargo\s*:\s*["']?cargo\./im.test(await obj.async("text")))throw new Error("Neutralização falhou: "+p);
+   if(mode==="overlay"&&(!obj||!/^\s*cargo\s*:\s*""/mi.test(await obj.async("text"))))throw new Error("Neutralização falhou: "+p);
   }
   const slug=(el("v10-map-name").value||"Mapa").replace(/[^a-z0-9_-]/gi,"_");
   const a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;
