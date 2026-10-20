@@ -31,5 +31,7 @@ jobs:
           node-version: "22"
       - name: Static and script integrity
         run: node tests/project-integrity.cjs
+      - name: Check source-to-HTML synchronization
+        run: node scripts/sync-company-engine.cjs --check
       - name: SII/ZIP parsing, economy, SCS export and UI regression
         run: node tests/company-creator.smoke.cjs
