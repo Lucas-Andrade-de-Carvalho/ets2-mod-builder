@@ -1804,7 +1804,7 @@ function audit(map,cargo,sim){
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
- [["Empresas",companies.length],["Cargas do Librelato",cargo.cargos.size],["Sem rota validada",sim.skipped.length],["Observações técnicas",sim.assumptions.length],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
+ [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
  (ranked.length?"<details class='creator-catalog'><summary>Motivos das cargas sem rota ("+sim.skipped.length+")</summary>"+ranked.map(([reason,count])=>"<div class='audit'><b>"+count+"x</b><span>"+escapeHTML(reason)+"</span></div>").join("")+"</details>":"")+
@@ -1816,10 +1816,10 @@ function audit(map,cargo,sim){
  catalogCompanies.slice(0,120).map(c=>"<div class='creator-catalog-row'><b>"+escapeHTML(c.folder||c.id)+"</b><span>"+escapeHTML(c.catalog.name+" · "+c.catalog.role+" · "+c.catalog.matchBy)+"</span><a href='"+escapeHTML(SCS_REFERENCE_URLS[c.catalog.source]||SCS_REFERENCE_URLS.wiki)+"' target='_blank' rel='noopener noreferrer'>Fonte</a></div>").join("")+
  (catalogCompanies.length>120?"<p class='muted'>Exibindo os primeiros 120. O relatório TXT contém todos os registros.</p>":"")+
  "</details>";
- ui.detail.innerHTML="<details><summary>Conferir relações detalhadas das cargas</summary>"+
- "<p class='muted'>Cargas distribuídas (expedidores → recebedores): "+sim.proof.map(p=>escapeHTML(p.name)+": "+p.origins+" → "+p.destinations).join("; ")+"</p>"+
+ ui.detail.innerHTML="<p class='muted small'>Prova documental indica mercadoria declarada nos IN/OUT; não é verificação presencial da empresa. Categoria relacionada e inferência são hipóteses identificadas, não fatos.</p>"+"<details><summary>Conferir relações detalhadas das cargas</summary>"+
+ "<p class='muted'>Cargas distribuídas (expedidores → recebedores): "+sim.proof.map(p=>escapeHTML(p.name)+" ("+escapeHTML(p.confidence)+"): "+p.origins+" → "+p.destinations).join("; ")+"</p>"+
  "<p class='muted'>Exemplos de relações do mapa (não garante oferta no ETS2):</p>"+
- sim.proof.map(p=>"<div class='audit'><b>"+escapeHTML(p.name)+"</b><span>OUT: "+escapeHTML(p.sourceIds.slice(0,6).join(", "))+" | IN: "+escapeHTML(p.destIds.slice(0,6).join(", "))+"</span></div>").join("")+
+ sim.proof.map(p=>"<div class='audit'><b>"+escapeHTML(p.name)+" · "+escapeHTML(p.confidence)+"</b><span>OUT: "+escapeHTML(p.sourceIds.slice(0,6).join(", "))+" | IN: "+escapeHTML(p.destIds.slice(0,6).join(", "))+" | Referências: "+escapeHTML(p.researchSources.join(", ")||"nenhuma fonte aplicável")+"</span></div>").join("")+
  (sim.assumptions.length?"<details class='creator-catalog'><summary>Observações técnicas das cargas ("+sim.assumptions.length+")</summary><p class='muted'>São interpretações ainda não confirmadas, não impedimentos de geração.</p>"+sim.assumptions.map(p=>"<div class='audit'><b>"+escapeHTML(p.id)+"</b><span>"+escapeHTML(p.notes.join("; "))+"</span></div>").join("")+"</details>":"")+
  (sim.skipped.length?"<details class='creator-catalog'><summary>Cargas ainda sem rota verificada ("+sim.skipped.length+")</summary>"+sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+"</details>":"")+
  "</details>"+catalogSummary;
