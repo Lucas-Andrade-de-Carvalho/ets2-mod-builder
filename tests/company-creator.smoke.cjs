@@ -140,9 +140,9 @@ async function main(){
   'cargo_data : cargo.carga5 {\n name: "Carga Pluma de Algodão"\n body_types[]: alta\n}\n');
  sampleCargo.file("cargo/carga23.sui",
   'cargo_data : cargo.carga23 {\n name: "Sorgoalto"\n body_types[]: alta\n}\n');
- const parsedMap=await creator.loadMap(sampleMap);
+ const minasParsedMap=await creator.loadMap(sampleMap);
  const parsedCargo=await creator.loadCargo(sampleCargo);
- const reality=creator.simulate(parsedMap,parsedCargo);
+ const reality=creator.simulate(minasParsedMap,parsedCargo);
  assert.equal(reality.proof.length,1,"Somente a ração tem origem e destino explícitos");
  assert.equal(reality.proof[0].id,"carga17");
  assert.equal(reality.proof[0].confidence,"documental");
@@ -153,7 +153,7 @@ async function main(){
     "Bobinas, pluma e sorgo não possuem produtos correspondentes");
  }
  assert.ok(!reality.plan.has("empresa_sem_evidencia"));
- const realityBuilt=await creator.build(parsedMap,parsedCargo,reality);
+ const realityBuilt=await creator.build(minasParsedMap,parsedCargo,reality);
  const realitySCS=await JSZip.loadAsync(realityBuilt.blob);
  assert.ok(realitySCS.file("def/company/agromais/out/carga17.sii"));
  assert.ok(realitySCS.file("def/company/abcatacado/in/carga17.sii"));
