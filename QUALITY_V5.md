@@ -24,3 +24,7 @@
 - Relações B/C nunca são relatadas como prova documental da DEF; apenas empresas e cargos reais entram no arquivo final.
 - Cimento nas lojas e pré-moldados, bobinas nas siderúrgicas/metalúrgicas, sorgo em suprimentos pecuários, pluma beneficiada e retorno de paletes têm verificadores distintos; cereal não é ração industrial, chapa não é bobina, algodão bruto não é pluma.
 - Registros de decisões contextuais aceitas ficam no diagnóstico. A natureza ambígua de “Pallets Alto TESTE” permanece pendente.
+
+
+## V6.1 — categoria como regra principal
+Uma mercadoria literal da DEF é prova forte; a categoria nos IN/OUT ou atividade da empresa é inferência sinalizada, mesmo quando habilita carga. Empresas podem atuar nos dois sentidos por estoque/distribuição. Cargas não são impostas a setores incompatíveis, e um SCS requer empresa de saída e outra de entrada.

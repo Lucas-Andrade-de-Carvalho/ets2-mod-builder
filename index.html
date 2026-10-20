@@ -605,7 +605,7 @@ window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Err
 <script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · CONTEXTO ECONÔMICO AUDITÁVEL · v6.0";
+const ENGINE_BUILD="2026-10-20 · CONTEXTO ECONÔMICO AUDITÁVEL · v6.1";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -804,7 +804,7 @@ const kind=name=>{
  if(/\b(?:sementes?|seeds?)\b/.test(x)&&/\b(?:algodao|cotton)\b/.test(x))return null;
  // Produto TESTE de paletes sem indicação de vazios/embalagem não é
  // prova de expedição de paletes vazios ou carga paletizada.
- if(/\b(?:teste|test)\b/.test(x)&&/\b(?:paletes?|pallets?)\b/.test(x))return null;
+ if(/\b(?:teste|test)\b/.test(x)&&/\b(?:paletes?|pallets?)\b/.test(x))return "paletizado";
  for(const [k,re] of patterns)if(re.test(x))return k;
  return null;
 };
@@ -2337,10 +2337,71 @@ function economicContextCandidate(c,profile,type,dir){
    " ("+role+", "+dir.toUpperCase()+"): "+why+
    ". Evidência contextual, NÃO cargo idêntico na DEF."};
 }
+
+// V6.1: operadores por CATEGORIA, não por cadeia rígida produtor→consumidor.
+// 'both' = pode receber e expedir a categoria; 'ship'/'receive' = fluxo
+// naturalmente unilateral, sem precisar existir um produtor industrial.
+// Tokens históricos comprovam a categoria, nunca a identidade física exata.
+const CARGO_CATEGORY_INDEX=Object.freeze({
+ graos:{types:["milho","soja","sorgo"],goods:/^(?:milho|corn|corn_b|maize|soybeans?|soja|sorghum|sorgo|grain|grains|graos?|wheat|trigo|rice|arroz|barley|cevada)$/i,
+  both:["silo","cooperativa","agroinsumos","logistica"],ship:["fazenda"],receive:["moinho","racoes","pecuaria"],need:["agroinsumos","logistica"]},
+ fertilizantes:{types:["adubo"],goods:/^(?:adubo|fertilizantes?|fertilizers?|ureia|urea|big_bag_seed|seeds?|sementes?)$/i,
+  both:["agroinsumos","cooperativa","logistica"],ship:["adubeira"],receive:["fazenda","pecuaria"],need:["logistica"]},
+ construcao:{types:["cimento","tijolo"],goods:/^(?:cement|cimento|concrete|concr_beams|bricks?|tijolos?|roof_tiles|tiles?|floorpanels|wallpanels|precast_strs|gravel|brita|sand|areia|stones?|pedras?|calcario|limestone)$/i,
+  both:["materiais","logistica"],ship:["cimenteira","ceramica"],receive:["obras","premoldados"],need:["logistica"]},
+ rochas:{types:["granito"],goods:/^(?:granito|granitto|granite|marble|marmore|stones?|pedras?|calcario|limestone|gravel|sand|bricks?|tijolos?)$/i,
+  both:["marmoraria","materiais","logistica"],ship:["pedreira","mineracao"],receive:["obras","premoldados"],need:["logistica","premoldados"]},
+ siderurgia:{types:["bobinas_industriais","aco"],goods:/^(?:steel|steel_coils?|metal_coils?|bobinas?|chapaaco|chapa_aco|steel_plates?|steel_sheets?|hmetal|metal_center|ferroconst|b_reforco|largetubes|iron_pipes)$/i,
+  both:["siderurgica","metalurgica","logistica"],ship:[],receive:["calhas","obras"],need:["logistica","obras","calhas"]},
+ madeira:{types:["madeira"],goods:/^(?:madeira|madeirame|wood|timber|lumber|logs?|toras?|boards?|planks?|sawpanels)$/i,
+  both:["madeireira","serraria","logistica"],ship:["floresta"],receive:["materiais","obras","paletes"],need:["logistica","materiais","obras"]},
+ hortifruti:{types:["batata","laranja"],goods:/^(?:batatas?|potatoes?|potato_b|laranjas?|oranges?|citrus|fruit|frutas?|vegetables?|hortalicas?|apples?|carrots?|tomatoes?)$/i,
+  both:["hortifruti","alimentos","cooperativa","logistica"],ship:["fazenda"],receive:["supermercado"],need:["logistica","cooperativa"]},
+ bebidas:{types:["cerveja"],goods:/^(?:beer|beer_c|cervejas?|brahma|skol|antarctica|heineken|amstel|budweiser|devassa|schin|bebidas?|beverages?|beverages_c|soda|limonades|bottle_water)$/i,
+  both:["bebidas","alimentos","logistica"],ship:["cervejaria"],receive:["supermercado"],need:["alimentos","logistica"]},
+ nutricao:{types:["racao"],goods:/^(?:racao|racoes|animal_feed|feedmeal|feed_meal|xerem|farelo|salmineral|suplementomineral|corn|milho|soja|soybeans?|sorgo|sorghum)$/i,
+  both:["racoes","agroinsumos","cooperativa","logistica"],ship:[],receive:["fazenda","pecuaria"],need:["agroinsumos","cooperativa","logistica"]},
+ fibras:{types:["algodao"],goods:/^(?:pluma|cotton|cotton_bales?|cottonlint|algodao|cotton_seed|fabric|textiles?)$/i,
+  both:["algodoeira"],ship:["fazenda"],receive:["textil","cooperativa","logistica"],need:["fazenda","cooperativa","logistica"]},
+ paletes:{types:["palete_vazio","paletizado"],goods:/^(?:pallets?|paletes?|empty_pallets?|wood_pallets?|madeira|wood|lumber|used_packag|scrap_wood)$/i,
+  both:["paletes","reciclagem","logistica"],ship:["supermercado","materiais","bebidas","cervejaria","alimentos","hortifruti","madeireira"],receive:["cooperativa"],need:["logistica","cooperativa"]}
+});
+const CARGO_CATEGORY_BY_TYPE=new Map(Object.entries(CARGO_CATEGORY_INDEX)
+ .flatMap(([name,v])=>v.types.map(type=>[type,{...v,name}])));
+const CATEGORY_FORBIDDEN_ROLES=new Set(["posto","concessionaria","correios","cana"]);
+function categoryCargoCandidate(company,profile,type,dir){
+ const def=CARGO_CATEGORY_BY_TYPE.get(type);
+ if(!def||!company||!profile||!["in","out"].includes(dir))return null;
+ const role=company.role||"desconhecida";
+ if(CATEGORY_FORBIDDEN_ROLES.has(role))return null;
+ const dealer=def.both.includes(role),shipper=def.ship.includes(role),
+  receiver=def.receive.includes(role);
+ const originalOut=profile.count("out",def.goods),originalIn=profile.count("in",def.goods);
+ const goods=originalOut+originalIn>0;
+ const knownRole=dealer||shipper||receiver;
+ if(!goods&&!knownRole)return null;
+ if(def.need.includes(role)&&!goods)return null;
+ // Empresas com produto/categoria na DEF, mas ID opaco: preservar sentido
+ // IN/OUT observado. Comércio/armazenagem: os DOIS sentidos são válidos.
+ if(role==="desconhecida"&&!(dir==="out"?originalOut>0:originalIn>0))return null;
+ if(role!=="desconhecida"&&!(dealer||(dir==="out"&&shipper)||(dir==="in"&&receiver)))return null;
+ const direct=(dir==="out"?originalOut:originalIn)>0;
+ return{kind:"categoria_logistica",score:direct?92:goods?82:70,
+  category:def.name,contextLevel:direct?"categoria":"inferida",
+  reason:"Categoria "+def.name+" compatível ("+role+", "+dir.toUpperCase()+"). "+
+   (direct?"Mercadorias da categoria registradas nesse sentido nos IN/OUT.":
+    goods?"Categoria registrada no estoque da empresa, mas em sentido oposto.":
+     "Ramo identificado pela empresa, sem produto equivalente explícito.")+
+   " Não exige cadeia produtor→consumidor final; não confirma produto literal."+
+   (type==="paletizado"?" Paletes de teste: conteúdo físico não confirmado.":"")};
+}
+
 function logisticsIntelligenceDecision(company,profile,type,dir,evidence,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  if(!evidence)return null;
  const sourceIds=(knowledge.sources||[]).filter(s=>s.types.includes(type)).map(s=>s.id);
  const proof=findProductEvidence(profile,type,dir);
+ if(evidence.kind==="categoria_logistica")return{...evidence,sourceIds,
+  confidence:evidence.contextLevel==="categoria"?"categoria_economica":"inferida",documentedUnits:[]};
  if(evidence.kind==="contextual")return{...evidence,sourceIds,
   confidence:evidence.contextLevel==="forte"?"economica_forte":"inferida",documentedUnits:[]};
  if(EVIDENCE_REQUIRED.has(type)&&proof.level==="ausente"){
@@ -2392,8 +2453,9 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
    if(!entry.type||!entry.body.length)continue;
    for(const dir of ["out","in"]){
     const heuristic=companyCargoCompatibility(company,profile,entry.type,dir,entry.info,anomalies);
-    const context=economicContextCandidate(company,profile,entry.type,dir);
-    const evidence=heuristic?.kind==="direta"?heuristic:(context||heuristic);
+    const category=categoryCargoCandidate(company,profile,entry.type,dir);
+    const context=!category?economicContextCandidate(company,profile,entry.type,dir):null;
+    const evidence=heuristic?.kind==="direta"?heuristic:(category||context||heuristic);
     if(!evidence)continue;
     const ai=logisticsIntelligenceDecision(company,profile,entry.type,dir,evidence,knowledge);
     if(ai?.blocked){
@@ -2402,7 +2464,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
        dir,reason:ai.reason,sourceIds:ai.sourceIds});
       continue;
     }
-    if(ai?.kind==="contextual")contextualDecisions.push({company:company.id,
+    if(ai?.kind==="contextual"||ai?.kind==="categoria_logistica")contextualDecisions.push({company:company.id,
      cargo:entry.info.id,dir,confidence:ai.confidence,reason:ai.reason,sourceIds:ai.sourceIds});
     entry[dir==="out"?"out":"inn"].push({company,evidence:ai});
     decisions[dir].push(entry.info.id);
@@ -2431,13 +2493,14 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   const notes=[...outs.map(x=>({...x,dir:"OUT"})),...ins.map(x=>({...x,dir:"IN"}))]
    .filter(x=>x.evidence.kind!=="direta"||x.evidence.roleConflict)
    .map(x=>x.company.id+" "+x.dir+": "+x.evidence.reason);
-  if(notes.length)assumptions.push({id:info.id,notes});
+  if(notes.length)assumptions.push({id:info.id,notes:notes.slice(0,25),total:notes.length});
   for(const b of body)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
   const researchSources=[...new Set([...outs,...ins].flatMap(x=>x.evidence.sourceIds||[]))];
-  proof.push({id:info.id,name:info.name,type,researchSources,
+  proof.push({id:info.id,name:info.name,type,category:CARGO_CATEGORY_BY_TYPE.get(type)?.name||"desconhecida",researchSources,
    confidence:outs.every(x=>x.evidence.confidence==="documental")&&ins.every(x=>x.evidence.confidence==="documental")?"documental":
     [...outs,...ins].some(x=>x.evidence.confidence==="inferida")?"inferida":
-    [...outs,...ins].some(x=>x.evidence.confidence==="economica_forte")?"economica_forte":"relacionada",
+    [...outs,...ins].some(x=>x.evidence.confidence==="economica_forte")?"economica_forte":
+    [...outs,...ins].some(x=>x.evidence.confidence==="categoria_economica")?"categoria_economica":"relacionada",
    origins:outs.length,destinations:ins.length,
    sourceIds:outs.map(x=>x.company.id),destIds:ins.map(x=>x.company.id),notes,
    categoryReasons:[],directOut:outs.filter(x=>x.evidence.kind==="direta").length,
@@ -2579,7 +2642,7 @@ function audit(map,cargo,sim){
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
- [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
+ [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade por categoria",sim.proof.filter(p=>p.confidence==="categoria_economica").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
  (ranked.length?"<details class='creator-catalog'><summary>Motivos das cargas sem rota ("+sim.skipped.length+")</summary>"+ranked.map(([reason,count])=>"<div class='audit'><b>"+count+"x</b><span>"+escapeHTML(reason)+"</span></div>").join("")+"</details>":"")+
@@ -2595,7 +2658,7 @@ function audit(map,cargo,sim){
  "<p class='muted'>Cargas distribuídas (expedidores → recebedores): "+sim.proof.map(p=>escapeHTML(p.name)+" ("+escapeHTML(p.confidence)+"): "+p.origins+" → "+p.destinations).join("; ")+"</p>"+
  "<p class='muted'>Exemplos de relações do mapa (não garante oferta no ETS2):</p>"+
  sim.proof.map(p=>"<div class='audit'><b>"+escapeHTML(p.name)+" · "+escapeHTML(p.confidence)+"</b><span>OUT: "+escapeHTML(p.sourceIds.slice(0,6).join(", "))+" | IN: "+escapeHTML(p.destIds.slice(0,6).join(", "))+" | Referências: "+escapeHTML(p.researchSources.join(", ")||"nenhuma fonte aplicável")+"</span></div>").join("")+
- (sim.assumptions.length?"<details class='creator-catalog'><summary>Observações técnicas das cargas ("+sim.assumptions.length+")</summary><p class='muted'>São interpretações ainda não confirmadas, não impedimentos de geração.</p>"+sim.assumptions.map(p=>"<div class='audit'><b>"+escapeHTML(p.id)+"</b><span>"+escapeHTML(p.notes.join("; "))+"</span></div>").join("")+"</details>":"")+
+ (sim.assumptions.length?"<details class='creator-catalog'><summary>Observações técnicas das cargas ("+sim.assumptions.length+")</summary><p class='muted'>São interpretações ainda não confirmadas, não impedimentos de geração.</p>"+sim.assumptions.map(p=>"<div class='audit'><b>"+escapeHTML(p.id+" ("+(p.total||p.notes.length)+" associações; até 25 exibidas)")+"</b><span>"+escapeHTML(p.notes.join("; "))+"</span></div>").join("")+"</details>":"")+
  (sim.skipped.length?"<details class='creator-catalog'><summary>Cargas ainda sem rota verificada ("+sim.skipped.length+")</summary>"+sim.skipped.map(x=>"<div class='audit'><b>"+escapeHTML(x.id+" — "+x.name)+"</b> <span>"+escapeHTML(x.problems.join(", "))+"</span></div>").join("")+"</details>":"")+
  "</details>"+catalogSummary;
 }
@@ -2619,6 +2682,7 @@ function createDiagnosticText(map,cargo,sim){
   "Inconsistências econômicas bloqueadas pelo assistente: "+(sim.researchRejectedTotal||0),
   "Amostra detalhada das rejeições (limite de 600): "+(sim.researchRejected?.length||0),
   "Cargas efetivas do reboque: "+cargo.cargos.size,
+  "Método: compatibilidade pela categoria da carga; empresas de comércio/armazenagem podem ser IN e OUT.",
   "Escopo das cargas: "+(cargo.scope?.strategy||"sem especificação"),
   "Definições extras excluídas: "+(cargo.scope?.excluded.length||0),
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
@@ -2646,7 +2710,7 @@ function createDiagnosticText(map,cargo,sim){
  for(const a of sim.contextualDecisions||[])if(sim.plan.get(a.company)?.[a.dir]?.has(a.cargo))
   rows.push([a.company,a.cargo,a.dir.toUpperCase(),a.confidence,a.reason,a.sourceIds.join(",")].join(" | "));
  rows.push("","CARGAS LIBERADAS (ID | NOME | EXPEDIDORES | RECEBEDORES | CONFIANÇA | FONTES | HIPÓTESES)");
- for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.confidence,p.researchSources.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
+ for(const p of sim.proof)rows.push([p.id,p.name,"CATEGORIA="+p.category,p.sourceIds.join(","),p.destIds.join(","),p.confidence,p.researchSources.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
  rows.push("","CARGAS CONTRADITÓRIAS BLOQUEADAS (EMPRESA | CARGO | SENTIDO | SETOR | MOTIVO)");
  for(const issue of sim.anomalies||[])
   rows.push([issue.company,issue.cargo,issue.direction,issue.role,issue.reason].join(" | "));
@@ -2759,7 +2823,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,CARGO_CATEGORY_INDEX,categoryCargoCandidate,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();</script>
 </body>
 </html>

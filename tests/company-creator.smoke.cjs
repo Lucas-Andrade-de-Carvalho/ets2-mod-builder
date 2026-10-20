@@ -182,8 +182,8 @@ async function main(){
  // em outra DEF brasileira: sem copiar arquivos privados para o repositório.
  assert.equal(creator.kind("Sementes de Algodão"),null,
   "Semente não pode se converter em pluma");
- assert.equal(creator.kind("Pallets Alto TESTE"),null,
-  "Rótulo de teste genérico não é evidência de paletes vazios");
+ assert.equal(creator.kind("Pallets Alto TESTE"),"paletizado",
+  "Mercadoria teste deve ser somente categoria genérica de paletes");
  const sampleMap=new JSZip(),sampleCargo=new JSZip();
  const sampleCompanies={
   agromais:{out:["racao","adubo","fertilizante"],in:["milho","soja"]},
@@ -281,7 +281,7 @@ async function main(){
   "Metal sucata + diesel de uma empresa opaca não autoriza nenhum frete");
  assert.equal(econSim.proof.length,5);
  assert.ok(econSim.contextualDecisions.length>=10);
- assert.equal(creator.kind("Pallets Alto TESTE"),null,"Carga ambígua não pode ser adivinhada");
+ assert.equal(creator.kind("Pallets Alto TESTE"),"paletizado","Palete genérico não é palete vazio comprovado");
  assert.equal(creator.economicContextCandidate({id:"f",role:"fazenda"},
   creator.companyCargoProfile({old:[{dir:"out",unit:"corn"},{dir:"out",unit:"soybeans"}]}),
   "sorgo","out"),null,"Produzir milho/soja não comprova sorgo");
