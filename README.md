@@ -102,3 +102,8 @@ A partir de 20/10/2026, o gerador produz um **mod de sobrescrita integral**. Al�
 **Obrigatório:** No Gerenciador de Mods, coloque a Company gerada **acima do pacote DEF do mapa** e de qualquer outro mod Company. Sem prioridade maior, os arquivos antigos podem prevalecer. O mod principal do Librelato deve permanecer ativo; desative antigas DEF Companies genéricas que também mudam essas permissões. A alteração da oferta existente em saves pode exigir tempo de atualização de economia. Empresas sem mercadoria compatível permanecem no mapa, mas ficam sem rotas Librelato.
 
 Fonte oficial: https://eurotrucksimulator2.com/modding_changes.php ("Changes in company definition": `cargo` vazio desativa permissão).
+
+
+## Geração universal empresa por empresa (2026-10-20)
+
+O motor percorre cada empresa real da DEF e examina seus `IN` e `OUT` antes de associar as mercadorias efetivamente presentes na DEF do reboque. Associações inferidas por produtos relacionados ficam marcadas no diagnóstico. Se nenhuma carga for economicamente compatível, aquela empresa fica sem novas permissões e suas permissões originais são neutralizadas pela sobrescrita integral. Não há tabelas obrigatórias de empresas nem limites globais de produtores por carga. Cargas sem origem e destino distintos permanecem sem rota.
