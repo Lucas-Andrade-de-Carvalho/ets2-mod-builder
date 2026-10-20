@@ -590,11 +590,11 @@ async function main(){
  // Estes dados reais não contêm OUT explícito de ração, pluma ou bobinas.
  // A ausência de rota é o resultado correto: conhecimento geral não é prova
  // de atividade econômica de uma empresa específica.
- const mustSkip=["carga17","carga18","carga19","carga20","carga5","carga9"];
+ const mustSkip=["carga14","carga15","carga17","carga18","carga19","carga20","carga5","carga9"];
  for(const id of mustSkip)assert.ok(realSim.skipped.some(x=>x.id===id),
    "Não atribuir "+id+" sem mercadoria comprovada no OUT");
- for(const id of ["carga14","carga15"])assert.ok(realSim.proof.some(x=>x.id===id),
-   "Preservar cargas minerais relacionadas quando apoiadas pela DEF");
+ assert.equal(realSim.plan.size,0,
+  "Sem comprovante de destino de granito/rações/pluma/bobinas, não inventar rotas");
  const realScs=await creator.build(mapSubset,libSubset,realSim);
  const realArchive=await JSZip.loadAsync(realScs.blob);
  const ids=new Set(actualProfiles.map(x=>x.id));
