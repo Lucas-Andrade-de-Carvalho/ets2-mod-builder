@@ -156,6 +156,39 @@ class Regression(unittest.TestCase):
         self.assertGreater(diag["caminhos_reconhecidos"],0)
         self.assertIn("pastas_raiz",diag)
 
+    def test_no_legacy_company_permanent_list_is_silently_ignored(self):
+        src=self.root/"minas.zip"
+        with zipfile.ZipFile(src) as z:
+            contents={x.filename:z.read(x) for x in z.infolist()}
+        contents["def/company/agrish.sii"]=(
+            'SiiNunit\n{\n company_permanent : company.agrish {\n'
+            ' in_cargo[]: cargo.milho_a\n }\n}\n')
+        zip_write(src,contents)
+        with self.assertRaisesRegex(ValueError,"company_permanent"):
+            g.generate(self.inp,self.root/"legacy_rejected")
+        self.assertEqual(list((self.root/"legacy_rejected").glob("*.scs")),[])
+
+    def test_reproducible_output_and_source_hashes(self):
+        one=g.generate(self.inp,self.root/"first")
+        two=g.generate(self.inp,self.root/"second")
+        from hashlib import sha256
+        for (name,p,data),(_,p2,data2) in zip(one,two):
+            self.assertEqual(sha256(Path(p).read_bytes()).digest(),
+                             sha256(Path(p2).read_bytes()).digest())
+            self.assertEqual(data["versao_gerador"],g.VERSION)
+            self.assertEqual(len(data["fontes_sha256"]),4)
+            self.assertTrue(all(len(x["sha256"])==64 for x in data["fontes_sha256"]))
+            self.assertEqual(len(data2["cadeias"]),23)
+
+    def test_pallet_probability_independent_of_skill_checkbox(self):
+        result=g.generate(self.inp,self.root/"no_skill",fix_skills=False)
+        with zipfile.ZipFile(result[0][1]) as z:
+            pallet=z.read("def/cargo/carga16.sui").decode()
+            beer_names=z.namelist()
+            self.assertIn("prob_coef: 0.08",pallet)
+            self.assertIn("valuable: true",pallet)
+            self.assertNotIn("def/cargo/carga12.sui",beer_names)
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
