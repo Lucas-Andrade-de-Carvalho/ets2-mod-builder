@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "version": "2026-10-20",
+  "title": "Base documental de inteligência logística ETS2",
+  "reviewed": "2026-10-20",
+  "disclaimer": "Regras de cadeia produtiva não comprovam que uma empresa específica existe ou opera determinada mercadoria. Validar com IN/OUT reais.",
+  "sources": [
+    {
+      "id": "embrapa_graos",
+      "agency": "Embrapa Territorial",
+      "title": "Bacias logísticas do escoamento de soja e milho",
+      "url": "https://www.embrapa.br/en/web/territorial/macrologistica/sistema/bacias-logisticas",
+      "types": [
+        "milho",
+        "soja",
+        "sorgo"
+      ],
+      "fact": "Soja e milho possuem origens produtoras, armazenagem e rotas de escoamento; armazenagem não comprova produção na empresa."
+    },
+    {
+      "id": "embrapa_racao",
+      "agency": "Embrapa",
+      "title": "Nutrição de aves e formas de obtenção de rações",
+      "url": "https://www.atermaisdigital.cnptia.embrapa.br/web/frango/nutricao/racao",
+      "types": [
+        "racao"
+      ],
+      "fact": "Milho, farelo de soja e núcleos podem compor rações; uma fábrica precisa de processo de mistura/formulação. Receber milho não prova expedir ração."
+    },
+    {
+      "id": "embrapa_algodao",
+      "agency": "Embrapa",
+      "title": "Cultura do algodão no Cerrado — beneficiamento",
+      "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1155388/1/Cultura-do-Algodao-no-Cerrado-1.pdf",
+      "types": [
+        "algodao"
+      ],
+      "fact": "Algodão colhido é beneficiado em algodoeiras (separação fibra/semente), então a pluma enfardada segue para mercados consumidores e indústria têxtil. Fazenda de grãos não demonstra expedição de pluma."
+    },
+    {
+      "id": "aco_brasil",
+      "agency": "Instituto Aço Brasil",
+      "title": "Processo siderúrgico e laminação",
+      "url": "https://www.acobrasil.org.br/site/processo-siderurgico/",
+      "types": [
+        "bobinas_industriais",
+        "aco"
+      ],
+      "fact": "Produção e laminação transformam semiacabados em produtos siderúrgicos. Movimentação de tubos ou sucata isoladamente não comprova produção de bobinas."
+    },
+    {
+      "id": "abcp_cimento",
+      "agency": "ABCP",
+      "title": "Cadeia produtiva do cimento e do concreto",
+      "url": "https://abcp.org.br/abcp-lab-referencia-tecnica-para-a-cadeia-produtiva-do-cimento/",
+      "types": [
+        "cimento",
+        "tijolo",
+        "granito"
+      ],
+      "fact": "O cimento integra a construção; produção industrial, revenda e consumo em obras têm papéis econômicos diferentes."
+    },
+    {
+      "id": "embrapa_fertilizante",
+      "agency": "Embrapa Hortaliças",
+      "title": "Adubos e fertilizantes",
+      "url": "https://www.embrapa.br/web/agencia-de-informacao-tecnologica/cultivos/pimenta/pre-producao/insumos/adubos-e-fertilizantes",
+      "types": [
+        "adubo"
+      ],
+      "fact": "Fertilizantes são insumos aplicados na produção agrícola. Uma fazenda pode recebê-los, mas produzi-los requer outra atividade."
+    },
+    {
+      "id": "embrapa_cotton_pluma",
+      "agency": "Embrapa Algodão",
+      "title": "Algodão em pluma",
+      "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/659531",
+      "types": [
+        "algodao"
+      ],
+      "fact": "Fibras de algodão são beneficiadas e enfardadas antes de comercialização para indústria têxtil; algodão em caroço não é automaticamente pluma."
+    }
+  ],
+  "policies": {
+    "noFabricatedBusinesses": true,
+    "noForcedCoverage": true,
+    "readMapCargoFirst": true,
+    "noNameOnly": true,
+    "cottonPlumaRequiresEvidence": true,
+    "steelCoilsRequireEvidence": true,
+    "feedProducerRequiresEvidence": true
+  }
+}
