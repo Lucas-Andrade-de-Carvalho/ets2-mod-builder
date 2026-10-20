@@ -429,6 +429,23 @@ function categorizeExistingCompanyLoads(c){
  }
  return result;
 }
+// Uma mercadoria pode ser expedida de um estabelecimento de estoque ou revenda,
+// sem existir uma fábrica no mapa. Identificamos o ramo pelas cargas REAIS da DEF.
+const CONSTRUCTION_CARGO_MARKERS=[
+ ["areia",/\b(areias?|sand)\b/],
+ ["brita",/\b(brita|britas|gravel|cascalho)\b/],
+ ["tijolo",/\b(tijolos?|bricks?|ceramic ?bricks?)\b/],
+ ["piso",/\b(pisos?|floor(?:ing)?|azulejos?|revestimentos?)\b/],
+ ["telha",/\b(telhas?|roof(?:ing)?|roof ?tiles?)\b/],
+ ["tubo",/\b(tubos?|tubos? ?concret|tubos? ?mg|concrete ?pipes?|pipes?|tubulacoes?)\b/],
+ ["ferragem",/\b(ferro ?const|b ?reforco|vergalhoes?|rebars?|armaduras?|ferragens?)\b/],
+ ["calha",/\b(calhas?|gutters?)\b/],
+ ["madeira",/\b(madeira|madeirame|wood|timber|lumber|tabuas?|planks?)\b/],
+ ["granito",/\b(pedras?|granito|granite|marmore|marble|calcario|limestone)\b/],
+ ["cimento",/\b(cimento|cement|argamassa|reboco|blocos? ?concret|concrete ?blocks?)\b/],
+ ["aco",/\b(chapa ?aco|chapas? ?aco|steel ?plates?|sua?luminio)\b/]
+];
+const CONSTRUCTION_FINISHED=new Set(["tijolo","piso","telha","tubo","ferragem","calha","madeira","cimento","aco"]);
 function semanticConstructionType(raw){
  const val=norm(String(raw||"").replace(/^cargo[.:]/i,"")).replace(/[^a-z0-9 ]/g," ").trim();
  for(const [type,re]of CONSTRUCTION_CARGO_MARKERS)if(re.test(val))return type;
