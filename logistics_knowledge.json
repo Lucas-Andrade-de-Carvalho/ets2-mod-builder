@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026-10-20",
+  "version": "2026-10-20-v6",
   "title": "Base documental de inteligência logística ETS2",
   "reviewed": "2026-10-20",
   "disclaimer": "Regras de cadeia produtiva não comprovam que uma empresa específica existe ou opera determinada mercadoria. Validar com IN/OUT reais.",
@@ -142,6 +142,17 @@
         "racao"
       ],
       "fact": "A formulação de ração requer processamento e mistura de ingredientes; receber milho, soja ou insumos isoladamente não comprova expedição de ração pronta."
+    },
+    {
+      "id": "embrapa_sorgo_bovinos",
+      "agency": "Embrapa Gado de Corte",
+      "title": "Sorgo granífero na alimentação de bovinos",
+      "url": "https://cloud.cnpgc.embrapa.br/sac/2016/05/24/como-usar-o-sorgo-granifero-e-o-sorgo-forrageiro-na-alimentacao-de-bovinos/",
+      "types": [
+        "sorgo",
+        "racao"
+      ],
+      "fact": "O sorgo granífero é ingrediente para alimentação animal; não deve ser identificado como ração industrial pronta nem atribuído como cultura produzida sem evidência."
     }
   ],
   "policies": {

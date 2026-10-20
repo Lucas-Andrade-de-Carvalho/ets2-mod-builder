@@ -148,3 +148,10 @@ Consulte [QUALITY_V5.md](QUALITY_V5.md). O assistente exige evidências por merc
 ## Diagnóstico MINAS e reboque Librelato (v5.2)
 
 [Ver auditoria dos arquivos reais](AUDITORIA_MINAS_V5_2.md). O manifesto `cargo.librelato.sii` determina as 23 cargas do reboque; outras definições como `cott_seed` e `sugar_beet_b` são auxiliares e não entram por padrão. Cervejas das marcas comprovadas em IN/OUT (Amstel, Antarctica, Brahma, Budweiser, Devassa, Heineken, Schin e Skol) são reconhecidas como produto cerveja. `bebidas` genérico não comprova cerveja. Quando o mapa não tem `cimento` ou `cement`, nenhuma rota de cimento é inventada para preencher o mercado.
+
+
+## V6.0 — compatibilidade contextual auditável
+- Classificação de cadeias com evidências A (direta), B (econômica forte), C (inferida) e D (incompatível), sem preencher empresas obrigatoriamente.
+- Cimento, bobinas, sorgo, pluma beneficiada, cerveja e paletes retornáveis analisados por fluxos reais e setor; rótulos ambíguos não ganham rota automaticamente.
+- O SCS mantém neutralização de permissões antigas e o diagnóstico documenta associações contextuais efetivas com grau de confiança.
+- Os testes CI são estruturais e sintéticos; não comprovam ofertas de frete dentro do ETS2.

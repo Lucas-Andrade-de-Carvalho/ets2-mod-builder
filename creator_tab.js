@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · MERCADORIAS REAIS E MANIFESTO DO REBOQUE · v5.2";
+const ENGINE_BUILD="2026-10-20 · CONTEXTO ECONÔMICO AUDITÁVEL · v6.0";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -61,6 +61,11 @@ function consultCatalogForMapDistribution(map){
 }
 
 const sectors=[
+["premoldados",/(pre.?moldad|precast|fabrica de pre moldad)/],
+["calhas",/(fabrica de calhas|fabricante de calhas|calharia|industria de calhas)/],
+["reciclagem",/(reciclador|reciclagem|recupera(?:cao|dora) de paletes|reaproveitamento de madeira)/],
+["agroinsumos",/(loja agropecuaria|casa agropecuaria|agropecuaria comercial|comercio agropecuario)/],
+["algodoeira",/(beneficiadora de algodao|fazenda algodoeira|unidade de beneficiamento de algodao)/],
 ["cooperativa",/(cooperativa|cooperativa agricola|agrocooperativa|agrocoop|cooperagro|coopercentro)/],
 ["silo",/(silo|cerealista|armazem de graos|grain storage)/],
 ["fazenda",/(fazenda|faz0|faz1|faz2|faz3|faz4|faz5|agropecuaria|sitio agricola|cultivo agricola|farm|plantacao)/],
@@ -98,11 +103,11 @@ const flows={
  // Um distribuidor/depósito pode ter IN e OUT da mesma mercadoria.
  milho:{out:["fazenda"],in:["cooperativa","silo","moinho","racoes","pecuaria"]},
  soja:{out:["fazenda"],in:["cooperativa","silo","moinho"]},
- sorgo:{out:["fazenda"],in:["cooperativa","silo","racoes","pecuaria"]},
+ sorgo:{out:["fazenda","agroinsumos","cooperativa","silo","logistica"],in:["cooperativa","silo","racoes","pecuaria","fazenda","logistica"]},
  adubo:{out:["adubeira","agroinsumos","logistica"],in:["fazenda","cana","pecuaria","agroinsumos","logistica"]},
  madeira:{out:["madeireira","serraria","floresta","materiais","logistica"],in:["obras","madeireira","materiais","logistica"]},
  algodao:{out:["fazenda","algodoeira","logistica"],in:["cooperativa","algodoeira","textil","logistica"]},
- cimento:{out:["materiais","logistica","cimenteira"],in:["obras","materiais","logistica"]},
+ cimento:{out:["materiais","logistica","cimenteira"],in:["obras","materiais","logistica","premoldados"]},
  batata:{out:["fazenda","hortifruti","alimentos","logistica"],in:["supermercado","hortifruti","alimentos","logistica"]},
  laranja:{out:["fazenda","hortifruti","alimentos","logistica"],in:["supermercado","hortifruti","alimentos","logistica"]},
  cerveja:{out:["cervejaria","bebidas","alimentos","logistica"],in:["bebidas","supermercado","alimentos","logistica"]},
@@ -110,9 +115,9 @@ const flows={
  granito:{out:["pedreira","mineracao","marmoraria","materiais","logistica"],in:["obras","marmoraria","materiais","logistica"]},
  racao:{out:["racoes","logistica","alimentos"],in:["fazenda","pecuaria","logistica","alimentos"]},
  aco:{out:["siderurgica","metalurgica","materiais","logistica"],in:["metalurgica","obras","materiais","logistica"]},
- bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","siderurgica","logistica"]},
+ bobinas_industriais:{out:["siderurgica","metalurgica","logistica"],in:["metalurgica","calhas","obras","logistica"]},
  // Paletes vazios: fabricantes e operadores logísticos expedem, várias empresas recebem.
- palete_vazio:{out:["madeireira","serraria","paletes"],in:["cooperativa","logistica","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]},
+ palete_vazio:{out:["madeireira","serraria","paletes","supermercado","alimentos","materiais","logistica","bebidas","cervejaria","hortifruti","cooperativa","racoes","metalurgica"],in:["reciclagem","paletes","madeireira","logistica","cooperativa","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]},
  // Pallets Alto do Librelato: a logística será centrada no setor madeireiro,
  // sujeita à confirmação da natureza exata da carga no modelo 3D.
  paletizado:{out:["madeireira","serraria","paletes"],in:["cooperativa","logistica","silo","materiais","alimentos","supermercado","racoes","cervejaria","hortifruti","textil"]}
@@ -131,6 +136,12 @@ const known=(id,label)=>{
  const flat=norm(id).replace(/ /g,"");
  // Regras de abreviações atestáveis, sem tornar empresas genéricas em produtoras.
  const prefixes=[
+ ["premoldados",/^(premold|pre.?mold|fabricapremold)/],
+ ["calhas",/^(calhas?|fabricacalhas?|fabricantecalhas?)/],
+ ["reciclagem",/^(reciclagem|reciclador|recuperadorapalet|recicladoramadeira)/],
+ ["agroinsumos",/^(lojaagropec|casaagropec|comercioagropec)/],
+ ["algodoeira",/^(algodoeira|beneficiadoraalgodao)/],
+ ["metalurgica",/^(cofer|centroaco|distribuidoraco)/],
  ["cooperativa",/^(coop(?:erativa)?|cooper|agrocoop)/],
  ["silo",/^(silos?|cerealista|graos)/],
  ["racoes",/^(racoes?|feedmill|nutricaoanimal)/],
@@ -161,7 +172,7 @@ const known=(id,label)=>{
  for(const [r,re] of prefixes)if(re.test(flat))return r;
  return"desconhecida";
 };
-const ALLOWED_ROLES=new Set(["cooperativa","madeireira","cana","marmoraria","agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios"]);
+const ALLOWED_ROLES=new Set(["cooperativa","madeireira","cana","marmoraria","agroinsumos","mineracao","logistica","fazenda","silo","pecuaria","racoes","moinho","adubeira","serraria","floresta","textil","algodoeira","ceramica","cimenteira","pedreira","obras","materiais","cervejaria","bebidas","supermercado","hortifruti","alimentos","siderurgica","metalurgica","paletes","posto","concessionaria","correios","premoldados","calhas","reciclagem"]);
 function applyCompanyOverrides(map){
  const field=el("companyCreateOverrides"),raw=field?.value?.trim()||"";
  const accepted=[],errors=[];
@@ -1464,8 +1475,7 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
  const declared=profile.declared?.[dir]||new Set();
  const signature=findProductEvidence(profile,type,dir);
  // Compartilhar um identificador numérico entre mods não comprova produto.
- const direct=signature.level==="especifica"||
-   [...declared].some(unit=>oldCargoCategory(unit)===type);
+ const direct=signature.level==="especifica"; // A categoria antiga não prova equivalência física (cotton ≠ pluma, chapas ≠ bobinas).
  const coherence=economicCoherence(c,profile,type,dir);
  if(!coherence.allowed){
   // Registrar toda contradição literal, não mascarar como rota.
@@ -1474,11 +1484,11 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
   });
   return null;
  }
- if(direct){
+ if(direct||(type==="granito"&&signature.level==="relacionada")){
   const roles=flows[type]?.[dir]||[];
   const mismatch=c.role!=="desconhecida"&&roles.length&&!roles.includes(c.role);
-  return{score:120,kind:"direta",roleConflict:!!mismatch,
-   reason:"cargo: documentado no "+dir.toUpperCase()+
+  return{score:direct?120:85,kind:direct?"direta":"categoria",roleConflict:!!mismatch,
+   reason:(direct?"cargo: documentado no ":"pedra ornamental relacionada (não granito comprovado) no ")+dir.toUpperCase()+
      (mismatch?" (atividade econômica reavaliada: "+coherence.reason+")":"")};
  }
  // O nome do arquivo nunca cria permissão de frete.
@@ -1553,9 +1563,9 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
 // Assistente de inteligência logística explicável. Conhecimento referenciado,
 // local/offline por padrão. Com conexão consulta automaticamente a base pública
 // do próprio projeto, NUNCA envia o mapa nem as empresas para a internet.
-const OFFLINE_LOGISTICS_KNOWLEDGE=Object.freeze({"schema":1,"version":"2026-10-20","title":"Base documental de inteligência logística ETS2","reviewed":"2026-10-20","disclaimer":"Regras de cadeia produtiva não comprovam que uma empresa específica existe ou opera determinada mercadoria. Validar com IN/OUT reais.","sources":[{"id":"embrapa_graos","agency":"Embrapa Territorial","title":"Bacias logísticas do escoamento de soja e milho","url":"https://www.embrapa.br/en/web/territorial/macrologistica/sistema/bacias-logisticas","types":["milho","soja","sorgo"],"fact":"Soja e milho possuem origens produtoras, armazenagem e rotas de escoamento; armazenagem não comprova produção na empresa."},{"id":"embrapa_racao","agency":"Embrapa","title":"Nutrição de aves e formas de obtenção de rações","url":"https://www.atermaisdigital.cnptia.embrapa.br/web/frango/nutricao/racao","types":["racao"],"fact":"Milho, farelo de soja e núcleos podem compor rações; uma fábrica precisa de processo de mistura/formulação. Receber milho não prova expedir ração."},{"id":"embrapa_algodao","agency":"Embrapa","title":"Cultura do algodão no Cerrado — beneficiamento","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1155388/1/Cultura-do-Algodao-no-Cerrado-1.pdf","types":["algodao"],"fact":"Algodão colhido é beneficiado em algodoeiras (separação fibra/semente), então a pluma enfardada segue para mercados consumidores e indústria têxtil. Fazenda de grãos não demonstra expedição de pluma."},{"id":"aco_brasil","agency":"Instituto Aço Brasil","title":"Processo siderúrgico e laminação","url":"https://www.acobrasil.org.br/site/processo-siderurgico/","types":["bobinas_industriais","aco"],"fact":"Produção e laminação transformam semiacabados em produtos siderúrgicos. Movimentação de tubos ou sucata isoladamente não comprova produção de bobinas."},{"id":"abcp_cimento","agency":"ABCP","title":"Cadeia produtiva do cimento e do concreto","url":"https://abcp.org.br/abcp-lab-referencia-tecnica-para-a-cadeia-produtiva-do-cimento/","types":["cimento","tijolo","granito"],"fact":"O cimento integra a construção; produção industrial, revenda e consumo em obras têm papéis econômicos diferentes."},{"id":"embrapa_fertilizante","agency":"Embrapa Hortaliças","title":"Adubos e fertilizantes","url":"https://www.embrapa.br/web/agencia-de-informacao-tecnologica/cultivos/pimenta/pre-producao/insumos/adubos-e-fertilizantes","types":["adubo"],"fact":"Fertilizantes são insumos aplicados na produção agrícola. Uma fazenda pode recebê-los, mas produzi-los requer outra atividade."},{"id":"embrapa_cotton_pluma","agency":"Embrapa Algodão","title":"Algodão em pluma","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/659531","types":["algodao"],"fact":"Fibras de algodão são beneficiadas e enfardadas antes de comercialização para indústria têxtil; algodão em caroço não é automaticamente pluma."},{"id":"florestal_madeira","agency":"Serviço Florestal Brasileiro","title":"Monitoramento e rastreabilidade da madeira: floresta, toras e serraria","url":"https://www.gov.br/florestal/pt-br/assuntos/concessoes-e-monitoramento/monitoramento-das-concessoes-florestais","types":["madeira"],"fact":"Fluxo florestal desde transporte de toras da floresta até beneficiamento na serraria e movimentação de madeira serrada. Mover madeira serrada requer evidência do produto correspondente."},{"id":"ceagesp_hortifruti","agency":"CEAGESP","title":"Entreposto Terminal São Paulo: frutas, hortaliças e abastecimento","url":"https://ceagesp.gov.br/entrepostos/etsp/","types":["laranja","batata"],"fact":"Entrepostos recebem e comercializam frutas, legumes e verduras de múltiplos municípios; fazendas produzem, atacadistas distribuem e supermercados recebem."},{"id":"mapa_cerveja","agency":"Ministério da Agricultura","title":"Cadeia produtiva da cerveja no Brasil","url":"https://www.gov.br/agricultura/pt-br/assuntos/camaras-setoriais-tematicas/camaras-setoriais-1/cerveja-1","types":["cerveja"],"fact":"Cervejarias, distribuidores e varejo ocupam funções diferentes; OUT de bebidas genéricas não comprova cervejas específicas."},{"id":"receita_paletes","agency":"Receita Federal","title":"Unidades de carga, embalagens e paletes","url":"https://www.gov.br/receitafederal/pt-br/assuntos/aduana-e-comercio-exterior/manuais/despacho-de-importacao/sistemas/siscomex-importacao-web/declaracao-de-importacao/funcionalidades/ficha-carga/unidades-de-carga-x-embalagens-x-volumes-peso-bruto-x-peso-liquido","types":["paletizado","palete_vazio"],"fact":"Paletes podem ser unidade de carga retornável ou embalagem que acompanha mercadorias. Um estabelecimento com cargas paletizadas não é necessariamente produtor ou expedidor de paletes vazios."},{"id":"aco_produtos_planos","agency":"Instituto Aço Brasil","title":"Produtos planos: chapas e bobinas de aço","url":"https://www.acobrasil.org.br/site/produtos/","types":["bobinas_industriais","aco"],"fact":"Bobinas integram a classe de produtos planos obtidos por laminação; tubos, arames e sucata pertencem a produtos/processos distintos e não comprovam movimentação de bobinas."},{"id":"embrapa_fabrica_racao","agency":"Embrapa","title":"Produção de feno, silagem e ração em sistemas ILPF","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1128581/1/ProducaoFenoSilagemRacaoSistemaILPF.pdf","types":["racao"],"fact":"A formulação de ração requer processamento e mistura de ingredientes; receber milho, soja ou insumos isoladamente não comprova expedição de ração pronta."}],"policies":{"noFabricatedBusinesses":true,"noForcedCoverage":true,"readMapCargoFirst":true,"noNameOnly":true,"cottonPlumaRequiresEvidence":true,"steelCoilsRequireEvidence":true,"feedProducerRequiresEvidence":true}});
+const OFFLINE_LOGISTICS_KNOWLEDGE=Object.freeze({"schema":1,"version":"2026-10-20-v6","title":"Base documental de inteligência logística ETS2","reviewed":"2026-10-20","disclaimer":"Regras de cadeia produtiva não comprovam que uma empresa específica existe ou opera determinada mercadoria. Validar com IN/OUT reais.","sources":[{"id":"embrapa_graos","agency":"Embrapa Territorial","title":"Bacias logísticas do escoamento de soja e milho","url":"https://www.embrapa.br/en/web/territorial/macrologistica/sistema/bacias-logisticas","types":["milho","soja","sorgo"],"fact":"Soja e milho possuem origens produtoras, armazenagem e rotas de escoamento; armazenagem não comprova produção na empresa."},{"id":"embrapa_racao","agency":"Embrapa","title":"Nutrição de aves e formas de obtenção de rações","url":"https://www.atermaisdigital.cnptia.embrapa.br/web/frango/nutricao/racao","types":["racao"],"fact":"Milho, farelo de soja e núcleos podem compor rações; uma fábrica precisa de processo de mistura/formulação. Receber milho não prova expedir ração."},{"id":"embrapa_algodao","agency":"Embrapa","title":"Cultura do algodão no Cerrado — beneficiamento","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1155388/1/Cultura-do-Algodao-no-Cerrado-1.pdf","types":["algodao"],"fact":"Algodão colhido é beneficiado em algodoeiras (separação fibra/semente), então a pluma enfardada segue para mercados consumidores e indústria têxtil. Fazenda de grãos não demonstra expedição de pluma."},{"id":"aco_brasil","agency":"Instituto Aço Brasil","title":"Processo siderúrgico e laminação","url":"https://www.acobrasil.org.br/site/processo-siderurgico/","types":["bobinas_industriais","aco"],"fact":"Produção e laminação transformam semiacabados em produtos siderúrgicos. Movimentação de tubos ou sucata isoladamente não comprova produção de bobinas."},{"id":"abcp_cimento","agency":"ABCP","title":"Cadeia produtiva do cimento e do concreto","url":"https://abcp.org.br/abcp-lab-referencia-tecnica-para-a-cadeia-produtiva-do-cimento/","types":["cimento","tijolo","granito"],"fact":"O cimento integra a construção; produção industrial, revenda e consumo em obras têm papéis econômicos diferentes."},{"id":"embrapa_fertilizante","agency":"Embrapa Hortaliças","title":"Adubos e fertilizantes","url":"https://www.embrapa.br/web/agencia-de-informacao-tecnologica/cultivos/pimenta/pre-producao/insumos/adubos-e-fertilizantes","types":["adubo"],"fact":"Fertilizantes são insumos aplicados na produção agrícola. Uma fazenda pode recebê-los, mas produzi-los requer outra atividade."},{"id":"embrapa_cotton_pluma","agency":"Embrapa Algodão","title":"Algodão em pluma","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/659531","types":["algodao"],"fact":"Fibras de algodão são beneficiadas e enfardadas antes de comercialização para indústria têxtil; algodão em caroço não é automaticamente pluma."},{"id":"florestal_madeira","agency":"Serviço Florestal Brasileiro","title":"Monitoramento e rastreabilidade da madeira: floresta, toras e serraria","url":"https://www.gov.br/florestal/pt-br/assuntos/concessoes-e-monitoramento/monitoramento-das-concessoes-florestais","types":["madeira"],"fact":"Fluxo florestal desde transporte de toras da floresta até beneficiamento na serraria e movimentação de madeira serrada. Mover madeira serrada requer evidência do produto correspondente."},{"id":"ceagesp_hortifruti","agency":"CEAGESP","title":"Entreposto Terminal São Paulo: frutas, hortaliças e abastecimento","url":"https://ceagesp.gov.br/entrepostos/etsp/","types":["laranja","batata"],"fact":"Entrepostos recebem e comercializam frutas, legumes e verduras de múltiplos municípios; fazendas produzem, atacadistas distribuem e supermercados recebem."},{"id":"mapa_cerveja","agency":"Ministério da Agricultura","title":"Cadeia produtiva da cerveja no Brasil","url":"https://www.gov.br/agricultura/pt-br/assuntos/camaras-setoriais-tematicas/camaras-setoriais-1/cerveja-1","types":["cerveja"],"fact":"Cervejarias, distribuidores e varejo ocupam funções diferentes; OUT de bebidas genéricas não comprova cervejas específicas."},{"id":"receita_paletes","agency":"Receita Federal","title":"Unidades de carga, embalagens e paletes","url":"https://www.gov.br/receitafederal/pt-br/assuntos/aduana-e-comercio-exterior/manuais/despacho-de-importacao/sistemas/siscomex-importacao-web/declaracao-de-importacao/funcionalidades/ficha-carga/unidades-de-carga-x-embalagens-x-volumes-peso-bruto-x-peso-liquido","types":["paletizado","palete_vazio"],"fact":"Paletes podem ser unidade de carga retornável ou embalagem que acompanha mercadorias. Um estabelecimento com cargas paletizadas não é necessariamente produtor ou expedidor de paletes vazios."},{"id":"aco_produtos_planos","agency":"Instituto Aço Brasil","title":"Produtos planos: chapas e bobinas de aço","url":"https://www.acobrasil.org.br/site/produtos/","types":["bobinas_industriais","aco"],"fact":"Bobinas integram a classe de produtos planos obtidos por laminação; tubos, arames e sucata pertencem a produtos/processos distintos e não comprovam movimentação de bobinas."},{"id":"embrapa_fabrica_racao","agency":"Embrapa","title":"Produção de feno, silagem e ração em sistemas ILPF","url":"https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1128581/1/ProducaoFenoSilagemRacaoSistemaILPF.pdf","types":["racao"],"fact":"A formulação de ração requer processamento e mistura de ingredientes; receber milho, soja ou insumos isoladamente não comprova expedição de ração pronta."},{"id":"embrapa_sorgo_bovinos","agency":"Embrapa Gado de Corte","title":"Sorgo granífero na alimentação de bovinos","url":"https://cloud.cnpgc.embrapa.br/sac/2016/05/24/como-usar-o-sorgo-granifero-e-o-sorgo-forrageiro-na-alimentacao-de-bovinos/","types":["sorgo","racao"],"fact":"O sorgo granífero é ingrediente para alimentação animal; não deve ser identificado como ração industrial pronta nem atribuído como cultura produzida sem evidência."}],"policies":{"noFabricatedBusinesses":true,"noForcedCoverage":true,"readMapCargoFirst":true,"noNameOnly":true,"cottonPlumaRequiresEvidence":true,"steelCoilsRequireEvidence":true,"feedProducerRequiresEvidence":true}});
 const RESEARCH_DATA_URL="https://raw.githubusercontent.com/Lucas-Andrade-de-Carvalho/ets2-mod-builder/main/logistics_knowledge.json";
-const RESEARCH_HOSTS=new Set(["www.embrapa.br","www.atermaisdigital.cnptia.embrapa.br","www.infoteca.cnptia.embrapa.br","www.acobrasil.org.br","abcp.org.br","www.gov.br","ceagesp.gov.br"]);
+const RESEARCH_HOSTS=new Set(["cloud.cnpgc.embrapa.br","www.embrapa.br","www.atermaisdigital.cnptia.embrapa.br","www.infoteca.cnptia.embrapa.br","www.acobrasil.org.br","abcp.org.br","www.gov.br","ceagesp.gov.br"]);
 function validateLogisticsKnowledge(obj){
  if(!obj||obj.schema!==1||!Array.isArray(obj.sources)||obj.sources.length<3||obj.sources.length>30)return false;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(obj.reviewed||"")))return false;
@@ -1633,10 +1643,103 @@ const RESEARCH_CARGO_TOKENS=Object.freeze({
  racao:/^(?:racao|racoes|animal_?feed|feedmeal|feed_meal|xerem|farelo|salmineral|suplementomineral)$/i,
  bobinas_industriais:/^(?:bobinas?|steel_?coils?|metal_?coils?|rolled_steel|coil_steel)$/i
 });
+
+// Avaliador econômico contextual. É independente de IDs de mapa/reboque.
+// Não transforma nomes de empresas em prova: exige atividade identificada,
+// IN/OUT reais e mercadorias tecnicamente relacionadas para cada direção.
+// A confiança B/C jamais é documental; é sempre uma inferência explícita.
+function economicContextCandidate(c,profile,type,dir){
+ if(!c||!profile||!["in","out"].includes(dir)||!profile.total||
+    profile.total>=95||c.role==="desconhecida")return null;
+ const role=c.role,n=(d,re)=>profile.count(d,re);
+ const build=/^(?:bricks?|tijolos?|roof_tiles|tiles?|floorpanels|wallpanels|precast_strs|concr_beams|gravel|sand|areia|brita|stones?|pedras?|iron_pipes|ferroconst|b_reforco|chapaaco|calcario|limestone|concrete)$/i;
+ const sheets=/^(?:chapa_?aco|steel_plates?|steel_sheets?|metal_center|hmetal|ferroconst|b_reforco)$/i;
+ const steelInput=/^(?:chapa_?aco|steel_plates?|steel_sheets?|metal_center|hmetal|ferroconst|b_reforco|iron_ore|ore|coal|scrap_metals)$/i;
+ const livestock=/^(?:beef3|beef_meat|milk|leite|gado|cattle|wool|sheep|livestock|animals?)$/i;
+ const feed=/^(?:racao|racoes|feedmeal|animal_?feed|xerem|farelo|milho|corn|soja|soybeans?|sorghum|sorgo|grain|grains)$/i;
+ const cotton=/^(?:cotton|cotton_seed|algodao|algodao_?caroco|pluma|cotton_bales?|cottonlint)$/i;
+ const packageWood=/^(?:pallets?|paletes?|wood|timber|lumber|boards?|planks?|madeira|used_packag|empty_?pallets?|scrap_wood|sucata_madeira)$/i;
+ let why="",level="forte";
+ switch(type){
+  case "cimento":
+   if(dir==="out"&&role==="materiais"&&
+      (n("out",build)>=2||(n("out",build)>=1&&n("in",build)>=1)))
+    why="revenda: OUT de materiais de construção e estoque compatível com cimento ensacado";
+   else if(dir==="out"&&role==="cimenteira"&&
+      n("in",/^(?:calcario|limestone|clay|argila|gravel|sand)$/i)>0&&n("out",build)>0)
+    why="indústria cimenteira com insumo mineral IN e produtos de construção OUT";
+   else if(dir==="in"&&["obras","materiais","premoldados"].includes(role)&&n("in",build)>0)
+    why=role==="premoldados"?"fábrica de pré-moldados com materiais de construção IN (consumo, não produção de cimento)":
+      "obra ou revenda com recebimento documentado de insumos de construção";
+   break;
+  case "bobinas_industriais":
+   if(dir==="out"&&["siderurgica","metalurgica"].includes(role)&&n("out",sheets)>0&&
+      (n("in",steelInput)>0||n("out",sheets)>=2))
+    why="siderurgia/distribuição de aço: chapas ou perfis OUT e cadeia de aço IN/OUT; bobina é hipótese";
+   else if(dir==="in"&&["metalurgica","calhas"].includes(role)&&n("in",sheets)>0)
+    why="processamento metálico que recebe chapa/aço; bobinas são matéria-prima plausível";
+   else if(dir==="in"&&role==="obras"&&n("in",sheets)>0&&n("in",build)>=2)
+    why="obra com entrada diversificada de aço estrutural; avaliar descarregamento de bobinas";
+   break;
+  case "sorgo":
+   if(dir==="out"&&["agroinsumos","cooperativa","silo","logistica"].includes(role)&&
+     n("out",feed)>0&&(n("in",feed)>0||n("out",feed)>=2)){
+    why="comércio/armazenagem agropecuária movimenta grãos ou ingredientes de ração; sorgo específico inferido";
+    level="inferida";
+   }else if(dir==="in"&&["fazenda","pecuaria","racoes"].includes(role)&&
+     n("in",feed)>0&&(n("out",livestock)>0||n("in",feed)>=2))
+    why="propriedade pecuária ou fábrica de ração recebe ingredientes alimentares; sorgo não é ração pronta";
+   else if(dir==="in"&&["cooperativa","silo"].includes(role)&&
+     n("in",feed)>0&&n("out",feed)>0){
+    why="entreposto recebe e expede grãos; possibilidade de armazenar sorgo";
+    level="inferida";
+   }
+   break;
+  case "algodao":
+   if(dir==="out"&&role==="algodoeira"&&
+     n("out",cotton)>0&&n("in",cotton)>0)
+    why="beneficiadora com algodão IN/OUT; pluma pode sair após beneficiamento";
+   else if(dir==="in"&&role==="textil"&&n("in",cotton)>0)
+    why="indústria têxtil recebe algodão; pluma é matéria-prima de fiação";
+   else if(dir==="in"&&role==="cooperativa"&&n("in",cotton)>0&&n("out",cotton)>0){
+    why="cooperativa com fluxo de algodão IN/OUT, presumindo armazenagem de fibra";
+    level="inferida";
+   }
+   break;
+  case "palete_vazio":
+   if(dir==="out"&&["supermercado","materiais","logistica","alimentos","bebidas","cervejaria","hortifruti","cooperativa","racoes","metalurgica"].includes(role)&&
+      (profile.in.size>=2||(profile.in.size>=1&&profile.out.size>=1))){
+    why="estabelecimento com movimentação física documentada e provável retorno de paletes vazios";
+    level="inferida";
+   }else if(dir==="in"&&["reciclagem","paletes","madeireira"].includes(role)&&
+     (n("in",packageWood)>0||n("out",packageWood)>0)){
+    why="recuperação/fabricação/reciclagem de embalagens de madeira documentada";
+   }else if(dir==="in"&&role==="logistica"&&n("in",packageWood)>0){
+    why="centro logístico com retorno declarado de embalagens";
+    level="inferida";
+   }
+   break;
+  case "cerveja":
+   if(dir==="out"&&role==="cervejaria"&&
+      n("out",/^(?:bebidas?|beverages?|beverages_c)$/i)>0&&
+      n("in",/^(?:barley|cevada|malt|malte|hops|lupulo)$/i)>0)
+    why="cervejaria com bebidas OUT e insumos cervejeiros IN";
+   break;
+ }
+ if(!why)return null;
+ const sectorCheck=economicCoherence(c,profile,type,dir);
+ if(!sectorCheck.allowed)return null;
+ return{score:level==="forte"?89:71,kind:"contextual",contextLevel:level,
+  reason:"Compatibilidade econômica "+(level==="forte"?"forte":"inferida")+
+   " ("+role+", "+dir.toUpperCase()+"): "+why+
+   ". Evidência contextual, NÃO cargo idêntico na DEF."};
+}
 function logisticsIntelligenceDecision(company,profile,type,dir,evidence,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  if(!evidence)return null;
  const sourceIds=(knowledge.sources||[]).filter(s=>s.types.includes(type)).map(s=>s.id);
  const proof=findProductEvidence(profile,type,dir);
+ if(evidence.kind==="contextual")return{...evidence,sourceIds,
+  confidence:evidence.contextLevel==="forte"?"economica_forte":"inferida",documentedUnits:[]};
  if(EVIDENCE_REQUIRED.has(type)&&proof.level==="ausente"){
   return{blocked:true,reason:"Não há produto "+type+" no "+dir.toUpperCase()+
     "; produtos do mesmo setor não comprovam esta mercadoria.",sourceIds,
@@ -1671,7 +1774,7 @@ function renderLogisticsResearch(research,sim){
 }
 function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  const catalogChecks=consultCatalogForMapDistribution(map);
- const plan=new Map(),skipped=[],proof=[],assumptions=[],anomalies=[],researchRejected=[];
+ const plan=new Map(),skipped=[],proof=[],assumptions=[],anomalies=[],researchRejected=[],contextualDecisions=[];
  let researchRejectedTotal=0;
  const grouped={alta:0,baixa:0,outros:0},perCompany=[];
  const cargoChecks=new Map();
@@ -1685,7 +1788,9 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   for(const entry of cargoChecks.values()){
    if(!entry.type||!entry.body.length)continue;
    for(const dir of ["out","in"]){
-    const evidence=companyCargoCompatibility(company,profile,entry.type,dir,entry.info,anomalies);
+    const heuristic=companyCargoCompatibility(company,profile,entry.type,dir,entry.info,anomalies);
+    const context=economicContextCandidate(company,profile,entry.type,dir);
+    const evidence=heuristic?.kind==="direta"?heuristic:(context||heuristic);
     if(!evidence)continue;
     const ai=logisticsIntelligenceDecision(company,profile,entry.type,dir,evidence,knowledge);
     if(ai?.blocked){
@@ -1694,6 +1799,8 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
        dir,reason:ai.reason,sourceIds:ai.sourceIds});
       continue;
     }
+    if(ai?.kind==="contextual")contextualDecisions.push({company:company.id,
+     cargo:entry.info.id,dir,confidence:ai.confidence,reason:ai.reason,sourceIds:ai.sourceIds});
     entry[dir==="out"?"out":"inn"].push({company,evidence:ai});
     decisions[dir].push(entry.info.id);
    }
@@ -1726,7 +1833,8 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   const researchSources=[...new Set([...outs,...ins].flatMap(x=>x.evidence.sourceIds||[]))];
   proof.push({id:info.id,name:info.name,type,researchSources,
    confidence:outs.every(x=>x.evidence.confidence==="documental")&&ins.every(x=>x.evidence.confidence==="documental")?"documental":
-    [...outs,...ins].some(x=>x.evidence.confidence==="inferida")?"inferida":"relacionada",
+    [...outs,...ins].some(x=>x.evidence.confidence==="inferida")?"inferida":
+    [...outs,...ins].some(x=>x.evidence.confidence==="economica_forte")?"economica_forte":"relacionada",
    origins:outs.length,destinations:ins.length,
    sourceIds:outs.map(x=>x.company.id),destIds:ins.map(x=>x.company.id),notes,
    categoryReasons:[],directOut:outs.filter(x=>x.evidence.kind==="direta").length,
@@ -1734,7 +1842,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
    scsSourceIds:outs.filter(x=>x.company.catalog).map(x=>x.company.id),
    scsDestIds:ins.filter(x=>x.company.catalog).map(x=>x.company.id)});
  }
- return{plan,skipped,proof,grouped,assumptions,catalogChecks,perCompany,anomalies,researchRejected,researchRejectedTotal,knowledge,
+ return{plan,skipped,proof,grouped,assumptions,catalogChecks,perCompany,anomalies,researchRejected,researchRejectedTotal,contextualDecisions,knowledge,
   emptyCompanies:[...map.companies.keys()].filter(id=>!plan.has(id)),
   engine:"company-first"};
 }
@@ -1868,7 +1976,7 @@ function audit(map,cargo,sim){
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
- [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
+ [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
  (ranked.length?"<details class='creator-catalog'><summary>Motivos das cargas sem rota ("+sim.skipped.length+")</summary>"+ranked.map(([reason,count])=>"<div class='audit'><b>"+count+"x</b><span>"+escapeHTML(reason)+"</span></div>").join("")+"</details>":"")+
@@ -1931,6 +2039,9 @@ function createDiagnosticText(map,cargo,sim){
   rows.push([r.company,r.cargo,r.dir,r.reason,r.sourceIds.join(",")].join(" | "));
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
+ rows.push("","ASSOCIAÇÕES CONTEXTUAIS EFETIVAS (EMPRESA | CARGA | DIREÇÃO | CONFIANÇA | JUSTIFICATIVA | FONTES)");
+ for(const a of sim.contextualDecisions||[])if(sim.plan.get(a.company)?.[a.dir]?.has(a.cargo))
+  rows.push([a.company,a.cargo,a.dir.toUpperCase(),a.confidence,a.reason,a.sourceIds.join(",")].join(" | "));
  rows.push("","CARGAS LIBERADAS (ID | NOME | EXPEDIDORES | RECEBEDORES | CONFIANÇA | FONTES | HIPÓTESES)");
  for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.confidence,p.researchSources.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
  rows.push("","CARGAS CONTRADITÓRIAS BLOQUEADAS (EMPRESA | CARGO | SENTIDO | SETOR | MOTIVO)");
@@ -2045,5 +2156,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();

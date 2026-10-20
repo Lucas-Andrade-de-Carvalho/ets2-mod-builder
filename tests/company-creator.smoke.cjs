@@ -231,6 +231,70 @@ async function main(){
    "Neutralizar fretes incompatíveis");
  }
 
+
+ // V6: inferências contextualizadas por papel econômico + fluxos reais da DEF.
+ // Nenhuma rota abaixo depende de ID cargaN nem presume produto documental.
+ const economyMap=new JSZip(),economyCargo=new JSZip();
+ const enterprises={
+  loja_material_construcao01:{in:["sand","gravel"],out:["bricks","roof_tiles"]},
+  obra_mg01:{in:["bricks","gravel"],out:[]},
+  fabrica_premoldados01:{in:["bricks","gravel"],out:["precast_strs"]},
+  cofer:{in:["chapaaco"],out:["chapaaco","ferroconst"]},
+  fabrica_calhas01:{in:["chapaaco"],out:["ferroconst"]},
+  loja_agropecuaria01:{in:["corn","soybeans"],out:["corn","feedmeal"]},
+  fazenda_boi01:{in:["feedmeal"],out:["beef3"]},
+  algodoeira01:{in:["cotton"],out:["cotton"]},
+  industria_textil01:{in:["cotton"],out:["fabric"]},
+  supermercado_a01:{in:["potatoes","brahma","soybeans"],out:[]},
+  reciclagem_madeira01:{in:["wood"],out:["lumber"]},
+  sem_setor_provado:{in:["diesel"],out:["scrap_metals"]}
+ };
+ for(const [name,trade] of Object.entries(enterprises)){
+  economyMap.file("def/company/"+name+"/editor/city.sii","SiiNunit\n{}\n");
+  for(const d of ["in","out"])for(const [i,item] of trade[d].entries())
+   companyFile(economyMap,name,d,item+"_"+i,item);
+ }
+ for(const [id,name] of [["cement_bags","Cimento em sacos"],
+  ["steel_bundle","Bobinas de aço"],["sorghum_feed","Sorgo para ração"],
+  ["cotton_lint","Pluma de algodão"],["empty_wood_pallets","Paletes vazios"]])
+  economyCargo.file("cargo/"+id+".sui",
+   'cargo_data : cargo.'+id+' {\n name: "'+name+'"\n body_types[]: baixa\n}');
+ const econCompanies=await creator.loadMap(economyMap);
+ const econLoads=await creator.loadCargo(economyCargo);
+ const econSim=creator.simulate(econCompanies,econLoads);
+ const route=id=>econSim.proof.find(p=>p.id===id);
+ for(const [id,origin,dest] of [
+  ["cement_bags","loja_material_construcao01","fabrica_premoldados01"],
+  ["steel_bundle","cofer","fabrica_calhas01"],
+  ["sorghum_feed","loja_agropecuaria01","fazenda_boi01"],
+  ["cotton_lint","algodoeira01","industria_textil01"],
+  ["empty_wood_pallets","supermercado_a01","reciclagem_madeira01"]
+ ]){
+  const p=route(id);
+  assert.ok(p,"V6 deve identificar cadeia realista para "+id+
+   ": "+JSON.stringify(econSim.skipped.find(x=>x.id===id)));
+  assert.ok(p.sourceIds.includes(origin),id+" sem origem econômica plausível");
+  assert.ok(p.destIds.includes(dest),id+" sem destino econômico plausível");
+  assert.notEqual(p.confidence,"documental","Inferência não pode virar prova literal: "+id);
+ }
+ assert.equal(econSim.plan.has("sem_setor_provado"),false,
+  "Metal sucata + diesel de uma empresa opaca não autoriza nenhum frete");
+ assert.equal(econSim.proof.length,5);
+ assert.ok(econSim.contextualDecisions.length>=10);
+ assert.equal(creator.kind("Pallets Alto TESTE"),null,"Carga ambígua não pode ser adivinhada");
+ assert.equal(creator.economicContextCandidate({id:"f",role:"fazenda"},
+  creator.companyCargoProfile({old:[{dir:"out",unit:"corn"},{dir:"out",unit:"soybeans"}]}),
+  "sorgo","out"),null,"Produzir milho/soja não comprova sorgo");
+ const ecoPack=await creator.build(econCompanies,econLoads,econSim);
+ const ecoOutput=await JSZip.loadAsync(ecoPack.blob);
+ assert.ok(ecoOutput.file("def/company/cofer/out/steel_bundle.sii"));
+ assert.ok(ecoOutput.file("def/company/fabrica_calhas01/in/steel_bundle.sii"));
+ assert.ok(ecoOutput.file("def/company/reciclagem_madeira01/in/empty_wood_pallets.sii"));
+ assert.ok(ecoOutput.file("def/company/loja_material_construcao01/out/cement_bags.sii"));
+ assert.deepEqual(creator.parseCompanyCargoUnits(
+  await ecoOutput.file("def/company/sem_setor_provado/out/scrap_metals_0.sii").async("text"),
+  "scrap_metals_0.sii"),[]);
+
  // Strings com caracteres UTF-16 de dois code units não podem deslocar
  // offsets de neutralização nem alterar comentários.
  const unicodeSii='SiiNunit\n{\n // 🚚 carga de teste\\n'+
