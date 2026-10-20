@@ -18,3 +18,9 @@
 - CI: integridade do HTML e das seis abas, sincronismo da base documental, parser SII/ZIP e testes da geração de SCS.
 - O empacotador verifica cargos declarados no ZIP final pelo mesmo parser utilizado na leitura.
 - Os dados de teste não substituem ensaios no ETS2 com ordem de mods, game.log e atualização da economia.
+
+## Motor V6 — evidência econômica estruturada
+- A: cargo idêntico no IN/OUT; B: contexto econômico forte (setor + fluxo IN/OUT correlato); C: hipótese contextual conservadora; D: incompatível/sem evidência.
+- Relações B/C nunca são relatadas como prova documental da DEF; apenas empresas e cargos reais entram no arquivo final.
+- Cimento nas lojas e pré-moldados, bobinas nas siderúrgicas/metalúrgicas, sorgo em suprimentos pecuários, pluma beneficiada e retorno de paletes têm verificadores distintos; cereal não é ração industrial, chapa não é bobina, algodão bruto não é pluma.
+- Registros de decisões contextuais aceitas ficam no diagnóstico. A natureza ambígua de “Pallets Alto TESTE” permanece pendente.
