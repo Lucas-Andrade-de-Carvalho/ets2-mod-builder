@@ -92,7 +92,7 @@ DIRECTIONS = {
 RE_CARGO_FIELD = re.compile(r'(?m)^(\s*cargo\s*:\s*)(?:"[^"\r\n]*"|[a-zA-Z0-9_.-]+)')
 RE_CARGO_UNIT = re.compile(r'\bcargo_data\s*:\s*cargo\.([a-z][\w]*)\b',re.I)
 RE_COMPANY_PATH = re.compile(r'(?:^|/)def/company/([a-z0-9_]+)/(?:(in|out|editor)/)?([^/]+)$',re.I)
-RE_CARGO_PATH = re.compile(r'(?:^|/)def/cargo/([a-z0-9_]+)(?:\.(?:sii|sui)|/([^/]+))
+RE_CARGO_PATH = re.compile(r'(?:^|/)def/cargo/([a-z0-9_]+)(?:\.(?:sii|sui)|/([^/]+))$',re.I)
 RE_TRAILER_BODY = re.compile(r'(?m)^\s*body_type\s*:\s*["'+"']?([a-z0-9_]+)",re.I)
 RE_CARGO_BODY = re.compile(r'(?m)^\s*body_types(?:\[\d*\])?\s*:\s*["'+"']?([a-z0-9_]+)",re.I)
 
