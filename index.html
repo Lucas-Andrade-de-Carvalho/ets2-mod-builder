@@ -2621,6 +2621,15 @@ async function build(map,cargo,sim){
    generated.set(p,cargoSii(id));
   }
  }
+ // Ajustar a chance REAL de geração no ETS2 só no cargo_data do Palete Alto.
+ const palletCargoPatches=[];
+ for(const info of cargo.cargos.values()){
+  if(kind(info.name)!=="paletizado"||!sim.proof.some(x=>x.id===info.id))continue;
+  const source=cargo.files.get(info.path.toLowerCase());
+  if(!source)throw Error("Cargo_data Palete Alto ausente no reboque: "+info.path);
+  generated.set(info.path,patchPalletCargoProbability(await source.obj.async("text"),info.id));
+  palletCargoPatches.push(info.path);
+ }
  // Pendente por chave normalizada: tolerar capitalização do mapa.
  const pending=new Map([...generated.entries()].map(([p,text])=>
   [p.toLowerCase(),{p,text}]));
@@ -2661,10 +2670,15 @@ async function build(map,cargo,sim){
   info=>say("Compactando Company integral… "+Math.round(info.percent)+"%",
    62+Math.round(info.percent*.28)));
  const check=await JSZip.loadAsync(blob,{createFolders:false});
- const generatedLower=new Set([...generated.keys()].map(p=>p.toLowerCase()));
+ const generatedLower=new Set([...generated.keys()].filter(p=>p.startsWith("def/company/")).map(p=>p.toLowerCase()));
  for(const p of generated.keys()){
   const obj=check.file(p);
   if(!obj)throw Error("Faltou carga gerada: "+p);
+  if(palletCargoPatches.includes(p)){
+   if(!(await obj.async("text")).includes("prob_coef: "+PALLET_MARKET_POLICY.probCoef))
+    throw Error("prob_coef de paletes ausente no SCS: "+p);
+   continue;
+  }
   const expected=p.split("/").pop().replace(/\.sii$/i,"").toLowerCase();
   const units=parseCompanyCargoUnits(await obj.async("text"),p);
   if(units.length!==1||units[0]!==expected)
@@ -2688,7 +2702,7 @@ async function build(map,cargo,sim){
   if(companyMeta(x.p)?.type==="editor"&&!check.file(x.p))
    throw Error("Arquivo editor perdido: "+x.p);
  const seenCompanies=new Set(coveredOriginal.map(p=>companyMeta(p).id));
- return{blob,count:generated.size,removed:disabled.length+replacedOriginal.length,
+ return{blob,count:generated.size-palletCargoPatches.length,palletCargoPatches,removed:disabled.length+replacedOriginal.length,
   disabled:disabled.length,replacedOriginal:replacedOriginal.length,
   coverage:coveredOriginal.length,originalCompanies:seenCompanies.size};
 
@@ -2871,6 +2885,7 @@ async function generate(){
   const identifier=clean+"_"+fingerprint;
   lastCompany={
    blob:out.blob,
+   palletCargoPatches:out.palletCargoPatches,
    filename:"DEF_Company_Librelato_"+identifier+"_Universal.scs",
    count:out.count,
    removed:out.removed,
@@ -2879,7 +2894,7 @@ async function generate(){
    originalCompanies:out.originalCompanies
   };
   updateDownloadUI();
-  say("Company integral pronta: "+out.count+" novas associações, "+out.coverage+" arquivos IN/OUT antigos SOBRESCRITOS, "+out.disabled+" neutralizados (cargo vazio), "+map.companies.size+" empresas preservadas. Coloque este mod ACIMA da DEF do mapa. Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Baixe a Company .SCS. Motor: "+ENGINE_BUILD,100);
+  say("Company integral pronta: "+out.count+" novas associações, "+out.coverage+" arquivos IN/OUT antigos SOBRESCRITOS, "+out.disabled+" neutralizados (cargo vazio), "+map.companies.size+" empresas preservadas. Coloque este mod ACIMA da DEF do mapa. Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Palete Alto: prob_coef "+PALLET_MARKET_POLICY.probCoef+" ("+out.palletCargoPatches.length+" cargo_data). Baixe a Company .SCS. Motor: "+ENGINE_BUILD,100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
