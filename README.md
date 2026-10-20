@@ -93,3 +93,12 @@ O gerador agora detecta quando a DEF enviada é composta quase totalmente por pe
 ### Correção com DEF real de 208 empresas (20/10/2026)
 
 Nova rotina de recuperação de rotas para granito, rações, pluma e bobinas: cruza **produtos reais** em IN e OUT, com limites conservadores por empresa, e marca explicitamente relações inferidas. Quando os cargos exatos não estão presentes na DEF original, disponibilidade no mapa não equivale a produção comprovada dessa mercadoria. Versão do motor aparece no status da aba para permitir identificar HTML antigo. Validação local do ZIP de entrada: 208 empresas, 6739 OUT e 7088 IN, oito cargos em questão; os testes no GitHub usam perfis amostrados dessas empresas, não o pacote completo ou o ETS2.
+
+
+### Substituição integral dos arquivos IN/OUT da DEF do mapa
+
+A partir de 20/10/2026, o gerador produz um **mod de sobrescrita integral**. Além das novas permissões Librelato, ele escreve, nos mesmos caminhos virtuais dos arquivos IN/OUT antigos, definições de `cargo: ""`. Conforme a SCS, cargo vazio desativa a permissão original, mesmo quando a empresa não tem nova carga compatível. O número total de arquivos originais neutralizados aparece no status da geração.
+
+**Obrigatório:** No Gerenciador de Mods, coloque a Company gerada **acima do pacote DEF do mapa** e de qualquer outro mod Company. Sem prioridade maior, os arquivos antigos podem prevalecer. O mod principal do Librelato deve permanecer ativo; desative antigas DEF Companies genéricas que também mudam essas permissões. A alteração da oferta existente em saves pode exigir tempo de atualização de economia. Empresas sem mercadoria compatível permanecem no mapa, mas ficam sem rotas Librelato.
+
+Fonte oficial: https://eurotrucksimulator2.com/modding_changes.php ("Changes in company definition": `cargo` vazio desativa permissão).
