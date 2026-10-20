@@ -423,18 +423,22 @@ async function main(){
  // Deve COBRIR o caminho original, pois o mapa permanece ativo no jogo.
  const obsolete=output.file("def/company/fazenda01/out/milho_original.sii");
  assert.ok(obsolete,"Arquivo antigo sem substituição (o mapa reinjeta a carga)");
- assert.match(await obsolete.async("text"),/\\bcargo\\s*:\\s*""/,
+ assert.match(await obsolete.async("text"),/\bcargo\s*:\s*""/,
   "Arquivo original deve ter cargo vazio");
- assert.doesNotMatch(await obsolete.async("text"),/cargo\\.corn|cargo\\.milho_original/i);
+ assert.doesNotMatch(await obsolete.async("text"),/cargo\.corn|cargo\.milho_original/i);
  assert.match(creator.disableExistingCargo('SiiNunit\\n{\\n cargo_def: .a { cargo: "cargo.old" }\\n}'),
-  /cargo:\\s*""/);
+  /cargo:\s*""/);
  const allowed=new Set(["fazenda01","silo01","lojamaterial01","obra01"]);
  const cargos=new Set(["carga1","carga13"]);
  for(const pathname of Object.keys(output.files)){
   const c=pathname.match(/^def\/company\/([^/]+)\//);
   if(c)assert.ok(allowed.has(c[1]),"Empresa inventada: "+c[1]);
   const cargo=pathname.match(/^def\/company\/[^/]+\/(?:in|out)\/([^/]+)\.sii$/);
-  if(cargo)assert.ok(cargos.has(cargo[1]),"Cargo inventado: "+cargo[1]);
+  if(cargo&&!cargos.has(cargo[1])){
+   const contents=await output.file(pathname).async("text");
+   assert.match(contents,/\bcargo\s*:\s*""/,
+    "Arquivo IN/OUT antigo não está neutralizado: "+pathname);
+  }
   assert.equal(/^def\/cargo\//.test(pathname),false,"O mod não pode recriar cargo_data");
  }
  element("companyCreateDownload").listeners.click();
@@ -450,8 +454,8 @@ async function main(){
                     "def/company/deposito_sem_rota/in/antiga_recebida.sii"]){
   assert.ok(emptyZip.file(item),"Empresa sem rota reteve permissão: "+item);
   const txt=await emptyZip.file(item).async("text");
-  assert.match(txt,/cargo:\\s*""/);
-  assert.doesNotMatch(txt,/cargo\\.old_/);
+  assert.match(txt,/cargo:\s*""/);
+  assert.doesNotMatch(txt,/cargo\.old_/);
  }
  assert.equal(blank.disabled,2);
  assert.equal(blank.coverage,2);
