@@ -147,13 +147,14 @@ async function main(){
  const beerSim=creator.simulate(beerMapRead,beerCargo);
  const beerProof=beerSim.proof.find(p=>p.id==="carga12");
  assert.ok(beerProof,"Cerveja de marca real deve ter rota no MINAS");
- assert.deepEqual(beerProof.sourceIds.sort(),["ambev","jjdistibuido"]);
+ assert.deepEqual(beerProof.sourceIds.sort(),["ambev","bebida_generica","jjdistibuido"]);
+ // V6.1: bebidas genéricas documentam a CATEGORIA, não cerveja literal.
  assert.deepEqual(beerProof.destIds.sort(),["abcatacado","superabc"]);
- assert.equal(beerProof.confidence,"documental");
+ assert.notEqual(beerProof.confidence,"documental","Categoria não é identidade literal");
  assert.equal(beerSim.proof.some(p=>p.id==="carga6"),false,
   "Sem cimento real, não inventar origem/destino apenas por haver outras cargas de construção");
- assert.equal(beerSim.plan.has("bebida_generica"),false,
-  "Bebida genérica não demonstra cerveja");
+ assert.equal(beerSim.plan.get("bebida_generica")?.out.has("carga12"),true,
+  "Distribuição por categoria deve admitir saída de bebidas genéricas sem alegar cerveja literal");
  const beerBuilt=await creator.build(beerMapRead,beerCargo,beerSim);
  const beerPack=await JSZip.loadAsync(beerBuilt.blob);
  for(const company of ["ambev","jjdistibuido"])
@@ -163,7 +164,9 @@ async function main(){
  assert.deepEqual(creator.parseCompanyCargoUnits(
   await beerPack.file("def/company/bebida_generica/out/bebidas.sii").async("text"),
   "def/company/bebida_generica/out/bebidas.sii"),[],
-  "Empresa sem cerveja documentada tem OUT antigo neutralizado");
+  "Mercadoria antiga é neutralizada mesmo quando habilitada sua categoria");
+ assert.ok(beerPack.file("def/company/bebida_generica/out/carga12.sii"),
+  "A categoria de bebidas pode participar como OUT, mantendo distinção documental");
 
  // Sem manifesto, models vehicle/cargo fornecem o escopo de forma genérica.
  const modelScope=new JSZip();
