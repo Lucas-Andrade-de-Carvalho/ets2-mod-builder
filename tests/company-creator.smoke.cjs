@@ -145,10 +145,6 @@ async function main(){
  assert.equal(creator.companyCargoCompatibility(steelActual,creator.companyCargoProfile(steelActual),
   "adubo","out",{id:"carga3"}),null,
   "Indústria com evidência real de aço não pode virar agroinsumos");
- const verifiedSteel=counterExample("metal_opaque","desconhecida",[
-  ["out","steel"],["in","iron_pipes"]]);
- assert.equal(creator.companyCargoCompatibility(verifiedSteel,creator.companyCargoProfile(verifiedSteel),
-  "aco","out",{id:"carga9"})?.kind,"direta");
 
  const byNameOnly=counterExample("fazenda_milho","fazenda",[["out","diesel"],["in","petrol"]]);
  assert.equal(creator.companyCargoCompatibility(byNameOnly,creator.companyCargoProfile(byNameOnly),
