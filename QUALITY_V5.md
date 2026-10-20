@@ -28,3 +28,7 @@
 
 ## V6.1 — categoria como regra principal
 Uma mercadoria literal da DEF é prova forte; a categoria nos IN/OUT ou atividade da empresa é inferência sinalizada, mesmo quando habilita carga. Empresas podem atuar nos dois sentidos por estoque/distribuição. Cargas não são impostas a setores incompatíveis, e um SCS requer empresa de saída e outra de entrada.
+
+
+## V6.2 — validação de raridade
+Testes verificam Palete Alto apenas OUT de madeireira/serraria, apenas IN para reciclagem/sucatão, amostragem reproduzível de lojas elegíveis, preservação de outras cargas, limites globais e inclusão seletiva do `prob_coef: 0.14` no `cargo_data` original sem tocar em outra mercadoria.

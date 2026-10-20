@@ -159,3 +159,7 @@ Consulte [QUALITY_V5.md](QUALITY_V5.md). O assistente exige evidências por merc
 
 ## V6.1 — roteamento por categorias econômicas
 A carga é analisada por categoria (grãos, insumos, construção, metal, fibras, madeira, bebidas, hortifruti, paletes). Empresas de comércio e armazenagem podem receber e expedir a mesma categoria: não é necessário identificar produtor e consumidor finais. Ainda é preciso haver empresas distintas nos sentidos IN/OUT e carroceria compatível. Exceções físicas e empresas incompatíveis permanecem bloqueadas. "Pallets Alto TESTE" pode circular apenas como categoria genérica, sem prova do tipo físico de palete.
+
+
+## V6.2 — Palete Alto balanceado
+Madeireiras/serrarias/fabricantes de paletes são exclusivamente **OUT**; reciclagens/sucatões exclusivamente **IN**. Demais empresas elegíveis são selecionadas com hash reproduzível, limitando a no máximo **7 pontos OUT / 9 pontos IN** por mercadoria Palete Alto no mapa. Prioridade de seleção para pátios que já distribuem outras cargas. A Company gerada sobrepõe a **definição cargo_data original do Palete Alto** com `prob_coef: 0.14`, reduzindo sua probabilidade relativa de geração (padrão 1.0) sem alterar carroceria, massa, preço ou modelo. SCS gerado precisa ficar **acima da DEF do reboque** na prioridade do jogo. Sementes de algodão e beterraba açucareira têm categorias independentes da pluma. Não há garantia de uma porcentagem exata no mercado; depende também dos pátios e demais mods.
