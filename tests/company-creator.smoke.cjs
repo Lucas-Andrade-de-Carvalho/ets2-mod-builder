@@ -212,15 +212,19 @@ async function main(){
  const minasParsedMap=await creator.loadMap(sampleMap);
  const parsedCargo=await creator.loadCargo(sampleCargo);
  const reality=creator.simulate(minasParsedMap,parsedCargo);
- assert.equal(reality.proof.length,1,"Somente a ração tem origem e destino explícitos");
- assert.equal(reality.proof[0].id,"carga17");
- assert.equal(reality.proof[0].confidence,"documental");
- assert.ok(reality.proof[0].sourceIds.includes("agromais"));
- assert.ok(reality.proof[0].destIds.includes("abcatacado"));
- for(const id of ["carga9","carga5","carga23"]){
+ // No modo categoria, chapas e ferragens documentam siderurgia,
+ // mas não comprovam bobinas literais; a confiança precisa refletir isso.
+ const feedProof=reality.proof.find(p=>p.id==="carga17");
+ const steelProof=reality.proof.find(p=>p.id==="carga9");
+ assert.ok(feedProof,"Ração literal deve preservar rota");
+ assert.equal(feedProof.confidence,"documental");
+ assert.ok(feedProof.sourceIds.includes("agromais"));
+ assert.ok(feedProof.destIds.includes("abcatacado"));
+ assert.ok(steelProof,"Bobinas devem circular na categoria siderúrgica");
+ assert.notEqual(steelProof.confidence,"documental","Chapas não comprovam bobinas físicas");
+ for(const id of ["carga5","carga23"])
   assert.ok(reality.skipped.some(item=>item.id===id),
-    "Bobinas, pluma e sorgo não possuem produtos correspondentes");
- }
+   "Sem pares econômicos distintos da categoria, a carga não pode inventar empresas");
  assert.ok(!reality.plan.has("empresa_sem_evidencia"));
  const realityBuilt=await creator.build(minasParsedMap,parsedCargo,reality);
  const realitySCS=await JSZip.loadAsync(realityBuilt.blob);
