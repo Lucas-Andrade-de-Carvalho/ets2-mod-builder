@@ -1484,11 +1484,11 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
   });
   return null;
  }
- if(direct){
+ if(direct||(type==="granito"&&signature.level==="relacionada")){
   const roles=flows[type]?.[dir]||[];
   const mismatch=c.role!=="desconhecida"&&roles.length&&!roles.includes(c.role);
-  return{score:120,kind:"direta",roleConflict:!!mismatch,
-   reason:"cargo: documentado no "+dir.toUpperCase()+
+  return{score:direct?120:85,kind:direct?"direta":"categoria",roleConflict:!!mismatch,
+   reason:(direct?"cargo: documentado no ":"pedra ornamental relacionada (não granito comprovado) no ")+dir.toUpperCase()+
      (mismatch?" (atividade econômica reavaliada: "+coherence.reason+")":"")};
  }
  // O nome do arquivo nunca cria permissão de frete.
