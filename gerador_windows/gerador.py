@@ -551,7 +551,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             write_report(outdir,name,data)
             log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
                 str(data["arquivos_inout_gerados"])+" permissões.")
-            results.append((name,str(dest),data))
+            results.append((name,str(publish_dir/dest.name),data))
         outdir.joinpath("LEIA_PRIMEIRO.txt").write_text(
             "ETS2 COMPANY LOGISTICS - GERADOR OFFLINE\n\n"+
             "1. Utilize somente a Company do mapa ativo.\n"+
