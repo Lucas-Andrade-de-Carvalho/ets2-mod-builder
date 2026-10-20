@@ -117,3 +117,14 @@ O campo `cargo:` encontrado na DEF original é agora prova primária; um nome ou
 ### Coerência econômica (v3.2, 20/10/2026)
 
 A presença literal de `cargo:` é forte evidência documental, mas **não autorização absoluta**. Empresas de ramos especializados (siderurgia, postos, concessionárias, pedreiras, etc.) não recebem/expedem mercadorias de outros setores apenas por uma definição isolada. A contradição só pode ser superada automaticamente se várias categorias independentes de produtos reais em IN e OUT indicarem atividade alternativa **e não houver prova do ramo original nem identificação exata no catálogo SCS**. Eventos rejeitados aparecem no diagnóstico, e nenhuma empresa recebe carga obrigatória. Não é necessário conhecer previamente o mapa.
+
+
+## Arquitetura e fluxo de qualidade — revisão v4
+
+**Fonte de verdade do gerador de Company:** `creator_tab.js`, incorporado ao último `<script>` de `index.html`. O arquivo `engine_universal.js` é legado histórico, não é executado pelo HTML; mantido apenas para compatibilidade de referências antigas. Não editar o código inline do gerador e esquecer de sincronizar o arquivo fonte. O CI falhará se divergir.
+
+**Arquivos:** `index.html` contém as seis abas e o fluxo de interface; `creator_tab.js` cuida da leitura da DEF de mapa, análise IN/OUT, compatibilidade econômica, neutralização de cargas antigas e empacotamento do SCS; `scs_company_catalog.js` é um catálogo de referência não autoritativo; `tests/company-creator.smoke.cjs` cobre comportamento e geração; `tests/project-integrity.cjs` valida integridade de scripts, abas e sincronização.
+
+**Regras técnicas:** analisar `cargo:` REAL, não somente o nome do arquivo; ler todas as referências de uma definição, ignorando comentários; não ignorar silenciosamente um IN/OUT grande ou inválido; manter empresas sem cargas e neutralizar antigas permissões corretamente; não alterar a atividade manual ao consultar o catálogo; recusar ZIPs absurdamente expandidos. Usar apenas empresas presentes no mapa e mercadorias presentes na DEF anexada. 
+
+**Validação:** o GitHub Actions executa testes estáticos e funcionais com Node 22 a cada modificação dos arquivos relevantes. Aprovação em CI não comprova comportamento no jogo. Para confirmar o resultado final, testar no Euro Truck Simulator 2 com mods na prioridade correta e conferir `game.log`, mercado de fretes e empresas vazias. Caso a DEF contiver outra forma de declarar cargas que o parser não reconheça, ampliar o suporte explicitamente e criar teste correspondente, em vez de assumir que não há mercadorias.
