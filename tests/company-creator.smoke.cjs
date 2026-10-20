@@ -112,6 +112,81 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // A aba Arquivos/Gerar SCS (outra ferramenta do mesmo HTML) também deve
+ // rejeitar ZIPs inseguros, sem confundi-la com o gerador universal.
+ assert.equal(typeof windowShim.Ets2MainTest.validateMainArchive,"function");
+ const mainZip=new JSZip();mainZip.file("def/company/a/editor/city.sii","SiiNunit\n{}");
+ assert.equal(windowShim.Ets2MainTest.validateMainArchive(mainZip).entries,1);
+ assert.throws(()=>windowShim.Ets2MainTest.validateMainArchive({
+  files:{"def/../invalido.sii":{dir:false,_data:{uncompressedSize:30}}}
+ }),/inseguro/);
+ assert.throws(()=>windowShim.Ets2MainTest.validateMainArchive({
+  files:{"def/company/a/out/huge.sii":{dir:false,_data:{uncompressedSize:180*1024*1024}}}
+ }),/150 MB/);
+
+
+ // Profissionalização da leitura: múltiplos cargo: no mesmo SII,
+ // comentários ignorados, preservação das unidades e classificação manual.
+ const multiCargo=new JSZip();
+ multiCargo.file("def/company/loja_ab/editor/city.sii","SiiNunit\n{}\n");
+ multiCargo.file("def/company/loja_ab/out/multiplo.sii",
+  'SiiNunit\n{\n // cargo: "cargo.fake_comment"\n'+
+  ' cargo_def: .one { cargo: "cargo.corn" }\n'+
+  ' /* cargo: "cargo.another_fake" */\n'+
+  ' cargo_def: .two { cargo: cargo.soybeans }\n}\n');
+ const multiMap=await creator.loadMap(multiCargo);
+ const multiCompany=multiMap.companies.get("loja_ab");
+ assert.deepEqual(multiCompany.old[0].units,["corn","soybeans"]);
+ assert.equal(multiMap.parsedRelations,2);
+ const multiProfile=creator.companyCargoProfile(multiCompany);
+ assert.ok(multiProfile.declared.out.has("corn"));
+ assert.ok(multiProfile.declared.out.has("soybeans"));
+ assert.ok(!multiProfile.declared.out.has("fake_comment"));
+ assert.deepEqual(creator.parseCompanyCargoUnits(
+  'cargo_def: .one { cargo: "cargo.bricks" }\n// cargo: "cargo.fake"\n', "example.sii"),["bricks"]);
+ assert.throws(()=>creator.parseCompanyCargoUnits(
+  'cargo_def: .one { cargo: "invalid_reference" }', "broken.sii"),/inválida/);
+ const neutralized=creator.disableExistingCargo(
+  'SiiNunit\n{\n // cargo: "cargo.comment"\n'+
+  ' cargo_def: .x { cargo: "cargo.corn" }\n'+
+  ' cargo_def: .y { cargo: cargo.soybeans }\n}',"multi.sii");
+ assert.deepEqual(creator.parseCompanyCargoUnits(neutralized,"multi.sii"),[]);
+ assert.ok(neutralized.includes('// cargo: "cargo.comment"'),
+  "Não modificar comentários legítimos");
+ assert.equal((neutralized.match(/cargo:\s*""/g)||[]).length,2);
+ const noCargoDefinition='SiiNunit\n{\n some_unit : .test { value: 1 }\n}\n';
+ assert.equal(creator.disableExistingCargo(noCargoDefinition,"none.sii"),noCargoDefinition);
+ const funnyName={id:"fazenda_batata",role:"fazenda",
+  old:[{dir:"out",stem:"milho.sii",unit:null}]};
+ assert.equal(creator.companyCargoProfile(funnyName).out.size,0,
+  "Nomes de arquivos não geram mercadorias");
+
+ // Catálogo nunca deve cancelar ajuste feito pelo usuário.
+ const manual={id:"euroacres",role:"agroinsumos",
+  evidence:"classificação informada pelo usuário",old:[]};
+ const mapManual={companies:new Map([[manual.id,manual]])};
+ creator.consultCatalogForMapDistribution(mapManual);
+ assert.equal(manual.role,"agroinsumos");
+ assert.equal(manual.evidence,"classificação informada pelo usuário");
+ assert.ok(manual.catalog);
+
+ // Carga de outro reboque: não limitar arbitrariamente aos IDs cargaN.
+ const independentCargo=new JSZip();
+ independentCargo.file("cargo/milho_real.sui",
+  'cargo_data : cargo.milho_real {\n name: "Milho"\n body_types[]: alta\n}\n');
+ const independentParsed=await creator.loadCargo(independentCargo);
+ assert.ok(independentParsed.cargos.has("milho_real"));
+
+ // Definição IN/OUT anormalmente grande deve falhar explicitamente,
+ // em vez de ser ignorada e gerar cargas por adivinhação.
+ const tooBig=new JSZip();
+ tooBig.file("def/company/empresa/editor/city.sii","SiiNunit\n{}\n");
+ tooBig.file("def/company/empresa/out/huge.sii",
+  'SiiNunit\n{\n cargo_def: .x { cargo: "cargo.corn" }\n}\n'+
+  " ".repeat(1100000));
+ await assert.rejects(creator.loadMap(tooBig),/grande demais|excede limite/);
+
+
  // O nome é auxiliar: se ele contradiz os arquivos IN/OUT, a mercadoria
  // efetivamente declarada deve prevalecer. O nome SOZINHO não libera frete.
  function counterExample(id,role,old){
@@ -154,8 +229,8 @@ async function main(){
   "tijolo","out",{id:"carga13"})?.kind,"direta");
  const noCargo={id:"empresaA",role:"materiais",old:[{dir:"out",stem:"bricks",unit:null}]};
  assert.equal(creator.companyCargoCompatibility(noCargo,creator.companyCargoProfile(noCargo),
-  "tijolo","out",{id:"carga13"})?.kind,"inferida",
-  "Sem cargo: não se pode alegar correspondência direta");
+  "tijolo","out",{id:"carga13"}),null,
+  "Nome do arquivo nunca pode substituir evidência cargo: real");
 
 
  // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS

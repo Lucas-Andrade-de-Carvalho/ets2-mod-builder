@@ -1,3 +1,8 @@
+/* @deprecated - versão histórica, mantida somente para compatibilidade e comparação.
+ * O site index.html usa o motor atualizado incorporado de creator_tab.js.
+ * NÃO use este arquivo isoladamente para gerar Companys. Não é carregado
+ * pelo HTML. Ver README.md (Arquitetura e fluxo de validação).
+ */
 
 (function(){
 "use strict";

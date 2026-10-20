@@ -1,10 +1,11 @@
-name: Company Logistics smoke tests
+name: ETS2 Company Logistics - quality gates
 
 on:
   push:
     paths:
       - "index.html"
       - "creator_tab.js"
+      - "engine_universal.js"
       - "scs_company_catalog.js"
       - "tests/**"
       - ".github/workflows/company-smoke.yml"
@@ -12,18 +13,25 @@ on:
     paths:
       - "index.html"
       - "creator_tab.js"
+      - "engine_universal.js"
       - "scs_company_catalog.js"
       - "tests/**"
+      - ".github/workflows/company-smoke.yml"
 
 jobs:
-  smoke:
+  validate:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Validate ZIP/SCS parser, Company generation and downloads
+          node-version: "22"
+      - name: Static and script integrity
+        run: node tests/project-integrity.cjs
+      - name: Check source-to-HTML synchronization
+        run: node scripts/sync-company-engine.cjs --check
+      - name: SII/ZIP parsing, economy, SCS export and UI regression
         run: node tests/company-creator.smoke.cjs

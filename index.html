@@ -62,7 +62,7 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 <body>
 <header>
 <h1>ETS2 Company Logistics — Ultimate Update</h1>
-<p>Classificação por ID, DEF e associações + logística automática. No modo de atualização, o SCS anterior preserva as empresas já configuradas e ensina o padrão das novas. As cargas existentes nunca definem o ramo da empresa.</p>
+<p>Logística baseada nas mercadorias reais de IN/OUT e na coerência econômica de cada empresa. O catálogo e os nomes são auxiliares; empresas sem cargas compatíveis permanecem no mapa sem fretes novos.</p>
 <div class="nav">
 <button data-page="files">Arquivos</button><button data-page="creator">Criação de Companys</button><button data-page="companies">Empresas</button><button data-page="logistics">Logística</button><button data-page="chains">Cadeias</button><button data-page="export">Gerar SCS</button>
 </div>
@@ -70,7 +70,7 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 <main>
 <section id="files" class="page active">
 <div class="card">
-<h2>Arquivos do mapa</h2>
+<h2>Arquivos do mapa</h2><p class="muted small">Esta aba atualiza uma Company existente. Para gerar um SCS universal usando a DEF original do mapa e a DEF do reboque, use Criação de Companys.</p>
 <div class="upload-grid">
 <div class="upload"><div class="icon">🚛</div><div class="txt"><b>Company .SCS atual</b><span id="mainFileName">Versão nova do mapa</span></div><label class="pick"><span>Selecionar</span><input id="mainFile" type="file" accept=".scs,.zip"></label></div>
 <div class="upload"><div class="icon">↻</div><div class="txt"><b>SCS anterior já modificado</b><span id="previousFileName">Opcional — para atualizar novas empresas</span></div><label class="pick"><span>Selecionar</span><input id="previousFile" type="file" accept=".scs,.zip"></label></div>
@@ -91,7 +91,7 @@ main{width:min(1280px,94vw);margin:20px auto 48px}.page{display:none}.page.activ
 
 <section id="chains" class="page"><div class="card"><h2>Cadeias das cargas</h2><div class="chain header"><div>Carga</div><div>Origem</div><div>Intermediário</div><div>Destino</div></div><div id="chainTable"></div></div></section>
 
-<section id="export" class="page"><div class="card"><h2>Gerar arquivo</h2><div id="exportState" class="notice">Selecione e analise um .scs primeiro.</div><div id="exportPreview"></div><div class="export-actions"><button id="generate" class="btn primary" disabled>Gerar novo .SCS</button><span id="exportStatus" class="muted small"></span></div><div id="progress" class="progress"><i></i></div></div></section>
+<section id="export" class="page"><div class="card"><h2>Gerar arquivo</h2><p class="muted small"><strong>Modo de atualização de um SCS existente.</strong> Para neutralizar as cargas antigas de todas as empresas do mapa e gerar apenas cargos do reboque, use a aba <strong>Criação de Companys</strong>. Os dois geradores são diferentes.</p><div id="exportState" class="notice">Selecione e analise um .scs primeiro.</div><div id="exportPreview"></div><div class="export-actions"><button id="generate" class="btn primary" disabled>Gerar novo .SCS</button><span id="exportStatus" class="muted small"></span></div><div id="progress" class="progress"><i></i></div></div></section>
 
 <section id="creator" class="page">
  <div class="card">
@@ -400,12 +400,33 @@ function buildPlan(companies){
  return{plan,active,audit}
 }
 
+// Proteção do modo Arquivos / Gerar SCS: um ZIP pequeno pode
+// expandir para arquivos gigantescos e congelar o navegador.
+function validateMainArchive(zip,label="SCS"){
+ const totalMax=800*1024*1024,singleMax=150*1024*1024,entriesMax=100000;
+ let total=0,count=0;
+ for(const [raw,obj] of Object.entries(zip.files||{})){
+  if(obj.dir)continue;
+  if(++count>entriesMax)throw Error("ZIP contém mais de 100 mil arquivos: "+label);
+  if(String(raw).replace(/\\/g,"/").split("/").some(x=>x==="."||x===".."))
+   throw Error("Caminho inseguro encontrado no ZIP: "+raw);
+  if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
+   throw Error("Caminho original inseguro no ZIP: "+raw);
+  const bytes=obj._data?.uncompressedSize;
+  if(Number.isFinite(bytes)){
+   if(bytes>singleMax)throw Error("Um arquivo da DEF excede 150 MB: "+raw);
+   total+=bytes;
+   if(total>totalMax)throw Error("Conteúdo expandido do ZIP excede 800 MB. Anexe apenas a DEF: "+label);
+  }
+ }
+ return{entries:count,uncompressedBytes:total};
+}
 async function readZipText(obj,max=MAX_META_FILE){try{const size=obj?._data?.uncompressedSize??0;if(size&&size>max)return"";const t=await obj.async("text");return t.replace(/[^\x09\x0A\x0D\x20-\x7EÀ-ÿ]/g," ").slice(0,max)}catch{return""}}
 async function scanArchive(zip){const map=new Map(),globalCandidates=[];const paths=Object.keys(zip.files);for(const raw of paths){const p=pathNorm(raw),obj=zip.files[raw];const ci=companyPathInfo(p);if(ci){const key=norm(ci.id);if(!map.has(key))map.set(key,{id:ci.id,key,localMeta:"",globalMeta:"",externalDef:"",metaSources:new Set(),defSources:new Set(),availableIn:new Set(),availableOut:new Set(),extraIn:new Set(),extraOut:new Set(),officialPaths:[],allCompanyPaths:[]});const c=map.get(key);c.allCompanyPaths.push(raw);const cp=cargoPathInfo(p);if(cp&&!obj.dir){if(OFFICIAL_SET.has(cp.cargo)){(cp.dir==="in"?c.availableIn:c.availableOut).add(cp.cargo);c.officialPaths.push({raw,path:p,dir:cp.dir,cargo:cp.cargo})}else if(/\.sii$/i.test(p)){(cp.dir==="in"?c.extraIn:c.extraOut).add(cp.cargo)}}if(!obj.dir&&TEXT_EXT.test(p)&&!/\/(in|out)\//i.test("/"+p)){globalCandidates.push({raw,obj,p,localKey:key,priority:3})}}else if(!obj.dir&&TEXT_EXT.test(p)&&(/(?:^|\/)def\//i.test(p)||/company|companies|company_data/i.test(p))){globalCandidates.push({raw,obj,p,localKey:null,priority:/company/i.test(p)?2:1})}}
 const companies=[...map.values()];const chosen=globalCandidates.sort((a,b)=>b.priority-a.priority).slice(0,1600);for(let i=0;i<chosen.length;i+=10){await Promise.all(chosen.slice(i,i+10).map(async f=>{const text=await readZipText(f.obj);if(!text)return;if(f.localKey&&map.has(f.localKey)){const c=map.get(f.localKey);c.localMeta=(c.localMeta+"\n"+text.slice(0,5000)).slice(-28000);c.metaSources.add(f.p);return}const lowPath=f.p.toLowerCase(),lowText=text.toLowerCase();for(const c of companies){const key=norm(c.id);let hit=lowPath.includes(key);if(!hit&&key.length>=2)hit=idOccurs(text,c.id);if(!hit)continue;const ctx=findContext(text,c.id)||text.slice(0,1200);c.globalMeta=(c.globalMeta+"\n"+ctx).slice(-30000);c.metaSources.add(f.p)}}))}
 return{companies,paths}}
 
-async function scanExternalDefs(files,companies,seq){let matched=0,entries=0;for(const file of files){if(seq!==state.analysisSeq)return;const fmt=await detectArchiveFormat(file);if(fmt.type!=="zip")continue;let z;try{z=await JSZip.loadAsync(file,{createFolders:true})}catch{continue}const entriesList=Object.entries(z.files).filter(([p,o])=>!o.dir&&TEXT_EXT.test(p)).slice(0,3200);for(let i=0;i<entriesList.length;i+=10){if(seq!==state.analysisSeq)return;await Promise.all(entriesList.slice(i,i+10).map(async([raw,obj])=>{entries++;const text=await readZipText(obj,480000);if(!text)return;const lp=pathNorm(raw).toLowerCase(),lt=text.toLowerCase();for(const c of companies){const key=norm(c.id);let hit=lp.includes(key);if(!hit&&key.length>=2)hit=idOccurs(text,c.id);if(!hit)continue;const before=c.externalDef.length;const ctx=findContext(text,c.id)||text.slice(0,1500);c.externalDef=(c.externalDef+"\n"+ctx).slice(-36000);c.defSources.add(file.name+" :: "+pathNorm(raw));if(!before&&c.externalDef.length)matched++}}))}}return{matched,entries}}
+async function scanExternalDefs(files,companies,seq){let matched=0,entries=0;for(const file of files){if(seq!==state.analysisSeq)return;const fmt=await detectArchiveFormat(file);if(fmt.type!=="zip")continue;let z;try{z=await JSZip.loadAsync(file,{createFolders:true});validateMainArchive(z,file.name)}catch{continue}const entriesList=Object.entries(z.files).filter(([p,o])=>!o.dir&&TEXT_EXT.test(p)).slice(0,3200);for(let i=0;i<entriesList.length;i+=10){if(seq!==state.analysisSeq)return;await Promise.all(entriesList.slice(i,i+10).map(async([raw,obj])=>{entries++;const text=await readZipText(obj,480000);if(!text)return;const lp=pathNorm(raw).toLowerCase(),lt=text.toLowerCase();for(const c of companies){const key=norm(c.id);let hit=lp.includes(key);if(!hit&&key.length>=2)hit=idOccurs(text,c.id);if(!hit)continue;const before=c.externalDef.length;const ctx=findContext(text,c.id)||text.slice(0,1500);c.externalDef=(c.externalDef+"\n"+ctx).slice(-36000);c.defSources.add(file.name+" :: "+pathNorm(raw));if(!before&&c.externalDef.length)matched++}}))}}return{matched,entries}}
 
 
 function setIntersection(a,b){const s=new Set();for(const x of a)if(b.has(x))s.add(x);return s}
@@ -479,7 +500,7 @@ async function loadPreviousReference(file,seq){
  if(!file)return{companies:[],map:new Map(),format:null};
  const fmt=await detectArchiveFormat(file);if(seq!==state.analysisSeq)return null;
  if(fmt.type!=='zip')return{companies:[],map:new Map(),format:fmt,error:fmt.type==='hashfs'?'O SCS anterior usa HashFS e não pode ser lido como ZIP neste navegador.':'Formato do SCS anterior não reconhecido.'};
- let zip;try{zip=await JSZip.loadAsync(file,{createFolders:true,checkCRC32:false})}catch(e){return{companies:[],map:new Map(),format:fmt,error:'Não foi possível abrir o SCS anterior: '+(e?.message||e)}}
+ let zip;try{zip=await JSZip.loadAsync(file,{createFolders:true,checkCRC32:false});validateMainArchive(zip,file.name)}catch(e){return{companies:[],map:new Map(),format:fmt,error:'Não foi possível abrir o SCS anterior: '+(e?.message||e)}}
  const scanned=await scanArchive(zip);if(seq!==state.analysisSeq)return null;
  const companies=scanned.companies;classifyAll(companies);for(const c of companies)c.roles=deriveRoles(c);
  return{companies,map:new Map(companies.map(c=>[c.key,c])),format:fmt,paths:scanned.paths}
@@ -498,7 +519,7 @@ async function analyze(){
    renderEmpty();return
   }
   let zip;try{zip=await JSZip.loadAsync(state.file,{createFolders:true,checkCRC32:false})}catch(e){throw new Error('Não foi possível abrir o SCS atual como ZIP. '+(e?.message||e))}
-  if(seq!==state.analysisSeq)return;state.zip=zip;
+  if(seq!==state.analysisSeq)return;validateMainArchive(zip,state.file.name);state.zip=zip;
   const scanned=await scanArchive(zip);if(seq!==state.analysisSeq)return;state.companies=scanned.companies;state.archivePaths=scanned.paths;if(!state.companies.length)throw new Error('Nenhuma pasta company/<empresa> foi encontrada no arquivo atual.');
 
   if(state.defFiles.length){setStatus($('defStatus'),'Lendo DEF auxiliar...','');const d=await scanExternalDefs(state.defFiles,state.companies,seq);if(seq!==state.analysisSeq)return;state.defMatches=d?.matched||0;setStatus($('defStatus'),`${state.defFiles.length} arquivo(s) DEF analisado(s) · ${state.defMatches} empresa(s) com contexto adicional.`,'good')}
@@ -565,19 +586,20 @@ async function verifyBlob(blob,originalPaths){
  }
  return true
 }
-async function generateSCS(){if(!state.file||!state.zip||!state.stats)return;state.audit=state.updateMode?incrementalAudit(state.companies,state.plan,state.newCompanyKeys):hardenPlan(state.companies,state.plan,state.activeCargos);if(!state.audit.ok){$("exportStatus").textContent="A geração foi bloqueada pela checagem interna.";return}$("generate").disabled=true;$("progress").style.display='block';$("progress").firstElementChild.style.width='2%';$("exportStatus").textContent='Preparando arquivo...';try{const zip=await JSZip.loadAsync(state.file,{createFolders:true,checkCRC32:false});const originalPaths=Object.keys(zip.files);let removed=0;for(const raw of originalPaths){if(shouldRemoveOfficialPath(raw)){zip.remove(raw);removed++}}const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6},streamFiles:true},m=>{const pct=Math.max(2,Math.min(92,Math.round(m.percent*.92)));$("progress").firstElementChild.style.width=pct+'%';$("exportStatus").textContent=`Compactando... ${Math.round(m.percent)}%`});$("exportStatus").textContent='Verificando o SCS gerado...';$("progress").firstElementChild.style.width='95%';await verifyBlob(blob,originalPaths);$("progress").firstElementChild.style.width='100%';const a=document.createElement('a');const base=state.file.name.replace(/\.(scs|zip)$/i,'');const url=URL.createObjectURL(blob);a.href=url;a.download=base+(state.updateMode?'_logistica_atualizada.scs':'_logistica_ultimate.scs');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),45000);$("exportStatus").textContent=`✓ Gerado e verificado · ${removed} definição(ões) oficial(is) removida(s).`}catch(e){$("exportStatus").textContent='Erro: '+(e.message||e);$("exportState").className='errorbox';$("exportState").textContent='O arquivo não foi baixado porque a autoverificação detectou um problema.'}finally{$("generate").disabled=!state.zip||!state.stats||state.stats.officialFiles===0;setTimeout(()=>{$("progress").style.display='none';$("progress").firstElementChild.style.width='0'},1000)}}
+async function generateSCS(){if(!state.file||!state.zip||!state.stats)return;state.audit=state.updateMode?incrementalAudit(state.companies,state.plan,state.newCompanyKeys):hardenPlan(state.companies,state.plan,state.activeCargos);if(!state.audit.ok){$("exportStatus").textContent="A geração foi bloqueada pela checagem interna.";return}$("generate").disabled=true;$("progress").style.display='block';$("progress").firstElementChild.style.width='2%';$("exportStatus").textContent='Preparando arquivo...';try{const zip=await JSZip.loadAsync(state.file,{createFolders:true,checkCRC32:false});validateMainArchive(zip,state.file.name);const originalPaths=Object.keys(zip.files);let removed=0;for(const raw of originalPaths){if(shouldRemoveOfficialPath(raw)){zip.remove(raw);removed++}}const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6},streamFiles:true},m=>{const pct=Math.max(2,Math.min(92,Math.round(m.percent*.92)));$("progress").firstElementChild.style.width=pct+'%';$("exportStatus").textContent=`Compactando... ${Math.round(m.percent)}%`});$("exportStatus").textContent='Verificando o SCS gerado...';$("progress").firstElementChild.style.width='95%';await verifyBlob(blob,originalPaths);$("progress").firstElementChild.style.width='100%';const a=document.createElement('a');const base=state.file.name.replace(/\.(scs|zip)$/i,'');const url=URL.createObjectURL(blob);a.href=url;a.download=base+(state.updateMode?'_logistica_atualizada.scs':'_logistica_ultimate.scs');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),45000);$("exportStatus").textContent=`✓ Gerado e verificado · ${removed} definição(ões) oficial(is) removida(s).`}catch(e){$("exportStatus").textContent='Erro: '+(e.message||e);$("exportState").className='errorbox';$("exportState").textContent='O arquivo não foi baixado porque a autoverificação detectou um problema.'}finally{$("generate").disabled=!state.zip||!state.stats||state.stats.officialFiles===0;setTimeout(()=>{$("progress").style.display='none';$("progress").firstElementChild.style.width='0'},1000)}}
 
 function renderChains(){const roleNames=r=>r.map(roleLabel).join(' / ');$("chainTable").innerHTML=OFFICIAL.map(c=>{const s=CHAINS[c];const via=s.via==='grain'?'Recebe em silo ou processador; sem silo→silo forçado':s.via?'Transportadora / hub opcional':'Direto';return `<div class="chain"><div><b>${c}</b><br><span class="muted small">${esc(CARGO_NAMES[c]||'')}</span></div><div>${esc(roleNames(s.orig))}</div><div>${esc(via)}</div><div>${esc(roleNames(s.dest))}</div></div>`}).join('')}
 
 for(const [k,v] of Object.entries(CATEGORIES))$("categoryFilter").insertAdjacentHTML('beforeend',`<option value="${k}">${v}</option>`);$("search").addEventListener('input',renderCompanies);$("categoryFilter").addEventListener('change',renderCompanies);$("generate").addEventListener('click',generateSCS);$("previousFile").addEventListener('change',e=>{state.previousFile=e.target.files?.[0]||null;$("previousFileName").textContent=state.previousFile?state.previousFile.name:'Opcional — para atualizar novas empresas';if(state.file)analyze()});renderChains();
 $("mainFile").addEventListener('change',async e=>{state.file=e.target.files[0]||null;$("mainFileName").textContent=state.file?state.file.name:'Arquivo principal';if(state.file)await analyze()});
 $("defFiles").addEventListener('change',async e=>{state.defFiles=[...e.target.files];$("defFileName").textContent=state.defFiles.length?state.defFiles.length===1?state.defFiles[0].name:`${state.defFiles.length} arquivos selecionados`:'Opcional — um ou vários ZIPs';if(state.file)await analyze()});
+window.Ets2MainTest={validateMainArchive};
 window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Erro interno: '+e.message,'bad')});
 </script>
 <script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · COERÊNCIA ECONÔMICA · v3.2";
+const ENGINE_BUILD="2026-10-20 · AUDITORIA E SEGURANÇA · v4";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -616,6 +638,12 @@ function checkMapCompanyAgainstSCS(company){
  company.catalogConsulted=true;
  if(!reference){company.catalog=null;return null}
  company.catalog=reference;
+ // O catálogo fornece contexto, mas nunca apaga uma classificação manual
+ // ou uma atividade já corrigida por provas mais fortes do IN/OUT.
+ if(company.evidence==="classificação informada pelo usuário"||
+    company.evidence?.startsWith("categoria agroinsumos inferida de OUT")||
+    company.evidence?.startsWith("movimentação IN/OUT"))
+   return reference;
  company.role=reference.role;
  company.evidence="empresa padrão SCS reconhecida por "+reference.matchBy+": "+reference.name+" ("+reference.source+")";
  return reference;
@@ -840,11 +868,16 @@ async function mapFingerprint(map){
 // Leitor de pacotes ZIP, inclusive SCS/ZIP guardados dentro de outro ZIP.
 // Mantém os nomes internos: prefixos de pastas só são removidos na projeção
 // canonizada de def/company e def/cargo, nunca nos dados originais.
+// Limites combinados: um ZIP pequeno também pode declarar gigabytes de
+// arquivos expandidos. Rejeitar ANTES de descompactar evita travar o navegador.
 const ARCHIVE_LIMITS=Object.freeze({
  maxDepth:3,
  maxNestedFiles:32,
  maxEntries:120000,
- maxNestedBytes:320*1024*1024
+ maxNestedBytes:320*1024*1024,
+ maxExpandedBytes:800*1024*1024,
+ maxSingleEntryBytes:150*1024*1024,
+ maxCargoDefinitionBytes:1024*1024
 });
 const ARCHIVE_FILE=/\.(?:zip|scs)$/i;
 const ZIP_SIGNATURES=new Set(["504b0304","504b0506","504b0708"]);
@@ -864,7 +897,7 @@ async function zipRead(file){
 }
 async function resolveEntries(zip,kind){
  const matched=[],stack=[{zip,level:0,source:"arquivo enviado"}];
- let entryCount=0,nestedCount=0,skippedHashFS=0;
+ let entryCount=0,nestedCount=0,skippedHashFS=0,expandedBytes=0;
  const isRelevant=kind==="map"?companyPath:cargoPath;
  while(stack.length){
   const frame=stack.pop();
@@ -874,6 +907,14 @@ async function resolveEntries(zip,kind){
   for(const [raw,obj] of Object.entries(frame.zip.files)){
    if(obj.dir)continue;
    if(++entryCount>ARCHIVE_LIMITS.maxEntries)throw Error("Pacote muito grande: limite de "+ARCHIVE_LIMITS.maxEntries+" entradas alcançado. Selecione só a DEF do mapa.");
+   const declaredSize=obj._data?.uncompressedSize;
+   if(Number.isFinite(declaredSize)){
+    if(declaredSize>ARCHIVE_LIMITS.maxSingleEntryBytes)
+     throw Error("Arquivo expandido grande demais para uma DEF: "+raw);
+    expandedBytes+=declaredSize;
+    if(expandedBytes>ARCHIVE_LIMITS.maxExpandedBytes)
+     throw Error("ZIP expandido supera 800 MB. Separe apenas as definições necessárias, sem modelos ou texturas.");
+   }
    if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
      throw Error("Caminho inseguro encontrado no arquivo "+frame.source);
    const name=pathNorm(raw);
@@ -970,15 +1011,21 @@ function oldCargoCategory(stemOrUnit){
 function categorizeExistingCompanyLoads(c){
  const result={in:new Map(),out:new Map(),unknownIn:0,unknownOut:0};
  for(const x of c.old){
-  const role=oldCargoCategory(x.unit)||oldCargoCategory(x.stem);
-  x.category=role;
-  if(role)result[x.dir].set(role,(result[x.dir].get(role)||0)+1);
-  else if(x.dir==="in")result.unknownIn++;
-  else result.unknownOut++;
+  const values=x.units?.length?x.units:[x.unit].filter(Boolean);
+  if(!values.length){
+   x.category=null;
+   if(x.dir==="in")result.unknownIn++;else result.unknownOut++;
+   continue;
+  }
+  for(const unit of values){
+   const role=oldCargoCategory(unit);
+   if(!x.category)x.category=role;
+   if(role)result[x.dir].set(role,(result[x.dir].get(role)||0)+1);
+   else if(x.dir==="in")result.unknownIn++;else result.unknownOut++;
+  }
  }
  return result;
 }
-
 // Uma mercadoria pode ser expedida de um estabelecimento de estoque ou revenda,
 // sem existir uma fábrica no mapa. Identificamos o ramo pelas cargas REAIS da DEF.
 const CONSTRUCTION_CARGO_MARKERS=[
@@ -1118,6 +1165,55 @@ function farmCargoEvidence(c,type){
  return oldSpecificEvidence(c,type,"out");
 }
 
+// Interpreta campos cargo: respeitando comentários de linha/bloco e strings.
+// Devolve offsets para desativar permissões sem destruir outros campos SII.
+function maskSiiComments(source){
+ const text=String(source),chars=[...text];let quote="",line=false,block=false;
+ for(let i=0;i<text.length;i++){
+  const ch=text[i],next=text[i+1];
+  if(line){
+   if(ch==="\n"){line=false;continue}
+   if(ch!=="\r")chars[i]=" ";
+   continue;
+  }
+  if(block){
+   if(ch==="*"&&next==="/"){chars[i]=" ";chars[i+1]=" ";i++;block=false;continue}
+   if(ch!=="\n"&&ch!=="\r")chars[i]=" ";
+   continue;
+  }
+  if(quote){
+   if(ch==="\\"){i++;continue}
+   if(ch===quote)quote="";
+   continue;
+  }
+  if(ch==='"'||ch==="'"){quote=ch;continue}
+  if(ch==="/"&&next==="/"){chars[i]=" ";chars[i+1]=" ";i++;line=true;continue}
+  if(ch==="/"&&next==="*"){chars[i]=" ";chars[i+1]=" ";i++;block=true;continue}
+ }
+ return chars.join("");
+}
+function scanCompanyCargoFields(source){
+ const clean=maskSiiComments(source),fields=[];
+ const re=/(^|[{\n\r])(\s*cargo\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s}\r\n]+)/gmi;
+ let match;
+ while((match=re.exec(clean))){
+  const start=match.index+match[1].length+match[2].length;
+  const literal=match[0].slice(match[1].length+match[2].length);
+  const value=literal.replace(/^["']|["']$/g,"").trim();
+  fields.push({start,end:start+literal.length,value});
+ }
+ return fields;
+}
+function parseCompanyCargoUnits(source,path){
+ const fields=scanCompanyCargoFields(source),units=[];
+ for(const field of fields){
+  if(!field.value)continue; // cargo: "" neutraliza a permissão.
+  const m=field.value.match(/^cargo\.([a-z0-9_]+)$/i);
+  if(!m)throw Error("Referência cargo: inválida em "+path+": "+field.value.slice(0,80));
+  units.push(m[1].toLowerCase());
+ }
+ return [...new Set(units)];
+}
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  const resolution=await resolveEntries(zip,"map");
@@ -1129,7 +1225,7 @@ async function loadMap(zip){
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
   if(m.type==="editor")c.editor++;
-  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
+  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,units:[],category:null});
  }
  if(!companies.size){
   const sample=Object.keys(zip.files).filter(p=>!zip.files[p].dir).slice(0,6);
@@ -1143,18 +1239,26 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
- let parsedRelations=0,scannedRelations=0;
+ let parsedRelations=0,scannedRelations=0,withoutCargo=0;
+ const relationsByPath=new Map();
+ for(const c of companies.values())for(const item of c.old)
+  relationsByPath.set(item.p.toLowerCase(),item);
  for(const item of files.values()){
   const m=companyMeta(item.p);
   if(!m||(m.type!=="in"&&m.type!=="out"))continue;
-  const obj=item.obj;
-  if((obj._data?.uncompressedSize||0)>100000)continue;
-  const raw=await obj.async("text");
-  const match=raw.replace(/\/\/[^\n]*/g,"").match(/\bcargo\s*:\s*["']?cargo\.([a-z0-9_]+)/i);
-  if(match){
-   const c=companies.get(m.id);
-   const relation=c?.old.find(x=>x.p===item.p);
-   if(relation){relation.unit=match[1].toLowerCase();parsedRelations++}
+  const size=item.obj._data?.uncompressedSize||0;
+  if(size>ARCHIVE_LIMITS.maxCargoDefinitionBytes)
+   throw Error("Definição IN/OUT grande demais para interpretar com segurança: "+item.p);
+  const raw=await item.obj.async("text");
+  if(raw.length>ARCHIVE_LIMITS.maxCargoDefinitionBytes)
+   throw Error("Definição IN/OUT excede limite após extração: "+item.p);
+  const units=parseCompanyCargoUnits(raw,item.p);
+  const relation=relationsByPath.get(item.p.toLowerCase());
+  if(relation){
+   relation.units=units;
+   relation.unit=units[0]||null;
+   parsedRelations+=units.length;
+   if(!units.length)withoutCargo++;
   }
   if(++scannedRelations%180===0)await yieldUI();
  }
@@ -1182,7 +1286,7 @@ async function loadMap(zip){
   inferConstructionSupplyFromINOUT(c);
  }
 
- return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
+ return{companies,files,parsedRelations,withoutCargo,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
@@ -1200,7 +1304,7 @@ async function loadCargo(zip){
   const txt=await f.obj.async("text"),p=f.p;
   if(/^def\/cargo\.[a-z0-9_-]+\.sii$/i.test(p))manifests.push(p);
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
-  if(id&&/^carga\d+$/i.test(id)){
+  if(id&&/^[a-z][a-z0-9_]*$/i.test(id)){
    let label=(txt.match(/^\s*name\s*:\s*"([^"]+)"/mi)||[])[1]||"";
    if(!label||label.includes("@@")){const n=id.match(/^carga(\d+)$/i);label=n?names[Number(n[1])-1]||id:id}
    const bs=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\d*\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
@@ -1764,16 +1868,17 @@ const UNIVERSAL_FREIGHT={
  pallets:/^(?:empty_palet|empty_pallet|pallets?|paletes?|used_packag|wood_pallets?)$/i
 };
 function companyCargoProfile(c){
- // O campo cargo: é a prova forte. O nome do arquivo é só um indício fraco
- // quando cargo: não pôde ser interpretado.
+ // Fontes do perfil: SOMENTE cargo: real, não nome de empresa ou .sii.
  const groups={in:new Set(),out:new Set()},declared={in:new Set(),out:new Set()};
  for(const item of c.old||[]){
   if(!groups[item.dir])continue;
-  const real=String(item.unit||"").toLowerCase().replace(/^cargo[.:]/,"").trim();
-  const token=real||String(item.stem||"").toLowerCase().trim();
-  if(!token||/^carga\d+$/i.test(token))continue;
-  groups[item.dir].add(token);
-  if(real)declared[item.dir].add(real);
+  const values=item.units?.length?item.units:[item.unit].filter(Boolean);
+  for(const value of values){
+   const token=String(value).toLowerCase().replace(/^cargo[.:]/,"").trim();
+   if(!token||/^carga\d+$/i.test(token))continue;
+   groups[item.dir].add(token);
+   declared[item.dir].add(token);
+  }
  }
  const count=(dir,re)=>[...groups[dir]].filter(x=>re.test(x)).length;
  return{...groups,declared,count,total:groups.in.size+groups.out.size};
@@ -1909,13 +2014,9 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
    reason:"cargo: documentado no "+dir.toUpperCase()+
      (mismatch?" (atividade econômica reavaliada: "+coherence.reason+")":"")};
  }
- // O nome do arquivo pode auxiliar, mas sozinho não vale evidência DIRETA.
- const filenameRelated=(!declared.size)&&
-   [...profile[dir]].some(unit=>oldCargoCategory(unit)===type);
+ // O nome do arquivo nunca cria permissão de frete.
  // Evitar extrapolar um operador genérico com quase todo o catálogo.
  if(profile.total>=95)return null;
- if(filenameRelated)return{score:57,kind:"inferida",
-  reason:"mercadoria sugerida pelo nome de arquivo, sem cargo: confirmado"};
  const outs=re=>n("out",re),ins=re=>n("in",re);
  let reason="",score=0; switch(type){
   case "milho":case "soja":case "sorgo":
@@ -2045,12 +2146,15 @@ const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"
 // pelo jogo. Conforme a documentação oficial SCS, cargo vazio desativa
 // aquela permissão. Preservar o MESMO caminho é indispensável.
 function disableExistingCargo(raw,p){
- let count=0;
- const result=String(raw).replace(/(\bcargo\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s}\r\n]+)/gi,
-  (_,prefix)=>{count++;return prefix+'""';});
- if(count)return result;
- // Arquivos de IN/OUT sem cargo conhecido também são neutralizados.
- return "SiiNunit\n{\n}\n";
+ const source=String(raw),fields=scanCompanyCargoFields(source);
+ // Preservar arquivos sem cargo: em vez de produzir um SII sem unidade.
+ if(!fields.length)return source;
+ let result=source;
+ for(const item of [...fields].reverse())
+  result=result.slice(0,item.start)+'""'+result.slice(item.end);
+ if(parseCompanyCargoUnits(result,p).length)
+  throw Error("Não foi possível neutralizar todas as permissões: "+p);
+ return result;
 }
 async function build(map,cargo,sim){
  const out=new JSZip(),keys=new Set(),generated=new Map();
@@ -2191,6 +2295,7 @@ function createDiagnosticText(map,cargo,sim){
   "Empresas existentes na DEF consultadas no catálogo durante a distribuição: "+(sim.catalogChecks?.consulted??map.companies.size),
   "Empresas padrão reconhecidas entre elas: "+(sim.catalogChecks?.matched??0),
   "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
+  "Arquivos IN/OUT sem campo cargo ativo: "+(map.withoutCargo||0),
   "Integridade da DEF: "+JSON.stringify(isGenericCompanyMap(map)),
   "ATENÇÃO: uma Company formada majoritariamente por cargo.cargaN não documenta os produtos originais dos estabelecimentos.",
   "Empresas: "+map.companies.size,
@@ -2320,7 +2425,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();</script>
 </body>
 </html>
