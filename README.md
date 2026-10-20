@@ -83,3 +83,8 @@ O contexto consolidado para outra conversa está em [HANDOFF_COMPANY_LOGISTICS.m
 - Testes unitários/simulados: oito cenários de evidência por mercadoria passaram.
 - Teste integral do `index.html` com ZIP de mapa em subpasta, DEF do Librelato também em subpasta, cinco cargas das duas grades e 11 empresas: pacote SCS aberto novamente, 13 relações IN/OUT, 14 verificações de integridade e regras concluídas, download funcionando, nenhuma empresa ou cargo inventado.
 - **Pendente:** análise da DEF do mapa real que apresentou oito cargas sem rota e teste com o `game.log` no ETS2. Os testes automatizados não comprovam ofertas in-game.
+
+
+## Diagnóstico de DEFs genéricas (correção 20/10/2026)
+
+O gerador agora detecta quando a DEF enviada é composta quase totalmente por permissões `cargo.cargaN` (situação observada nas antigas DEF Companies 1/2 do Librelato). Essas permissões não comprovam a atividade econômica das empresas, portanto um arquivo dessa natureza não pode substituir a **DEF Company original do mapa**. Em arquivos grandes, a geração é bloqueada com orientação explícita. O diagnóstico registra a quantidade de registros genéricos e exibe os IDs reais em `cargo:` encontrados nos IN/OUT, não apenas os nomes dos arquivos `.sii`. As regras também identificam revendas de construção e agropecuárias por entradas de estoque e saídas de mercadorias relacionadas. Não se garante rota quando as provas faltam.
