@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · MERCADO EQUILIBRADO · v6.2";
+const ENGINE_BUILD="2026-10-20 · DEF REAL E CATEGORIAS · v6.3";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],
@@ -1741,27 +1741,27 @@ function economicContextCandidate(c,profile,type,dir){
 // naturalmente unilateral, sem precisar existir um produtor industrial.
 // Tokens históricos comprovam a categoria, nunca a identidade física exata.
 const CARGO_CATEGORY_INDEX=Object.freeze({
- graos:{types:["milho","soja","sorgo"],goods:/^(?:milho|corn|corn_b|maize|soybeans?|soja|sorghum|sorgo|grain|grains|graos?|wheat|trigo|rice|arroz|barley|cevada)$/i,
+ graos:{types:["milho","soja","sorgo"],goods:/^(?:(?:rbr|ros|cs)_)?(?:milho(?:_[ab])?|soja(?:_[ab])?|soybeans?(?:_b)?|sorgo(?:alto)?|sorghum|corn(?:_b)?|maize|grain|grains|graos?|wheat|trigo|rice|arroz|barley|cevada|feijao)(?:_[ab])?$/i,
   both:["silo","cooperativa","agroinsumos","logistica"],ship:["fazenda"],receive:["moinho","racoes","pecuaria"],need:["agroinsumos","logistica"]},
- fertilizantes:{types:["adubo"],goods:/^(?:adubo|fertilizantes?|fertilizers?|ureia|urea|big_bag_seed|seeds?|sementes?)$/i,
+ fertilizantes:{types:["adubo"],goods:/^(?:(?:rbr|ros|tnh|cs)_)?(?:adubo|fertilizantes?|fertilizers?|ureia|urea|nitrato|npk(?:_10)?|big_bag_seed|seeds?|sementes?|bsementes)$/i,
   both:["agroinsumos","cooperativa","logistica"],ship:["adubeira"],receive:["fazenda","pecuaria"],need:["logistica"]},
- construcao:{types:["cimento","tijolo"],goods:/^(?:cement|cimento|concrete|concr_beams|bricks?|tijolos?|roof_tiles|tiles?|floorpanels|wallpanels|precast_strs|gravel|brita|sand|areia|stones?|pedras?|calcario|limestone)$/i,
+ construcao:{types:["cimento","tijolo"],goods:/^(?:(?:rbr|ros|cs|tnh)_)?(?:cement|cimento|concrete|concr_beams|bricks?|tijolos?(?:_b)?|roof_tiles|telhas?(?:_b)?|tiles?|floorpanels|wallpanels|precast_strs|gravel|brita|sand|areia|stones?|pedras?|calcario|limestone|cascalho|argamassa|concpmold)$/i,
   both:["materiais","logistica"],ship:["cimenteira","ceramica"],receive:["obras","premoldados"],need:["logistica"]},
- rochas:{types:["granito"],goods:/^(?:granito|granitto|granite|marble|marmore|stones?|pedras?|calcario|limestone|gravel|sand|bricks?|tijolos?)$/i,
+ rochas:{types:["granito"],goods:/^(?:(?:rbr|ros|cs|tnh)_)?(?:granito|granitto|granite|marble|marmore[0-9]?|stones?|pedras?|calcario|limestone|gravel|brita|sand|areia|cascalho|minerio|ore|ladepedr|bricks?|tijolos?)$/i,
   both:["marmoraria","materiais","logistica"],ship:["pedreira","mineracao"],receive:["obras","premoldados"],need:["logistica","premoldados"]},
- siderurgia:{types:["bobinas_industriais","aco"],goods:/^(?:steel|steel_coils?|metal_coils?|bobinas?|chapaaco|chapa_aco|steel_plates?|steel_sheets?|hmetal|metal_center|ferroconst|b_reforco|largetubes|iron_pipes)$/i,
+ siderurgia:{types:["bobinas_industriais","aco"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:steel|steel_coils?|metal_coils?|bobinas?(?:[0-9])?|chapaaco|chapa_aco|steel_plates?|steel_sheets?|hmetal|metal_center|ferroconst|barras?ferro(?:b)?|barraferrob|ferro|estru_metal|b_reforco|largetubes|iron_pipes|tubo_ferro[0-9]?|vergalhao|viga_met)$/i,
   both:["siderurgica","metalurgica","logistica"],ship:[],receive:["calhas","obras"],need:["logistica","obras","calhas"]},
- madeira:{types:["madeira"],goods:/^(?:madeira|madeirame|wood|timber|lumber|logs?|toras?|boards?|planks?|sawpanels)$/i,
+ madeira:{types:["madeira"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:madeira|madeirame|madeirase(?:_b)?|wood|timber|lumber|logs?|toras?|troncos(?:_di)?|boards?|planks?|sawpanels|caibros_m|mdf|serrage)$/i,
   both:["madeireira","serraria","logistica"],ship:["floresta"],receive:["materiais","obras","paletes"],need:["logistica","materiais","obras"]},
- hortifruti:{types:["batata","laranja"],goods:/^(?:batatas?|potatoes?|potato_b|laranjas?|oranges?|citrus|fruit|frutas?|vegetables?|hortalicas?|apples?|carrots?|tomatoes?)$/i,
+ hortifruti:{types:["batata","laranja"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:batatas?(?:_[ab])?|potatoes?(?:_b)?|potato_b|laranjas?(?:_[ab])?|oranges?|citrus|fruit|frutas?|vegetables?|hortalicas?|apples?|carrots?|tomatoes?|tomate(?:_[ab])?|banana(?:_[ab])?|maca(?:_[ab])?|repolho(?:_[ab])?|alface(?:_[ab])?)$/i,
   both:["hortifruti","alimentos","cooperativa","logistica"],ship:["fazenda"],receive:["supermercado"],need:["logistica","cooperativa"]},
- bebidas:{types:["cerveja"],goods:/^(?:beer|beer_c|cervejas?|brahma|skol|antarctica|heineken|amstel|budweiser|devassa|schin|bebidas?|beverages?|beverages_c|soda|limonades|bottle_water)$/i,
+ bebidas:{types:["cerveja"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:beer|beer_c|cervejas?|brahma|skol|antarctica|heineken|amstel|budweiser|devassa|schin|itaipava|ambev|bebidas?(?:_b)?|beverages?|beverages_c|soda|limonades|bottle_water|refrigerant|suco|cerv0alc)$/i,
   both:["bebidas","alimentos","logistica"],ship:["cervejaria"],receive:["supermercado"],need:["alimentos","logistica"]},
- nutricao:{types:["racao"],goods:/^(?:racao|racoes|animal_feed|feedmeal|feed_meal|xerem|farelo|salmineral|suplementomineral|corn|milho|soja|soybeans?|sorgo|sorghum)$/i,
+ nutricao:{types:["racao"],goods:/^(?:(?:rbr|ros|cs|tnh)_)?(?:racao|racoes|animal_feed|feedmeal|feed_meal|xerem|farelo|salmineral|suplementomineral|corn|milho(?:_[ab])?|soja(?:_[ab])?|rbr_milho|rbr_soja|sorgo|sorghum)$/i,
   both:["racoes","agroinsumos","cooperativa","logistica"],ship:[],receive:["fazenda","pecuaria"],need:["agroinsumos","cooperativa","logistica"]},
- fibras:{types:["algodao"],goods:/^(?:pluma|cotton|cotton_bales?|cottonlint|algodao|cotton_seed|fabric|textiles?)$/i,
+ fibras:{types:["algodao"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:pluma|cotton|cotton_bales?|cottonlint|algodao|cotton_seed|fabric|textiles?)$/i,
   both:["algodoeira"],ship:["fazenda"],receive:["textil","cooperativa","logistica"],need:["fazenda","cooperativa","logistica"]},
- paletes:{types:["palete_vazio","paletizado"],goods:/^(?:pallets?|paletes?|empty_pallets?|wood_pallets?|madeira|wood|lumber|used_packag|scrap_wood)$/i,
+ paletes:{types:["palete_vazio","paletizado"],goods:/^(?:(?:rbr|cs|tnh)_)?(?:pallets?|paletes?|paletev|empty_pallets?|wood_pallets?|madeira|madeirase(?:_b)?|wood|lumber|used_packag|scrap_wood|sucata(?:_di)?|sucatap)$/i,
   both:["paletes","logistica"],ship:["supermercado","materiais","bebidas","cervejaria","alimentos","hortifruti","madeireira","serraria"],receive:["reciclagem","cooperativa"],need:["logistica","cooperativa"]},
  sementes:{types:["sementes_algodao"],goods:/^(?:cotton_seed|cott_seed|cottonseeds?|seeds?|sementes?|big_bag_seed|young_seed|algodao|cotton)$/i,
   both:["agroinsumos","cooperativa","logistica"],ship:["algodoeira","fazenda"],receive:["fazenda","pecuaria"],need:["logistica"]},
@@ -1781,6 +1781,10 @@ function categoryCargoCandidate(company,profile,type,dir){
  const originalOut=profile.count("out",def.goods),originalIn=profile.count("in",def.goods);
  const goods=originalOut+originalIn>0;
  const knownRole=dealer||shipper||receiver;
+ // Arquivos de mapa brasileiros usam dezenas de aliases reais (milho_a,
+ // rbr_soja, bebidas_b, madeiraSE, etc.). Uma empresa de catálogo genérico
+ // com centenas de itens não é prova de compatibilidade universal.
+ if(role==="desconhecida"&&profile.total>90)return null;
  if(!goods&&!knownRole)return null;
  if(def.need.includes(role)&&!goods)return null;
  // Empresas com produto/categoria na DEF, mas ID opaco: preservar sentido
