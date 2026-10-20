@@ -112,3 +112,8 @@ O motor percorre cada empresa real da DEF e examina seus `IN` e `OUT` antes de a
 ### Prioridade do conteúdo IN/OUT sobre nomes (v3.1)
 
 O campo `cargo:` encontrado na DEF original é agora prova primária; um nome ou ID sugerindo setor diferente não bloqueia um cargo realmente declarado. Se houver conflito, ele será registrado no diagnóstico. Nomes de arquivos `.sii` podem auxiliar apenas como evidência inferida quando `cargo:` não foi identificado. Nomes e catálogo SCS não criam novas associações por si sós. Empresas sem mercadoria compatível seguem com IN/OUT antigos neutralizados.
+
+
+### Coerência econômica (v3.2, 20/10/2026)
+
+A presença literal de `cargo:` é forte evidência documental, mas **não autorização absoluta**. Empresas de ramos especializados (siderurgia, postos, concessionárias, pedreiras, etc.) não recebem/expedem mercadorias de outros setores apenas por uma definição isolada. A contradição só pode ser superada automaticamente se várias categorias independentes de produtos reais em IN e OUT indicarem atividade alternativa **e não houver prova do ramo original nem identificação exata no catálogo SCS**. Eventos rejeitados aparecem no diagnóstico, e nenhuma empresa recebe carga obrigatória. Não é necessário conhecer previamente o mapa.
