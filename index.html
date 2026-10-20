@@ -2103,8 +2103,8 @@ function validateLogisticsKnowledge(obj){
   if(!s||!/^[-a-z0-9_]{3,45}$/.test(String(s.id||""))||ids.has(s.id))return false;
   if(typeof s.title!=="string"||s.title.length>220||typeof s.fact!=="string"||s.fact.length>700)return false;
   if(!Array.isArray(s.types)||!s.types.length||s.types.length>12)return false;
-  let u;try{u=new URL(s.url)}catch{return false}
-  if(u.protocol!=="https:"||!RESEARCH_HOSTS.has(u.hostname))return false;
+  const u=/^https:\/\/([a-z0-9.-]+)(?:\/|$)/i.exec(String(s.url||""));
+  if(!u||!RESEARCH_HOSTS.has(u[1].toLowerCase()))return false;
   ids.add(s.id);
  }
  return !!obj.policies?.noFabricatedBusinesses&&!!obj.policies?.noForcedCoverage;
