@@ -185,8 +185,8 @@ def describe_archive(path, limit=50):
         return {"arquivo":p.name,"erro":"Nao e ZIP valido nem pasta extraida"}
     normalized=[clean_path(n) or n for n in names]
     company_like=[n for n in normalized if re.search(r'(^|/)(company|companies|def_company)(/|\.)',n,re.I)]
-    inout=[n for n in normalized if re.search(r'/(in|out)/[^/]+\.(?:sii|sui),n,re.I)]
-    legacy=[n for n in normalized if re.search(r'/(company|companies)/[a-z0-9_]+\.(?:sii|sui),n,re.I)]
+    inout=[n for n in normalized if re.search(r'/(in|out)/[^/]+\.(?:sii|sui)$',n,re.I)]
+    legacy=[n for n in normalized if re.search(r'/(company|companies)/[a-z0-9_]+\.(?:sii|sui)$',n,re.I)]
     canonical=[n for n in normalized if canonical_path(n)]
     top=collections.Counter(n.split("/")[0] for n in normalized)
     extensions=collections.Counter(Path(n).suffix.lower() for n in normalized)
