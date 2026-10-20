@@ -5,6 +5,13 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import os
+import shutil
+import tempfile
+import collections
+import hashlib
+import threading
+import queue
 import json
 import re
 import sys
@@ -112,6 +119,9 @@ def canonical_path(raw):
     if m:return m.group(1).lower()
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
+    # Company permanente avulsa (empresa.sii) nos ZIPs de mapa.
+    m=re.search(r'(?:^|/)(company/[a-z0-9_]+\.(?:sii|sui))$',path,re.I)
+    if m:return ("def/"+m.group(1)).lower()
     m=re.search(r'(?:^|/)(cargo/[a-z0-9_]+(?:\.(?:sii|sui)|/[^/]+))$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
     m=re.search(r'(?:^|/)(vehicle/trailer_owned/.+)$',path,re.I)
@@ -158,6 +168,49 @@ def zip_members(path, wanted=None):
     finally:
         if not path.is_dir():zf.close()
     return out
+
+
+def describe_archive(path, limit=50):
+    """Diagnostico independente do extrator; funciona ate para ZIPs desconhecidos."""
+    p=Path(path)
+    if p.is_dir():
+        names=[str(x.relative_to(p)).replace("\\","/") for x in p.rglob("*") if x.is_file()]
+        sizes={}
+    elif zipfile.is_zipfile(p):
+        with zipfile.ZipFile(p) as z:
+            inf=[x for x in z.infolist() if not x.is_dir()]
+            names=[x.filename.replace("\\","/") for x in inf]
+            sizes={x.filename:x.file_size for x in inf}
+    else:
+        return {"arquivo":p.name,"erro":"Nao e ZIP valido nem pasta extraida"}
+    normalized=[clean_path(n) or n for n in names]
+    company_like=[n for n in normalized if re.search(r'(^|/)(company|companies|def_company)(/|\\.)',n,re.I)]
+    inout=[n for n in normalized if re.search(r'/(in|out)/[^/]+\\.(?:sii|sui)$',n,re.I)]
+    legacy=[n for n in normalized if re.search(r'/(company|companies)/[a-z0-9_]+\\.(?:sii|sui)$',n,re.I)]
+    canonical=[n for n in normalized if canonical_path(n)]
+    top=collections.Counter(n.split("/")[0] for n in normalized)
+    extensions=collections.Counter(Path(n).suffix.lower() for n in normalized)
+    return {
+        "arquivo":p.name,"total_arquivos":len(names),
+        "tamanho_total_declarado":sum(sizes.values()),
+        "pastas_raiz":top.most_common(20),"extensoes":extensions.most_common(16),
+        "caminhos_reconhecidos":len(canonical),
+        "arquivos_parecidos_com_company":len(company_like),
+        "caminhos_in_out":len(inout),"arquivos_permanentes_possiveis":len(legacy),
+        "amostra_company":company_like[:limit],
+        "amostra_in_out":inout[:limit],
+        "amostra_geral":normalized[:limit],
+        "avisos":[]
+    }
+
+def export_diagnostic(path, dest, issue=""):
+    report=describe_archive(path)
+    if issue:report["erro_de_leitura"]=str(issue)
+    folder=Path(dest);folder.mkdir(parents=True,exist_ok=True)
+    name=re.sub(r'[^a-zA-Z0-9_-]','_',Path(path).stem)[:55]
+    target=folder/("DIAGNOSTICO_ARQUIVO_"+name+".json")
+    target.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+    return target
 
 @dataclass
 class Company:
@@ -209,7 +262,9 @@ def extract_map(path):
             if re.search(r'(?m)^\s*(in_cargo|out_cargo)(?:\[\d*\])?\s*:',read_sii(raw)):
                 legacy.append(p)
     if not companies or old_file_count==0:
-        raise ValueError(f"{Path(path).name}: nenhuma pasta def/company/<empresa>/in|out com cargas foi encontrada")
+        raise ValueError(f"{Path(path).name}: formato IN/OUT nao identificado. "+
+                         "Veja o DIAGNOSTICO_ARQUIVO_*.json; o leitor NAO inventara "+
+                         "empresas nem criara .scs a partir de dados desconhecidos.")
     if legacy:raise ValueError("Company legada com in_cargo/out_cargo requer tratamento especifico: "+", ".join(legacy[:5]))
     for c in companies.values():classify_company(c)
     return companies,old_file_count
@@ -405,81 +460,116 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             "\n".join(errors)+"\n\nAVISOS\n"+"\n".join(warnings),encoding="utf-8")
         raise ValueError("Diagnostico tecnico bloqueou geracao:\n- "+"\n- ".join(errors[:12]))
     log("Validacao de cargo_data e carroceria de reboque proprio concluida; avisos no relatorio.")
-    results=[]
+    # FASE 1: preflight dos 3 mapas. Nenhuma Company e publicada se um mapa falhar.
+    checked_maps={}
+    map_failures={}
     for name,path in inputs["maps"].items():
-        log("Analisando mapa "+name+"...")
-        companies,count=extract_map(path)
-        work={};evidence=[];bycargo={}
-        for n,(category,title) in MANIFEST.items():
-            id=f"carga{n}"
-            outs=[];ins=[]
-            for c in companies.values():
-                for direction,results_list in (("out",outs),("in",ins)):
-                    why=permits(c,category,direction)
-                    if why:results_list.append(c.name)
-                    if why:evidence.append({"empresa":c.name,"direcao":direction,"carga":id,"categoria":category,"justificativa":why})
-            bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
-                         "origens_lista":outs,"destinos_lista":ins}
-            # Nao inventar rotas para completar 23/23.
-            if not outs or not ins: warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
-            for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
-            for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
-        output_files={}
-        for c in companies.values():
-            for p,raw in c.files.items():
-                output_files[p]=neutralize(raw,p)
-        for cid,dirs in work.items():
-            for direction in ("in","out"):
-                for id in dirs[direction]:
-                    output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
-        # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
-        # de skill somente no mod complementar; originais NUNCA sao editados.
-        if fix_skills:
-            for n in MANIFEST:
+        log("Verificando estrutura de "+name+" ...")
+        try:
+            checked_maps[name]=extract_map(path)
+            log(name+": "+str(len(checked_maps[name][0]))+" empresas reconhecidas.")
+        except Exception as exc:
+            map_failures[name]=str(exc)
+            diag=export_diagnostic(path,outdir,str(exc))
+            log("ERRO em "+name+": "+str(exc))
+            log("Diagnostico salvo: "+str(diag))
+    if map_failures:
+        report=outdir/"FALHA_MAPAS_NAO_GERAR.txt"
+        report.write_text("Nenhum SCS novo foi publicado por esta execucao. "+
+                          "Nao use resultados parciais ou de execucoes anteriores.\n\n"+
+                          "\n".join(k+": "+v for k,v in map_failures.items())+
+                          "\n\nArquivos DIAGNOSTICO_ARQUIVO_*.json foram criados na pasta de saida.\n",
+                          encoding="utf-8")
+        raise ValueError("Analise interrompida sem publicar Companies. "+
+                         "Confira FALHA_MAPAS_NAO_GERAR.txt e envie o "+
+                         "DIAGNOSTICO_ARQUIVO_*.json do mapa com erro.")
+    results=[]
+    # FASE 2: construcao inteira em pasta temporaria, invisivel para cliente.
+    publish_dir=outdir
+    staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
+    outdir=Path(staging.name)
+    try:
+        for name,path in inputs["maps"].items():
+            log("Gerando Company de "+name+"...")
+            companies,count=checked_maps[name]
+            work={};evidence=[];bycargo={}
+            for n,(category,title) in MANIFEST.items():
                 id=f"carga{n}"
-                record=records[id]
-                if record["valuable"] or id=="carga16":
-                    output_files[record["path"]]=(cargo_override(record) if id=="carga16" else
-                      re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',read_sii(record["raw"])).encode("utf-8"))
-        dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
-        with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
-            for p,raw in sorted(output_files.items()):z.writestr(p,raw)
-        with zipfile.ZipFile(dest) as z:
-            if z.testzip() is not None:raise ValueError("Falha na integridade do ZIP: "+str(dest))
-            paths=set(z.namelist())
-            if not all(p in paths for c in companies.values() for p in c.files):
-                raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
-            for id,info in bycargo.items():
-                for company in info["origens_lista"]:
-                    if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
-                for company in info["destinos_lista"]:
-                    if f"def/company/{company}/in/{id}.sii" not in paths:raise ValueError("Permissao IN ausente")
-        rows=[]
-        for cid,c in sorted(companies.items()):
-            selected=work.get(cid,{"in":set(),"out":set()})
-            rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
-                         "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
-                         "out_originais":",".join(sorted(c.old_out))})
-        data={"mapa":name,"empresas":rows,"total_empresas":len(companies),
-              "empresas_atendidas":len(work),"arquivos_inout_originais":count,
-              "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
-              "cadeias":bycargo,"evidencias":evidence,"avisos":list(warnings),
-              "validacao":"SCS ZIP, paths IN/OUT, manifesto, cargo_data, trailer_def; nao e teste dentro do ETS2"}
-        write_report(outdir,name,data)
-        log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
-            str(data["arquivos_inout_gerados"])+" permissões.")
-        results.append((name,str(dest),data))
-    outdir.joinpath("LEIA_PRIMEIRO.txt").write_text(
-        "ETS2 COMPANY LOGISTICS - GERADOR OFFLINE\n\n"+
-        "1. Utilize somente a Company do mapa ativo.\n"+
-        "2. Mantenha o mod principal do Librelato ativo.\n"+
-        "3. Desative DEF Company 1 e DEF Company 2 antigas, quando forem complementos conflitantes.\n"+
-        "4. Deixe o novo SCS acima das DEFs do mapa e do reboque.\n"+
-        "5. Teste carrocerias Grade Alta e Grade Baixa e atualize economia.\n"+
-        "6. O Mercado de Cargas de reboque PROPRIO exige carroceria e configuracao correspondente.\n"+
-        "7. Se o mercado ficar vazio, anexe game.log.txt e dados da configuracao instalada.\n"+
-        "ATENCAO: analise estatica nao prova ofertas no jogo.\n\n"+
-        "\n".join(warnings),encoding="utf-8")
+                outs=[];ins=[]
+                for c in companies.values():
+                    for direction,results_list in (("out",outs),("in",ins)):
+                        why=permits(c,category,direction)
+                        if why:results_list.append(c.name)
+                        if why:evidence.append({"empresa":c.name,"direcao":direction,"carga":id,"categoria":category,"justificativa":why})
+                bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
+                             "origens_lista":outs,"destinos_lista":ins}
+                # Nao inventar rotas para completar 23/23.
+                if not outs or not ins: warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
+                for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
+                for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
+            output_files={}
+            for c in companies.values():
+                for p,raw in c.files.items():
+                    output_files[p]=neutralize(raw,p)
+            for cid,dirs in work.items():
+                for direction in ("in","out"):
+                    for id in dirs[direction]:
+                        output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
+            # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
+            # de skill somente no mod complementar; originais NUNCA sao editados.
+            if fix_skills:
+                for n in MANIFEST:
+                    id=f"carga{n}"
+                    record=records[id]
+                    if record["valuable"] or id=="carga16":
+                        output_files[record["path"]]=(cargo_override(record) if id=="carga16" else
+                          re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',read_sii(record["raw"])).encode("utf-8"))
+            dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
+            with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
+                for p,raw in sorted(output_files.items()):z.writestr(p,raw)
+            with zipfile.ZipFile(dest) as z:
+                if z.testzip() is not None:raise ValueError("Falha na integridade do ZIP: "+str(dest))
+                paths=set(z.namelist())
+                if not all(p in paths for c in companies.values() for p in c.files):
+                    raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
+                for id,info in bycargo.items():
+                    for company in info["origens_lista"]:
+                        if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
+                    for company in info["destinos_lista"]:
+                        if f"def/company/{company}/in/{id}.sii" not in paths:raise ValueError("Permissao IN ausente")
+            rows=[]
+            for cid,c in sorted(companies.items()):
+                selected=work.get(cid,{"in":set(),"out":set()})
+                rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
+                             "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
+                             "out_originais":",".join(sorted(c.old_out))})
+            data={"mapa":name,"empresas":rows,"total_empresas":len(companies),
+                  "empresas_atendidas":len(work),"arquivos_inout_originais":count,
+                  "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
+                  "cadeias":bycargo,"evidencias":evidence,"avisos":list(warnings),
+                  "validacao":"SCS ZIP, paths IN/OUT, manifesto, cargo_data, trailer_def; nao e teste dentro do ETS2"}
+            write_report(outdir,name,data)
+            log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
+                str(data["arquivos_inout_gerados"])+" permissões.")
+            results.append((name,str(dest),data))
+        outdir.joinpath("LEIA_PRIMEIRO.txt").write_text(
+            "ETS2 COMPANY LOGISTICS - GERADOR OFFLINE\n\n"+
+            "1. Utilize somente a Company do mapa ativo.\n"+
+            "2. Mantenha o mod principal do Librelato ativo.\n"+
+            "3. Desative DEF Company 1 e DEF Company 2 antigas, quando forem complementos conflitantes.\n"+
+            "4. Deixe o novo SCS acima das DEFs do mapa e do reboque.\n"+
+            "5. Teste carrocerias Grade Alta e Grade Baixa e atualize economia.\n"+
+            "6. O Mercado de Cargas de reboque PROPRIO exige carroceria e configuracao correspondente.\n"+
+            "7. Se o mercado ficar vazio, anexe game.log.txt e dados da configuracao instalada.\n"+
+            "ATENCAO: analise estatica nao prova ofertas no jogo.\n\n"+
+            "\n".join(warnings),encoding="utf-8")
+            # Apenas publicar apos TODOS os SCS serem gerados e validados.
+        for generated in sorted(outdir.iterdir()):
+            if generated.is_file():
+                os.replace(generated,publish_dir/generated.name)
+        log("PUBLICACAO CONCLUIDA: 3 mapas, relatórios e SCS verificados.")
+    finally:
+        staging.cleanup()
     return results
 
 def run_gui():
