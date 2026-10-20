@@ -143,3 +143,8 @@ O assistente preserva a regra fundamental: o conhecimento geral sobre uma cadeia
 ## Política de evidências v5
 
 Consulte [QUALITY_V5.md](QUALITY_V5.md). O assistente exige evidências por mercadoria física, não usa IDs numéricos como definição de produto, distingue confiança documental/relacionada/inferida e mantém empresas sem fretes quando não há compatibilidade. O catálogo offline reúne 13 fontes documentais; a consulta de rede apenas atualiza essa base curada. A aprovação no GitHub Actions não substitui o teste no jogo.
+
+
+## Diagnóstico MINAS e reboque Librelato (v5.2)
+
+[Ver auditoria dos arquivos reais](AUDITORIA_MINAS_V5_2.md). O manifesto `cargo.librelato.sii` determina as 23 cargas do reboque; outras definições como `cott_seed` e `sugar_beet_b` são auxiliares e não entram por padrão. Cervejas das marcas comprovadas em IN/OUT (Amstel, Antarctica, Brahma, Budweiser, Devassa, Heineken, Schin e Skol) são reconhecidas como produto cerveja. `bebidas` genérico não comprova cerveja. Quando o mapa não tem `cimento` ou `cement`, nenhuma rota de cimento é inventada para preencher o mercado.
