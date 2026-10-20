@@ -1777,7 +1777,8 @@ function companyCargoProfile(c){
 function companyCargoCompatibility(c,profile,type,dir,info){
  const n=profile.count,other=dir==="out"?"in":"out",f=UNIVERSAL_FREIGHT;
  if(!profile[dir].size)return null;
- if(["posto","correios","concessionaria","cana"].includes(c.role)&&type!=="adubo")return null;
+ if(["posto","correios","concessionaria"].includes(c.role))return null;
+ if(c.role==="cana"&&(type!=="adubo"||dir!=="in"))return null;
  const direct=profile[dir].has(info.id.toLowerCase())||
    [...profile[dir]].some(unit=>oldCargoCategory(unit)===type)||
    oldSpecificEvidence(c,type,dir);
@@ -2087,8 +2088,12 @@ function createDiagnosticText(map,cargo,sim){
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
  rows.push("","CARGAS LIBERADAS E RAZÕES (ID | NOME | EXPEDIDORES | RECEBEDORES | HIPÓTESES)");
  for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
- rows.push("","CARGAS DESTINADAS A EMPRESAS (ID | IN | OUT)");
- for(const [id,p] of sim.plan)rows.push([id,[...p.in].join(","),[...p.out].join(",")].join(" | "));
+ rows.push("","DISTRIBUIÇÃO FINAL DE TODAS AS EMPRESAS (ID | IN | OUT | SITUAÇÃO)");
+ for(const co of map.companies.values()){
+  const p=sim.plan.get(co.id);
+  rows.push([co.id,p?[...p.in].join(","):"",p?[...p.out].join(","):"",
+   p?"COMPATÍVEL":"SEM CARGAS (IN/OUT antigos neutralizados)"].join(" | "));
+ }
  return rows.join("\n");
 }
 function downloadDiagnostic(){
@@ -2144,7 +2149,9 @@ async function generate(){
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
-  if(!sim.plan.size)throw Error("Nenhuma relação IN/OUT válida encontrada. Consulte o diagnóstico de empresas e cargas; o site não gera pacotes vazios.");
+  // Sem compatibilidade: mantém as empresas e gera SCS neutralizador integral.
+  // Isso é um resultado legítimo, não erro de análise.
+  if(!sim.plan.size)say("Nenhuma carga nova compatível; todas as empresas serão preservadas com permissões antigas neutralizadas.",51);
   // Não inventar fretes para completar uma grade ausente neste mapa.
   // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);
