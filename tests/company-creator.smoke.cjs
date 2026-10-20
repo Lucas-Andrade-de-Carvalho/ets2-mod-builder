@@ -112,6 +112,42 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Diferentes mapas com IDs opacos: nenhuma associação deve depender
+ // do nome da empresa ou de listas fixas de empresas.
+ const universalMap=new JSZip(),universalCargo=new JSZip();
+ for(const id of ["origin_opaque","receiver_xyz","construction_shop","construction_work","fuel_station","unrelated"]){
+  universalMap.file("def/company/"+id+"/editor/city.sii","SiiNunit\n{}\n");
+ }
+ companyFile(universalMap,"origin_opaque","out","crop","corn");
+ companyFile(universalMap,"origin_opaque","in","input","fertilizer");
+ companyFile(universalMap,"receiver_xyz","in","cereal","corn");
+ companyFile(universalMap,"construction_shop","out","bricks","bricks");
+ companyFile(universalMap,"construction_work","in","bricks","bricks");
+ companyFile(universalMap,"fuel_station","out","diesel","diesel");
+ companyFile(universalMap,"unrelated","out","steel_pipe","iron_pipes");
+ universalCargo.file("cargo/carga1.sui",
+   'cargo_data : cargo.carga1 {\n name: "Milho"\n body_types[]: alta\n}\n');
+ universalCargo.file("cargo/carga13.sui",
+   'cargo_data : cargo.carga13 {\n name: "Tijolos"\n body_types[]: baixa\n}\n');
+ const universalMapRead=await creator.loadMap(universalMap);
+ const universalCargoRead=await creator.loadCargo(universalCargo);
+ const universal=creator.simulate(universalMapRead,universalCargoRead);
+ assert.equal(universal.engine,"company-first");
+ assert.equal(universal.skipped.length,0);
+ assert.ok(universal.proof.find(x=>x.id==="carga1").sourceIds.includes("origin_opaque"));
+ assert.ok(universal.proof.find(x=>x.id==="carga1").destIds.includes("receiver_xyz"));
+ assert.ok(universal.proof.find(x=>x.id==="carga13").sourceIds.includes("construction_shop"));
+ assert.ok(universal.proof.find(x=>x.id==="carga13").destIds.includes("construction_work"));
+ assert.equal(universal.plan.has("fuel_station"),false);
+ assert.equal(universal.plan.has("unrelated"),false);
+ assert.ok(universal.emptyCompanies.includes("fuel_station"));
+ const outputUniversal=await creator.build(universalMapRead,universalCargoRead,universal);
+ const verifyUniversal=await JSZip.loadAsync(outputUniversal.blob);
+ const oldFuel=verifyUniversal.file("def/company/fuel_station/out/diesel.sii");
+ assert.ok(oldFuel,"Permissão antiga precisa continuar coberta");
+ assert.match(await oldFuel.async("text"),/cargo:\s*""/);
+
+
  // Teste das mercadorias recuperadas de def_company(2).zip (208 empresas)
  // sem presumir IDs ou nomes. Regras exigem prova IN/OUT e rejeitam
  // distribuidores genéricos que carregam de tudo.
