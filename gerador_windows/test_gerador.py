@@ -99,6 +99,28 @@ class Regression(unittest.TestCase):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
         self.assertIn('cargo: ""',g.neutralize(s.encode(),"x").decode())
+    def test_company_root_without_def_prefix(self):
+        src=self.root/"minas.zip"
+        with zipfile.ZipFile(src) as z:
+            content={x.filename:z.read(x) for x in z.infolist()}
+        content={p.removeprefix("def/"):raw for p,raw in content.items()}
+        zip_write(src,content)
+        companies,count=g.extract_map(src)
+        self.assertEqual(len(companies),len(self.company_raw))
+        self.assertGreater(count,10)
+        self.assertEqual(companies["fazenda_a"].role,"fazenda")
+
+    def test_agro_name_with_crop_history_is_farm(self):
+        c=g.Company("agro_fazenda",old_in={"adubo"},old_out={"milho_a","soja_b"})
+        g.classify_company(c)
+        self.assertEqual(c.role,"fazenda")
+
+    def test_original_files_not_modified(self):
+        before={str(p):p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        g.generate(self.inp,self.root/"output")
+        after={str(p):p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        self.assertEqual(before,after)
+
     def test_not_zip(self):
         p=self.root/"bad.scs";p.write_bytes(b"not a ZIP")
         with self.assertRaisesRegex(ValueError,"SCS Extractor"):
