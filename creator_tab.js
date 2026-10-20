@@ -751,6 +751,26 @@ function freightEvidence(c,dir,re){
  }
  return hits.size;
 }
+// O perfil é montado com mercadorias reais dos IN/OUT; entradas cargo.cargaN
+// de DEFs genéricas não são evidência independente de estoque.
+function detailedMovement(c){
+ const inGoods=new Set(),outGoods=new Set();
+ for(const entry of c.old||[]){
+  const unit=String(entry.unit||entry.stem||"").toLowerCase();
+  if(/^carga[0-9]+$/.test(unit))continue;
+  (entry.dir==="in"?inGoods:outGoods).add(unit);
+ }
+ return{inGoods,outGoods};
+}
+function isGenericCompanyMap(map){
+ let count=0,generic=0,unparsed=0;
+ for(const c of map.companies.values())for(const e of c.old||[]){
+  count++;
+  if(/^carga[0-9]+$/i.test(String(e.unit||e.stem||"")))generic++;
+  if(!e.unit)unparsed++;
+ }
+ return{count,generic,unparsed,share:count?generic/count:0};
+}
 function relatedCargoCandidate(c,type,dir){
  if(!c||["posto","correios","concessionaria","cana"].includes(c.role))return null;
  const n=(pattern,d=dir)=>freightEvidence(c,d,pattern);
@@ -769,6 +789,11 @@ function relatedCargoCandidate(c,type,dir){
  if(type==="granito"){
   const stone=n(RELATED_FREIGHT_PATTERNS.stone);
   if(dir==="out"&&stone){score=90+stone*5;reason="expedição documentada de rochas similares"}
+  else if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.stone,"in")&&
+   n(/^(?:cimento|cement|tijolos?|bricks?|pisos?|telhas?|tubosconcret|calhas|madeira|ferroconst)$/i,"out")>=2&&
+   ["materiais","logistica","desconhecida","obras"].includes(c.role)){
+    score=76;reason="revenda: recebe rochas e expede outros materiais de construção";
+  }
   if(dir==="in"&&n(RELATED_FREIGHT_PATTERNS.stoneReceiver)>=2){
    score=75+n(RELATED_FREIGHT_PATTERNS.stoneReceiver)*3;reason="recebimento documentado de materiais de construção";
   }
@@ -776,6 +801,11 @@ function relatedCargoCandidate(c,type,dir){
  if(type==="racao"){
   const feed=n(RELATED_FREIGHT_PATTERNS.feed);
   if(feed){score=85+feed*5;reason="movimentação documentada de farelo/insumo para alimentação animal"}
+  else if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.feed,"in")&&
+   n(/^(?:adubo|fertilizante|fertilizer|sementes?|equipagrico|farelo|salmineral)$/i,"out")>=2&&
+   ["agroinsumos","cooperativa","racoes","logistica","desconhecida"].includes(c.role)){
+    score=75;reason="revenda agropecuária: recebe ração e expede vários insumos relacionados";
+  }
   else if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.feedInput,"in")>=2&&n(RELATED_FREIGHT_PATTERNS.feed,"out")){
    score=75;reason="recebe insumos e expede alimentação animal";
   }
@@ -789,7 +819,11 @@ function relatedCargoCandidate(c,type,dir){
   }
  }
  if(type==="algodao"){
-  if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.grain)>=2&&c.role==="fazenda"){
+  const farmEvidence=c.role==="fazenda"||
+   (n(RELATED_FREIGHT_PATTERNS.grain,"out")>=2&&
+    n(/^(?:adubo|fertilizante|fertilizer|ureia|seeds?|sementes?)$/i,"in")>=1&&
+    n(RELATED_FREIGHT_PATTERNS.grain,"in")===0);
+  if(dir==="out"&&n(RELATED_FREIGHT_PATTERNS.grain)>=2&&farmEvidence){
    score=55;reason="produção agrícola diversificada, compatibilidade hipotética";
   }
   if(dir==="in"&&n(RELATED_FREIGHT_PATTERNS.cottonReceive)&&["textil","algodoeira","cooperativa"].includes(c.role)){
@@ -828,7 +862,10 @@ function chooseEndpoints(map,type,spec,cargoId=""){
  const hardWrong=new Set(["posto","correios","concessionaria","cana"]);
  // A prova de cargo específico nos IN/OUT da DEF supera rótulos comerciais,
  // salvo os setores explicitamente incompatíveis acima.
- const exactCargo=(c,dir)=>Boolean(cargoId)&&c.old?.some(x=>
+ const genericStats=isGenericCompanyMap(map);
+ // Não tratar permissões da DEF genérica (cargo.cargaN) como prova econômica
+ // quando elas dominam o arquivo de origem.
+ const exactCargo=(c,dir)=>Boolean(cargoId)&&genericStats.share<0.50&&c.old?.some(x=>
    x.dir===dir&&String(x.unit||"").toLowerCase()===cargoId.toLowerCase());
  const hasDirect=(c,dir)=>exactCargo(c,dir)||oldSpecificEvidence(c,type,dir);
  const certified=(c,dir)=>Boolean(relatedCargoCandidate(c,type,dir)?.score>=100);
@@ -1120,6 +1157,8 @@ function createDiagnosticText(map,cargo,sim){
   "Empresas existentes na DEF consultadas no catálogo durante a distribuição: "+(sim.catalogChecks?.consulted??map.companies.size),
   "Empresas padrão reconhecidas entre elas: "+(sim.catalogChecks?.matched??0),
   "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
+  "Integridade da DEF: "+JSON.stringify(isGenericCompanyMap(map)),
+  "ATENÇÃO: uma Company formada majoritariamente por cargo.cargaN não documenta os produtos originais dos estabelecimentos.",
   "Empresas: "+map.companies.size,
   "Cargas personalizadas do Librelato: "+cargo.cargos.size,
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
@@ -1128,8 +1167,8 @@ function createDiagnosticText(map,cargo,sim){
   "EMPRESAS (ID | SETOR IDENTIFICADO | EVIDÊNCIA | CARGAS IN ANTIGAS | CARGAS OUT ANTIGAS)"
  ];
  for(const c of map.companies.values()){
-  const ins=c.old.filter(x=>x.dir==="in").map(x=>x.stem);
-  const outs=c.old.filter(x=>x.dir==="out").map(x=>x.stem);
+  const ins=c.old.filter(x=>x.dir==="in").map(x=>x.unit||x.stem);
+  const outs=c.old.filter(x=>x.dir==="out").map(x=>x.unit||x.stem);
   rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(","),"categorias IN: "+[...(c.categories?.in||new Map())].map(x=>x.join("=")).join(","),"categorias OUT: "+[...(c.categories?.out||new Map())].map(x=>x.join("=")).join(",")].join(" | "));
  }
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
@@ -1181,7 +1220,14 @@ async function generate(){
  busy=true;ui.run.disabled=true;clearCompanyDownload();ui.report.innerHTML="";ui.detail.innerHTML="";latestDiagnostic=null;
  try{
   say("Identificando empresas do mapa…",8);
-  const map=await loadMap(await zipRead(one));applyCompanyOverrides(map);await yieldUI();
+  const map=await loadMap(await zipRead(one));
+  const integrity=isGenericCompanyMap(map);
+  if(integrity.count>=1000&&integrity.share>=0.90)
+    throw Error("A DEF do mapa contém "+Math.round(integrity.share*100)+
+    "% de permissões genéricas cargo.cargaN, não as mercadorias originais. "+
+    "Não é possível deduzir logística real desses arquivos. "+
+    "Use a DEF COMPANY ORIGINAL do mapa, sem as DEF Companies genéricas 1 e 2 do Librelato.");
+  applyCompanyOverrides(map);await yieldUI();
   say("Identificando cargas e carrocerias…",28);
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do Librelato não contém unidades cargo_data reconhecidas.");
   say("Simulando logística…",43);const sim=simulate(map,cargo);audit(map,cargo,sim);
@@ -1225,5 +1271,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,relatedCargoCandidate,relatedCargoFallback,chooseEndpoints,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,relatedCargoCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();

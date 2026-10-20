@@ -112,6 +112,32 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Caso real reproduzido: DEF de mapa original tem IDs das mercadorias.
+ // Já a DEF Company genérica 1/2 Librelato pode repetir cargo.cargaN
+ // indiscriminadamente para praticamente todas as empresas.
+ const genuine={companies:new Map([["dep",{
+  id:"dep",role:"materiais",old:[{dir:"in",unit:"pedra"},{dir:"out",unit:"tijolos"},{dir:"out",unit:"madeira"}]
+ }]])};
+ assert.equal(creator.isGenericCompanyMap(genuine).generic,0);
+ assert.ok(creator.relatedCargoCandidate(genuine.companies.get("dep"),"granito","out"),
+   "Depósito com entrada de pedra e saída de materiais deve ser reconhecido como revenda");
+ const agro={id:"loja_opaca",role:"desconhecida",old:[
+  {dir:"in",unit:"racao"},{dir:"out",unit:"adubo"},{dir:"out",unit:"fertilizante"}]};
+ assert.ok(creator.relatedCargoCandidate(agro,"racao","out"),
+  "Distribuidora com entrada de ração e expedição de insumos deve poder revender");
+ const diverse={id:"sem_nome",role:"desconhecida",old:[
+  {dir:"out",unit:"milho"},{dir:"out",unit:"soja"},{dir:"in",unit:"adubo"}]};
+ assert.ok(creator.relatedCargoCandidate(diverse,"algodao","out"),
+   "Fazenda inferida por combinação IN/OUT, não pelo nome");
+ const generic={companies:new Map(Array.from({length:30},(_,i)=>[
+  "sem_ramo_"+i,{id:"sem_ramo_"+i,role:"desconhecida",
+   old:Array.from({length:24},(_,j)=>({dir:"out",unit:"carga"+(j+1)}))}
+ ]))};
+ assert.equal(creator.isGenericCompanyMap(generic).share,1);
+ assert.equal(creator.relatedCargoCandidate(generic.companies.values().next().value,"granito","out"),null,
+  "Cargo.cargaN genérico não é prova de granito");
+
+
  // As empresas devem ser selecionadas pelos produtos em IN/OUT, não por
  // supostos ramos derivados do nome e do ID.
  const cargoFlows=[
