@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · INTELIGÊNCIA LOGÍSTICA DOCUMENTAL · v4.1";
+const ENGINE_BUILD="2026-10-20 · INTELIGÊNCIA DE EVIDÊNCIAS · v5.0";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -185,6 +185,7 @@ const kind=name=>{
    .replace(/\b(soja|milho|sorgo)alto\b/g,"$1 alto")
    .replace(/\b(soja|milho|sorgo)alta\b/g,"$1 alta")
    .replace(/\b(batata|laranja|cerveja)s\b/g,"$1");
+ if(/\b(?:bobinas?|steel[ _-]?coils?|metal[ _-]?coils?)\b/i.test(x))return "bobinas_industriais";
  for(const [k,re] of patterns)if(re.test(x))return k;
  return null;
 };
@@ -709,9 +710,10 @@ async function loadCargo(zip){
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
   if(id&&/^[a-z][a-z0-9_]*$/i.test(id)){
    let label=(txt.match(/^\s*name\s*:\s*"([^"]+)"/mi)||[])[1]||"";
-   if(!label||label.includes("@@")){const n=id.match(/^carga(\d+)$/i);label=n?names[Number(n[1])-1]||id:id}
+   const unresolvedName=!label||label.includes("@@");
+   if(unresolvedName)label="Mercadoria não identificada ("+id+")";
    const bs=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\d*\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
-   cargos.set(id.toLowerCase(),{id:id.toLowerCase(),unit:"cargo."+id.toLowerCase(),name:label,body:[...new Set(bs)],path:p});
+   cargos.set(id.toLowerCase(),{id:id.toLowerCase(),unit:"cargo."+id.toLowerCase(),name:label,unresolvedName,body:[...new Set(bs)],path:p});
   }
   const ca=p.match(/^def\/cargo\/([a-z0-9_]+)\//i);
   if(ca&&/\btrailer_def\s*:/i.test(txt)){
@@ -1400,7 +1402,9 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
  // SEMPRE examinar a DEF antes de olhar o rótulo da empresa.
  // Nome, ID e catálogo são sugestões, não veto sobre cargo: verdadeiro.
  const declared=profile.declared?.[dir]||new Set();
+ const signature=findProductEvidence(profile,type,dir);
  const direct=declared.has(info.id.toLowerCase())||
+   signature.level==="especifica"||
    [...declared].some(unit=>oldCargoCategory(unit)===type);
  const coherence=economicCoherence(c,profile,type,dir);
  if(!coherence.allowed){
@@ -1526,6 +1530,42 @@ async function loadLogisticsKnowledge(){
   return{data:OFFLINE_LOGISTICS_KNOWLEDGE,origin:"base integrada/offline (sem atualização web)"};
  }finally{if(timeout)clearTimeout(timeout)}
 }
+// O modelo não confunde produtos da mesma indústria: milho != sorgo,
+// metal/sucata != bobinas, algodão em caroço != pluma beneficiada.
+const PRODUCT_EVIDENCE=Object.freeze({
+ milho:/^(?:milho|corn|maize|maiz|milho_alto|corn_b)$/i,
+ soja:/^(?:soja|soybeans?|soya|soja_alta|soy_b)$/i,
+ sorgo:/^(?:sorgo|sorghum|sorgo_alto)$/i,
+ adubo:/^(?:adubo|fertilizantes?|fertilizers?|ureia|urea)$/i,
+ madeira:/^(?:madeira|madeirame|wood|timber|lumber|logs?|planks?|boards?)$/i,
+ algodao:/^(?:pluma|cotton_?bales?|cottonlint|algodao_pluma|baled_?cotton)$/i,
+ cimento:/^(?:cimento|cement|cement_bags?|cement_pallet)$/i,
+ batata:/^(?:batatas?|potatoes?|potato_b)$/i,
+ laranja:/^(?:laranjas?|oranges?|citrus_oranges?)$/i,
+ cerveja:/^(?:cervejas?|beer|beer_c|cerveza)$/i,
+ tijolo:/^(?:tijolos?|bricks?|ceramic_bricks?)$/i,
+ granito:/^(?:granito|granitto|granite|granite_blocks?)$/i,
+ racao:/^(?:racao|racoes|xerem|feedmeal|feed_meal|animal_?feed|salmineral|suplementomineral)$/i,
+ aco:/^(?:aco|steel|steel_plates?|chapa_?aco|ferroconst)$/i,
+ bobinas_industriais:/^(?:bobinas?|steel_?coils?|metal_?coils?|rolled_steel|coil_steel)$/i,
+ palete_vazio:/^(?:empty_?palet|empty_?pallets?|pallets?_empty|paletes?_vazios?)$/i,
+ paletizado:/^(?:pallets?|paletes?|wood_?pallets?|empty_?palet)$/i
+});
+const RELATED_STONE=/^(?:stones?|pedras?|marmore|marble|marble_blocks?|dimension_?stone)$/i;
+const EVIDENCE_REQUIRED=new Set(["milho","soja","sorgo","batata","laranja",
+ "cerveja","cimento","tijolo","granito","algodao","racao",
+ "bobinas_industriais","palete_vazio","paletizado"]);
+function findProductEvidence(profile,type,dir){
+ const units=profile.declared?.[dir]||new Set();
+ const literal=PRODUCT_EVIDENCE[type];
+ const explicit=[...units].filter(value=>literal?.test(value));
+ if(explicit.length)return{level:"especifica",units:explicit};
+ if(type==="granito"){
+  const similar=[...units].filter(value=>RELATED_STONE.test(value));
+  if(similar.length)return{level:"relacionada",units:similar};
+ }
+ return{level:"ausente",units:[]};
+}
 const RESEARCH_CARGO_TOKENS=Object.freeze({
  algodao:/^(?:pluma|cotton_bales?|cottonlint|algodao_pluma|baled_cotton)$/i,
  racao:/^(?:racao|racoes|animal_?feed|feedmeal|feed_meal|xerem|farelo|salmineral|suplementomineral)$/i,
@@ -1534,25 +1574,27 @@ const RESEARCH_CARGO_TOKENS=Object.freeze({
 function logisticsIntelligenceDecision(company,profile,type,dir,evidence,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  if(!evidence)return null;
  const sourceIds=(knowledge.sources||[]).filter(s=>s.types.includes(type)).map(s=>s.id);
- const values=profile.declared?.[dir]||new Set();
- const matches=re=>[...values].some(x=>re.test(x));
- const base={...evidence,sourceIds,confidence:evidence.kind==="direta"?"documental":"inferida"};
- if(type==="algodao"){
-  const pluma=matches(RESEARCH_CARGO_TOKENS.algodao);
-  if(!pluma){
-   return{blocked:true,reason:"Pluma precisa de evidência de beneficiamento/fibra enfardada no "+dir.toUpperCase()+"; só grãos ou algodão em caroço não comprovam pluma.",sourceIds};
-  }
+ const proof=findProductEvidence(profile,type,dir);
+ if(EVIDENCE_REQUIRED.has(type)&&proof.level==="ausente"){
+  return{blocked:true,reason:"Não há produto "+type+" no "+dir.toUpperCase()+
+    "; produtos do mesmo setor não comprovam esta mercadoria.",sourceIds,
+    confidence:"não comprovada"};
  }
- if(type==="racao"&&dir==="out"&&!matches(RESEARCH_CARGO_TOKENS.racao)){
-  return{blocked:true,reason:"Expedição de ração exige ração/produto de nutrição animal no OUT; receber ou negociar milho/soja não comprova fabricação.",sourceIds};
+ if(proof.level==="relacionada"){
+  return{...evidence,sourceIds,kind:"categoria",confidence:"relacionada",
+    documentedUnits:proof.units,
+    reason:"Mercadoria mineral relacionada em "+dir.toUpperCase()+" ["+
+      proof.units.join(", ")+"]; granito específico não comprovado. "+evidence.reason};
  }
- if(type==="bobinas_industriais"&&dir==="out"&&!matches(RESEARCH_CARGO_TOKENS.bobinas_industriais)){
-  return{blocked:true,reason:"Expedição de bobinas exige bobinas/steel_coils/metal_coils no OUT; tubos e sucata não bastam.",sourceIds};
+ if(proof.level==="especifica"){
+  return{...evidence,sourceIds,kind:"direta",confidence:"documental",
+    documentedUnits:proof.units,
+    reason:"Mercadoria identificada em "+dir.toUpperCase()+" ["+
+      proof.units.join(", ")+"]; "+evidence.reason};
  }
- // A fonte reforça o contexto, mas não autoriza criar empresas, mercadorias
- // ou direções inexistentes na DEF original.
- return base;
+ return{...evidence,sourceIds,confidence:"inferida",documentedUnits:[]};
 }
+
 function researchEscape(x){return String(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function renderLogisticsResearch(research,sim){
  const line=el("companyCreateResearchStatus"),list=el("companyCreateResearchSources");
