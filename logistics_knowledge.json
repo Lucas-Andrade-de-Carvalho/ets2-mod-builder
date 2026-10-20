@@ -79,6 +79,48 @@
         "algodao"
       ],
       "fact": "Fibras de algodão são beneficiadas e enfardadas antes de comercialização para indústria têxtil; algodão em caroço não é automaticamente pluma."
+    },
+    {
+      "id": "florestal_madeira",
+      "agency": "Serviço Florestal Brasileiro",
+      "title": "Monitoramento e rastreabilidade da madeira: floresta, toras e serraria",
+      "url": "https://www.gov.br/florestal/pt-br/assuntos/concessoes-e-monitoramento/monitoramento-das-concessoes-florestais",
+      "types": [
+        "madeira"
+      ],
+      "fact": "Fluxo florestal desde transporte de toras da floresta até beneficiamento na serraria e movimentação de madeira serrada. Mover madeira serrada requer evidência do produto correspondente."
+    },
+    {
+      "id": "ceagesp_hortifruti",
+      "agency": "CEAGESP",
+      "title": "Entreposto Terminal São Paulo: frutas, hortaliças e abastecimento",
+      "url": "https://ceagesp.gov.br/entrepostos/etsp/",
+      "types": [
+        "laranja",
+        "batata"
+      ],
+      "fact": "Entrepostos recebem e comercializam frutas, legumes e verduras de múltiplos municípios; fazendas produzem, atacadistas distribuem e supermercados recebem."
+    },
+    {
+      "id": "mapa_cerveja",
+      "agency": "Ministério da Agricultura",
+      "title": "Cadeia produtiva da cerveja no Brasil",
+      "url": "https://www.gov.br/agricultura/pt-br/assuntos/camaras-setoriais-tematicas/camaras-setoriais-1/cerveja-1",
+      "types": [
+        "cerveja"
+      ],
+      "fact": "Cervejarias, distribuidores e varejo ocupam funções diferentes; OUT de bebidas genéricas não comprova cervejas específicas."
+    },
+    {
+      "id": "receita_paletes",
+      "agency": "Receita Federal",
+      "title": "Unidades de carga, embalagens e paletes",
+      "url": "https://www.gov.br/receitafederal/pt-br/assuntos/aduana-e-comercio-exterior/manuais/despacho-de-importacao/sistemas/siscomex-importacao-web/declaracao-de-importacao/funcionalidades/ficha-carga/unidades-de-carga-x-embalagens-x-volumes-peso-bruto-x-peso-liquido",
+      "types": [
+        "paletizado",
+        "palete_vazio"
+      ],
+      "fact": "Paletes podem ser unidade de carga retornável ou embalagem que acompanha mercadorias. Um estabelecimento com cargas paletizadas não é necessariamente produtor ou expedidor de paletes vazios."
     }
   ],
   "policies": {
