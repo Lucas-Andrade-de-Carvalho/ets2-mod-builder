@@ -714,6 +714,7 @@ async function loadCargo(zip){
   if((f.obj._data?.uncompressedSize||0)>500000)
    throw Error("Definição cargo_data extensa demais para leitura confiável: "+f.p);
   const txt=await f.obj.async("text"),p=f.p;
+  if(txt.length>500000)throw Error("Definição cargo_data extensa demais para leitura confiável: "+p);
   if(/^def\/cargo\.[a-z0-9_-]+\.sii$/i.test(p))manifests.push(p);
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
   if(id&&/^[a-z][a-z0-9_]*$/i.test(id)){
