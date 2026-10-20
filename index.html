@@ -605,10 +605,11 @@ window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Err
 <script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · DISTRIBUIÇÃO PELA CATEGORIA · v6.1";
+const ENGINE_BUILD="2026-10-20 · MERCADO EQUILIBRADO · v6.2";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
-["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
+["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],
+ ["sementes_algodao",/\b(sementes? de algodao|cotton seeds?)\b/],["beterraba",/\b(beterraba|sugar beet)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
 ["adubo",/\b(adubos?|fertilizantes?)\b/],["algodao",/\b(pluma|algodao)\b/],["batata",/\bbatatas?\b/],["laranja",/\blaranjas?\b/],
 ["cerveja",/\b(cervejas?|beer)\b/],["cimento",/\bcimento\b/],["tijolo",/\btijolo[s]?\b/],["granito",/\b(granito|granitto)\b/],
 ["madeira",/\b(madeira|madeirame)\b/],["aco",/\b(bobina de aco|bobina de chapa|steel coil)\b/],["bobinas_industriais",/\bbobinas?\b/],["palete_vazio",/\b(paletes? vazios?|pallets? vazios?|paletes? de madeira|pallets? de madeira)\b/],
@@ -666,7 +667,7 @@ function consultCatalogForMapDistribution(map){
 const sectors=[
 ["premoldados",/(pre.?moldad|precast|fabrica de pre moldad)/],
 ["calhas",/(fabrica de calhas|fabricante de calhas|calharia|industria de calhas)/],
-["reciclagem",/(reciclador|reciclagem|recupera(?:cao|dora) de paletes|reaproveitamento de madeira)/],
+["reciclagem",/(reciclador|reciclagem|recupera(?:cao|dora) de paletes|reaproveitamento de madeira|sucatao|ferro.?velho|sucateira|sucateiro|deposito de sucata)/],
 ["agroinsumos",/(loja agropecuaria|casa agropecuaria|agropecuaria comercial|comercio agropecuario)/],
 ["algodoeira",/(beneficiadora de algodao|fazenda algodoeira|unidade de beneficiamento de algodao)/],
 ["cooperativa",/(cooperativa|cooperativa agricola|agrocooperativa|agrocoop|cooperagro|coopercentro)/],
@@ -741,7 +742,7 @@ const known=(id,label)=>{
  const prefixes=[
  ["premoldados",/^(premold|pre.?mold|fabricapremold)/],
  ["calhas",/^(calhas?|fabricacalhas?|fabricantecalhas?)/],
- ["reciclagem",/^(reciclagem|reciclador|recuperadorapalet|recicladoramadeira)/],
+ ["reciclagem",/^(reciclagem|reciclador|recuperadorapalet|recicladoramadeira|sucatao|sucateira|sucateiro|ferrovelho|deposucata|sucata)/],
  ["agroinsumos",/^(lojaagropec|casaagropec|comercioagropec)/],
  ["algodoeira",/^(algodoeira|beneficiadoraalgodao)/],
  ["metalurgica",/^(cofer|centroaco|distribuidoraco)/],
@@ -801,7 +802,7 @@ const kind=name=>{
    .replace(/\b(batata|laranja|cerveja)s\b/g,"$1");
  if(/\b(?:bobinas?|steel[ _-]?coils?|metal[ _-]?coils?)\b/i.test(x))return "bobinas_industriais";
  // Sementes de algodão não são pluma de algodão beneficiada.
- if(/\b(?:sementes?|seeds?)\b/.test(x)&&/\b(?:algodao|cotton)\b/.test(x))return null;
+ if(/\b(?:sementes?|seeds?)\b/.test(x)&&/\b(?:algodao|cotton)\b/.test(x))return "sementes_algodao";
  // Produto TESTE de paletes sem indicação de vazios/embalagem não é
  // prova de expedição de paletes vazios ou carga paletizada.
  if(/\b(?:teste|test)\b/.test(x)&&/\b(?:paletes?|pallets?)\b/.test(x))return "paletizado";
@@ -1376,7 +1377,7 @@ async function loadCargo(zip){
    // IDs semanticamente explícitos (não cargoN) podem identificar três
    // mercadorias padronizadas da DEF, mesmo quando locale @@ não está presente.
    // Não aplicar esta regra a IDs genéricos do reboque ou produtos ambíguos.
-   const semanticLabels={corn_b:"Milho",soybean_b:"Soja",potatoes_b:"Batata"};
+   const semanticLabels={corn_b:"Milho",soybean_b:"Soja",potatoes_b:"Batata",sugar_beet_b:"Beterraba açucareira",cott_seed:"Sementes de algodão"};
    if(unresolvedName&&Object.hasOwn(semanticLabels,id.toLowerCase())){
     label=semanticLabels[id.toLowerCase()];
     unresolvedName=false;
@@ -2364,7 +2365,11 @@ const CARGO_CATEGORY_INDEX=Object.freeze({
  fibras:{types:["algodao"],goods:/^(?:pluma|cotton|cotton_bales?|cottonlint|algodao|cotton_seed|fabric|textiles?)$/i,
   both:["algodoeira"],ship:["fazenda"],receive:["textil","cooperativa","logistica"],need:["fazenda","cooperativa","logistica"]},
  paletes:{types:["palete_vazio","paletizado"],goods:/^(?:pallets?|paletes?|empty_pallets?|wood_pallets?|madeira|wood|lumber|used_packag|scrap_wood)$/i,
-  both:["paletes","reciclagem","logistica"],ship:["supermercado","materiais","bebidas","cervejaria","alimentos","hortifruti","madeireira"],receive:["cooperativa"],need:["logistica","cooperativa"]}
+  both:["paletes","logistica"],ship:["supermercado","materiais","bebidas","cervejaria","alimentos","hortifruti","madeireira","serraria"],receive:["reciclagem","cooperativa"],need:["logistica","cooperativa"]},
+ sementes:{types:["sementes_algodao"],goods:/^(?:cotton_seed|cott_seed|cottonseeds?|seeds?|sementes?|big_bag_seed|young_seed|algodao|cotton)$/i,
+  both:["agroinsumos","cooperativa","logistica"],ship:["algodoeira","fazenda"],receive:["fazenda","pecuaria"],need:["logistica"]},
+ beterraba:{types:["beterraba"],goods:/^(?:sugar_beet|sugar_beet_b|beets?|beterraba|vegetables?|potatoes?|grains?|graos?)$/i,
+  both:["cooperativa","silo","logistica","hortifruti"],ship:["fazenda"],receive:["alimentos"],need:["logistica"]}
 });
 const CARGO_CATEGORY_BY_TYPE=new Map(Object.entries(CARGO_CATEGORY_INDEX)
  .flatMap(([name,v])=>v.types.map(type=>[type,{...v,name}])));
@@ -2394,6 +2399,73 @@ function categoryCargoCandidate(company,profile,type,dir){
      "Ramo identificado pela empresa, sem produto equivalente explícito.")+
    " Não exige cadeia produtor→consumidor final; não confirma produto literal."+
    (type==="paletizado"?" Paletes de teste: conteúdo físico não confirmado.":"")};
+}
+
+
+const PALLET_MARKET_POLICY=Object.freeze({probCoef:0.14,maxOut:7,maxIn:9,outShare:0.018,inShare:0.023});
+const PALLET_WOOD_ORIGINS=new Set(["madeireira","serraria","paletes"]);
+function palletCompanyRole(c,dir){
+ const role=c.role||"desconhecida";
+ if(PALLET_WOOD_ORIGINS.has(role))return dir==="out"?"wood":"forbidden";
+ if(role==="reciclagem")return dir==="in"?"recycle":"forbidden";
+ if(CATEGORY_FORBIDDEN_ROLES.has(role))return "forbidden";
+ if(role==="desconhecida"&&!c.old?.length)return "forbidden";
+ return "general";
+}
+function genericPalletCandidate(c,profile,dir){
+ const role=palletCompanyRole(c,dir);
+ if(role==="forbidden")return null;
+ const documented=profile.count(dir,CARGO_CATEGORY_INDEX.paletes.goods)>0;
+ return {kind:"categoria_logistica",category:"paletes",score:role==="general"?45:100,
+  contextLevel:documented?"categoria":"inferida",
+  reason:role==="wood"?"Palete Alto: madeireira/serraria é exclusivamente expedidora.":
+   role==="recycle"?"Palete Alto: reciclagem/sucatão é exclusivamente recebedora.":
+   "Palete Alto genérico: outra empresa participa de amostra controlada, sem declarar produção específica."};
+}
+function stablePalletHash(key){
+ let h=2166136261;
+ for(let i=0;i<key.length;i++){h^=key.charCodeAt(i);h=Math.imul(h,16777619)}
+ return h>>>0;
+}
+function choosePalletPoints(items,dir,map,plan,cargoId){
+ const max=dir==="out"?PALLET_MARKET_POLICY.maxOut:PALLET_MARKET_POLICY.maxIn;
+ const fraction=dir==="out"?PALLET_MARKET_POLICY.outShare:PALLET_MARKET_POLICY.inShare;
+ const limit=Math.max(1,Math.min(max,Math.ceil(map.companies.size*fraction)));
+ const priority=[],others=[];
+ for(const x of items){
+  const role=palletCompanyRole(x.company,dir);
+  if(role==="wood"||role==="recycle")priority.push(x);
+  else if(role==="general")others.push(x);
+ }
+ const key=x=>stablePalletHash(x.company.id+"|"+cargoId+"|"+dir);
+ const sorter=(a,b)=>key(a)-key(b)||a.company.id.localeCompare(b.company.id);
+ priority.sort(sorter);
+ others.sort((a,b)=>Math.min(3,plan.get(b.company.id)?.[dir]?.size||0)-
+  Math.min(3,plan.get(a.company.id)?.[dir]?.size||0)||sorter(a,b));
+ const chosen=priority.slice(0,limit);
+ chosen.push(...others.slice(0,Math.max(0,limit-chosen.length)));
+ return{chosen,limit,candidates:priority.length+others.length};
+}
+function balancePalletRoute(entry,map,plan){
+ const a=choosePalletPoints(entry.out,"out",map,plan,entry.info.id);
+ const b=choosePalletPoints(entry.inn,"in",map,plan,entry.info.id);
+ entry.out=a.chosen;entry.inn=b.chosen;
+ return{cargo:entry.info.id,out:a.chosen.length,in:b.chosen.length,
+  outCandidates:a.candidates,inCandidates:b.candidates,
+  probCoef:PALLET_MARKET_POLICY.probCoef};
+}
+function patchPalletCargoProbability(raw,id){
+ if(!/^[a-z][a-z0-9_]*$/i.test(id))throw Error("ID de palete inválido");
+ const source=String(raw),re=new RegExp("\\bcargo_data\\s*:\\s*cargo\\."+id+"\\s*\\{","i");
+ const match=re.exec(source);
+ if(!match)throw Error("cargo_data de Palete Alto ausente: "+id);
+ const start=match.index+match[0].length,end=source.indexOf("}",start);
+ if(end<0)throw Error("cargo_data de palete sem fechamento: "+id);
+ const block=source.slice(start,end),coef=String(PALLET_MARKET_POLICY.probCoef);
+ const property=/^(\s*prob_coef\s*:\s*)[^\s#\/]+/mi;
+ const updated=property.test(block)?block.replace(property,(_,prefix)=>prefix+coef):
+  "\n prob_coef: "+coef+"\n"+block;
+ return source.slice(0,start)+updated+source.slice(end);
 }
 
 function logisticsIntelligenceDecision(company,profile,type,dir,evidence,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
@@ -2440,7 +2512,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  const catalogChecks=consultCatalogForMapDistribution(map);
  const plan=new Map(),skipped=[],proof=[],assumptions=[],anomalies=[],researchRejected=[],contextualDecisions=[];
  let researchRejectedTotal=0;
- const grouped={alta:0,baixa:0,outros:0},perCompany=[];
+ const grouped={alta:0,baixa:0,outros:0},perCompany=[],palletBalance=[];
  const cargoChecks=new Map();
  for(const info of cargo.cargos.values()){
   const type=info.unresolvedName?null:kind(info.name);
@@ -2452,9 +2524,11 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   for(const entry of cargoChecks.values()){
    if(!entry.type||!entry.body.length)continue;
    for(const dir of ["out","in"]){
-    const heuristic=companyCargoCompatibility(company,profile,entry.type,dir,entry.info,anomalies);
-    const category=categoryCargoCandidate(company,profile,entry.type,dir);
-    const context=!category?economicContextCandidate(company,profile,entry.type,dir):null;
+    const pallet=entry.type==="paletizado";
+    if(pallet&&palletCompanyRole(company,dir)==="forbidden")continue;
+    const heuristic=pallet?null:companyCargoCompatibility(company,profile,entry.type,dir,entry.info,anomalies);
+    const category=pallet?genericPalletCandidate(company,profile,dir):categoryCargoCandidate(company,profile,entry.type,dir);
+    const context=!pallet&&!category?economicContextCandidate(company,profile,entry.type,dir):null;
     const evidence=heuristic?.kind==="direta"?heuristic:(category||context||heuristic);
     if(!evidence)continue;
     const ai=logisticsIntelligenceDecision(company,profile,entry.type,dir,evidence,knowledge);
@@ -2472,7 +2546,11 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   }
   perCompany.push(decisions);
  }
- for(const entry of cargoChecks.values()){
+ const sortedEntries=[...cargoChecks.values()].sort((a,b)=>
+  Number(a.type==="paletizado")-Number(b.type==="paletizado")||
+  a.info.id.localeCompare(b.info.id));
+ for(const entry of sortedEntries){
+  if(entry.type==="paletizado")palletBalance.push(balancePalletRoute(entry,map,plan));
   const {info,type,body}=entry,issues=[],outs=entry.out,ins=entry.inn;
   if(!type)issues.push(info.unresolvedName?"cargo_data sem nome legível: informe descrição real, não adivinhar pelo ID":"tipo econômico da mercadoria não identificado");
   if(!info.body.length)issues.push("sem body_types");
@@ -2508,7 +2586,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
    scsSourceIds:outs.filter(x=>x.company.catalog).map(x=>x.company.id),
    scsDestIds:ins.filter(x=>x.company.catalog).map(x=>x.company.id)});
  }
- return{plan,skipped,proof,grouped,assumptions,catalogChecks,perCompany,anomalies,researchRejected,researchRejectedTotal,contextualDecisions,knowledge,
+ return{plan,skipped,proof,grouped,palletBalance,assumptions,catalogChecks,perCompany,anomalies,researchRejected,researchRejectedTotal,contextualDecisions,knowledge,
   emptyCompanies:[...map.companies.keys()].filter(id=>!plan.has(id)),
   engine:"company-first"};
 }
@@ -2642,7 +2720,7 @@ function audit(map,cargo,sim){
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
  ui.report.innerHTML="<div class='metrics'>"+
- [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade por categoria",sim.proof.filter(p=>p.confidence==="categoria_economica").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
+ [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade por categoria",sim.proof.filter(p=>p.confidence==="categoria_economica").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Pontos de paletes",sim.palletBalance.map(p=>p.out+" OUT / "+p.in+" IN").join("; ")||"nenhum"],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
  (ranked.length?"<details class='creator-catalog'><summary>Motivos das cargas sem rota ("+sim.skipped.length+")</summary>"+ranked.map(([reason,count])=>"<div class='audit'><b>"+count+"x</b><span>"+escapeHTML(reason)+"</span></div>").join("")+"</details>":"")+
@@ -2683,6 +2761,8 @@ function createDiagnosticText(map,cargo,sim){
   "Amostra detalhada das rejeições (limite de 600): "+(sim.researchRejected?.length||0),
   "Cargas efetivas do reboque: "+cargo.cargos.size,
   "Método: compatibilidade pela categoria da carga; empresas de comércio/armazenagem podem ser IN e OUT.",
+  "Palete Alto: madeira somente OUT; reciclagem/sucatão somente IN; demais empresas por amostragem.",
+  "Palete Alto: prob_coef="+PALLET_MARKET_POLICY.probCoef+"; pontos="+JSON.stringify(sim.palletBalance),
   "Escopo das cargas: "+(cargo.scope?.strategy||"sem especificação"),
   "Definições extras excluídas: "+(cargo.scope?.excluded.length||0),
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
@@ -2823,7 +2903,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,CARGO_CATEGORY_INDEX,categoryCargoCandidate,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,CARGO_CATEGORY_INDEX,categoryCargoCandidate,PALLET_MARKET_POLICY,palletCompanyRole,genericPalletCandidate,choosePalletPoints,balancePalletRoute,patchPalletCargoProbability,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();</script>
 </body>
 </html>
