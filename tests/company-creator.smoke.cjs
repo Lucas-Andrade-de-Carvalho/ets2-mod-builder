@@ -217,7 +217,10 @@ async function main(){
  const feedProof=reality.proof.find(p=>p.id==="carga17");
  const steelProof=reality.proof.find(p=>p.id==="carga9");
  assert.ok(feedProof,"Ração literal deve preservar rota");
- assert.equal(feedProof.confidence,"documental");
+ assert.ok(feedProof.directOut>0&&feedProof.directIn>0,
+  "Manter prova literal de ração em pelo menos um OUT e IN, mesmo quando a rota também envolve empresas por categoria");
+ assert.notEqual(feedProof.confidence,"documental",
+  "A confiança geral não pode ser documental quando há inclusão de categorias não literais");
  assert.ok(feedProof.sourceIds.includes("agromais"));
  assert.ok(feedProof.destIds.includes("abcatacado"));
  assert.ok(steelProof,"Bobinas devem circular na categoria siderúrgica");
