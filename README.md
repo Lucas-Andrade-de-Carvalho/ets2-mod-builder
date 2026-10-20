@@ -159,3 +159,10 @@ Consulte [QUALITY_V5.md](QUALITY_V5.md). O assistente exige evidências por merc
 
 ## V6.1 — roteamento por categorias econômicas
 A carga é analisada por categoria (grãos, insumos, construção, metal, fibras, madeira, bebidas, hortifruti, paletes). Empresas de comércio e armazenagem podem receber e expedir a mesma categoria: não é necessário identificar produtor e consumidor finais. Ainda é preciso haver empresas distintas nos sentidos IN/OUT e carroceria compatível. Exceções físicas e empresas incompatíveis permanecem bloqueadas. "Pallets Alto TESTE" pode circular apenas como categoria genérica, sem prova do tipo físico de palete.
+
+
+## V6.2 — correção dos fretes sem rota
+- O painel mostra a versão do motor ativo; usar o HTML atual evita confundir cópias antigas.
+- Para mapas com DEF genérica parcial, setores reconhecidos (fazendas, silos, cooperativas, revendas, construção, supermercados etc.) podem distribuir por categoria, mesmo sem nomes antigos de produtos; logística puramente genérica não recebe tudo automaticamente.
+- Quando um arquivo mistura pelo menos 15 unidades `carga1..carga23` com as cinco definições auxiliares `corn_b`, `soybean_b`, `potatoes_b`, `cott_seed`, `sugar_beet_b` sem manifesto/modelo, essas extras são excluídas; arquivos com manifesto ou modelos mantêm escopo declarado.
+- O diagnóstico mostra os setores presentes e a porcentagem de cargoN genérico. A ausência real de informações não deve ser ocultada.

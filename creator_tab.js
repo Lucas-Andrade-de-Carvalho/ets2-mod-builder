@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · DISTRIBUIÇÃO PELA CATEGORIA · v6.1";
+const ENGINE_BUILD="2026-10-20 · DISTRIBUIÇÃO PELA CATEGORIA · v6.2";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -152,19 +152,19 @@ const known=(id,label)=>{
  ["serraria",/^(araserr|serraria|serradero|sawmill)/],
  ["madeireira",/^(madeireira|madeiraria|lojamadeira|depomadeira|betimmadeira)/],
  ["moinho",/^(moinho|molino)/],
- ["hortifruti",/^(ceasa|hortifruti)/],
+ ["hortifruti",/^(ceasa|hortifruti|hortifrut|sacolao)/],
  ["ceramica",/^(olaria|ceramica|tijolaria)/],
  ["cimenteira",/^(cimenteira|fabrica.?cimento)/],
- ["obras",/^(abconstru|construtora|construcao|construc|construction|obra|canteiro)/],
+ ["obras",/^(abconstru|constru(?:cao|tora|c|[_-]|sc|ca)|cons[_-]?(?:aguacl|ameri|indiara|rbr|ribas)|construtora|construcao|construction|obras?|canteiro)/],
  ["pedreira",/^(pedreira|quarry|cantera|marmoraria)/],
  ["cervejaria",/^(ambev|heineken|cervejaria)/],
- ["supermercado",/^(supermercado|hipermercado|atacadao|assai|carrefour)/],
+ ["supermercado",/^(super(?:mercado|abc)|hipermercado|atacadao|assai|carrefour|abcatacado)/],
  ["siderurgica",/^(belgo|gerdau|usiminas|siderurgica)/],
  ["mineracao",/^(mineracao|mineradora|mining)/],
- ["materiais",/^(materiais|materialconstrucao|matconstrucao|matconst|matconstr|lojamat|lojamaterial|lojamateriais|depositomaterial|depomaterial|casamaterial|depoconst)/],
+ ["materiais",/^(materiais?|material(?:es)?(?:se|ber|ca|guapo|mg|sc|sp|rj|[0-9])|mate(?:rial)?[_-]?(?:guapo|ca|mg|sc|sp)|materialconstrucao|matconstrucao|matconst|matconstr|lojamat|lojamaterial|lojamateriais|depositomaterial|depomaterial|casamaterial|depoconst)/],
  ["metalurgica",/^(acero(?:[0-9]+)?$|metalurgica|acos?comercial)/],
  ["agroinsumos",/^(agrotec|agroinsumos|insumosagricolas)/],
- ["logistica",/^(arralog|transportadora|centrologistico|centrodistribuicao|armazemgeral|logistica)/],
+ ["logistica",/^(arralog|transportadora|centrologistico|centrodistribuicao|armazemgeral|logistica|translog|sc_multlog|sc_rodonave|sc_reiterlo)/],
  ["posto",/^(posto|refinaria|petrobras|ipiranga)/],
  ["concessionaria",/^(concessionaria|dealer)/],
  ["correios",/^(correios|sedex)/],
@@ -199,8 +199,8 @@ const kind=name=>{
  if(/\b(?:bobinas?|steel[ _-]?coils?|metal[ _-]?coils?)\b/i.test(x))return "bobinas_industriais";
  // Sementes de algodão não são pluma de algodão beneficiada.
  if(/\b(?:sementes?|seeds?)\b/.test(x)&&/\b(?:algodao|cotton)\b/.test(x))return null;
- // Produto TESTE de paletes sem indicação de vazios/embalagem não é
- // prova de expedição de paletes vazios ou carga paletizada.
+ // O rótulo TESTE não comprova paletes vazios; só determina a
+ // categoria genérica de paletes para compatibilidade econômica.
  if(/\b(?:teste|test)\b/.test(x)&&/\b(?:paletes?|pallets?)\b/.test(x))return "paletizado";
  for(const [k,re] of patterns)if(re.test(x))return k;
  return null;
@@ -736,14 +736,25 @@ async function selectTrailerCargoScope(files,cargos,manifests){
  }
  const manifestMatches=[...included].filter(x=>cargos.has(x));
  const visualMatches=[...visual].filter(x=>cargos.has(x));
+ // Quando os 23 IDs de um conjunto específico do Librelato aparecem ao lado
+ // de cinco definições auxiliares comuns do jogo, o ZIP pode ter sido
+ // montado por inclusão de bases extras sem manifesto. Não tratar automaticamente
+ // esses cinco registros como cargas do reboque. A regra só atua quando há
+ // pelo menos 15 IDs internos da série original E nenhum manifesto/modelo.
+ const core=[...cargos.keys()].filter(id=>/^carga(?:[1-9]|1\d|2[0-3])$/.test(id));
+ const auxiliaryIds=new Set(["corn_b","soybean_b","potatoes_b","cott_seed","sugar_beet_b"]);
+ const inferred=manifestMatches.length||visualMatches.length||core.length<15?null:
+   new Set([...cargos.keys()].filter(id=>!auxiliaryIds.has(id)));
  const chosen=manifestMatches.length?new Set(manifestMatches):
-   visualMatches.length?new Set(visualMatches):null;
+   visualMatches.length?new Set(visualMatches):inferred;
  const strategy=manifestMatches.length?"manifesto @include":
-   visualMatches.length?"modelos físicos vehicle/cargo":"sem manifesto/modelo (todas as definições)";
+   visualMatches.length?"modelos físicos vehicle/cargo":
+   inferred?"série de 15+ cargas Librelato (exclusão de cinco auxiliares do jogo)":
+   "sem manifesto/modelo (todas as definições)";
  const excluded=[];
  if(chosen)for(const [id,c] of [...cargos]){
   if(chosen.has(id))continue;
-  excluded.push({id,name:c.name,reason:"não declarado no "+strategy});
+  excluded.push({id,name:c.name,reason:inferred?"carga auxiliar do jogo, fora da série principal do reboque":"não declarado no "+strategy});
   cargos.delete(id);
  }
  return{strategy,excluded,manifestMatches:manifestMatches.length,
@@ -1777,7 +1788,17 @@ function categoryCargoCandidate(company,profile,type,dir){
  const goods=originalOut+originalIn>0;
  const knownRole=dealer||shipper||receiver;
  if(!goods&&!knownRole)return null;
- if(def.need.includes(role)&&!goods)return null;
+ // A principal evidência passa a ser a CATEGORIA ECONÔMICA DO RAMO:
+ // uma revenda de insumos/depósito tem mercadorias compatíveis mesmo
+ // quando a DEF traz apenas os IDs genéricos cargo.cargaN.
+ // Operadores logísticos genéricos continuam precisando de evidência de
+ // mercadoria, para evitar autorizar toda a economia indiscriminadamente.
+ if(def.need.includes(role)&&!goods&&role==="logistica")return null;
+ // Operações de saída de paletes são retornos comerciais, não produção.
+ // Uma fazenda de qualquer cultura não é automaticamente beneficiadora
+ // de pluma: exige identificação especializada ou evidência dos IN/OUT.
+ if(type==="algodao"&&role==="fazenda"&&dir==="out"&&!goods&&
+    !/algod|cotton|pluma/i.test(norm(company.id+" "+company.name)))return null;
  // Empresas com produto/categoria na DEF, mas ID opaco: preservar sentido
  // IN/OUT observado. Comércio/armazenagem: os DOIS sentidos são válidos.
  if(role==="desconhecida"&&!(dir==="out"?originalOut>0:originalIn>0))return null;
@@ -2032,13 +2053,13 @@ function audit(map,cargo,sim){
  if(!assignedCompanies)warning.push("Nenhum ponto real de expedição foi encontrado. Confira a DEF do mapa.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
  if(cargo.scope?.excluded.length)warning.push(
-  cargo.scope.excluded.length+" definições extras foram excluídas por não pertencerem ao manifesto/modelos do reboque.");
+  cargo.scope.excluded.length+" definições extras foram excluídas do escopo: "+cargo.scope.strategy+".");
  const reasons=new Map();
  for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
  const ranked=[...reasons].sort((a,b)=>b[1]-a[1]);
  const roles=new Map();
  for(const item of companies)roles.set(item.role,(roles.get(item.role)||0)+1);
- ui.report.innerHTML="<div class='metrics'>"+
+ ui.report.innerHTML="<p class='muted'><b>Motor ativo: "+escapeHTML(ENGINE_BUILD)+"</b> · Agrupamento pela categoria da mercadoria. A quantidade de rotas depende das empresas realmente presentes na DEF.</p><div class='metrics'>"+
  [["Empresas",companies.length],["Cargas do reboque",cargo.cargos.size],["Com prova documental",sim.proof.filter(p=>p.confidence==="documental").length],["Compatibilidade por categoria",sim.proof.filter(p=>p.confidence==="categoria_economica").length],["Compatibilidade econômica forte",sim.proof.filter(p=>p.confidence==="economica_forte").length],["Com categoria relacionada",sim.proof.filter(p=>p.confidence==="relacionada").length],["Rotas inferidas",sim.proof.filter(p=>p.confidence==="inferida").length],["Sem rota válida",sim.skipped.length],["Rejeições econômicas",sim.researchRejectedTotal||0],["Grade baixa",sim.grouped.baixa],["Grade alta",sim.grouped.alta],["Relações IN/OUT",assigned],["Empresas sem cargas compatíveis",sim.emptyCompanies?.length||0]]
  .map(([t,v])=>"<div class='metric'><span>"+escapeHTML(t)+"</span><strong>"+v+"</strong></div>").join("")+"</div>"+
  (warning.length?"<p class='warning'>"+warning.map(escapeHTML).join("<br>")+"</p>":"")+
@@ -2080,6 +2101,9 @@ function createDiagnosticText(map,cargo,sim){
   "Amostra detalhada das rejeições (limite de 600): "+(sim.researchRejected?.length||0),
   "Cargas efetivas do reboque: "+cargo.cargos.size,
   "Método: compatibilidade pela categoria da carga; empresas de comércio/armazenagem podem ser IN e OUT.",
+  "RESUMO DAS EMPRESAS POR SETOR: "+JSON.stringify([...map.companies.values()].reduce((obj,c)=>(obj[c.role]=(obj[c.role]||0)+1,obj),{})),
+  "DEF com cargo.cargaN genérico: "+Math.round(isGenericCompanyMap(map).share*100)+"% das referências.",
+  "Motor V6.2: para mapear empresas desconhecidas, envie a DEF Company ORIGINAL ou informe ID = setor; nenhuma associação será inventada.",
   "Escopo das cargas: "+(cargo.scope?.strategy||"sem especificação"),
   "Definições extras excluídas: "+(cargo.scope?.excluded.length||0),
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
@@ -2164,9 +2188,9 @@ async function generate(){
   const integrity=isGenericCompanyMap(map);
   if(integrity.count>=1000&&integrity.share>=0.90)
     throw Error("A DEF do mapa contém "+Math.round(integrity.share*100)+
-    "% de permissões genéricas cargo.cargaN, não as mercadorias originais. "+
-    "Não é possível deduzir logística real desses arquivos. "+
-    "Use a DEF COMPANY ORIGINAL do mapa, sem as DEF Companies genéricas 1 e 2 do Librelato.");
+    "% de permissões genéricas cargo.cargaN: não é possível recuperar setores desconhecidos. "+
+    "Use a DEF Company original, ou uma DEF que mantenha informações específicas dos estabelecimentos. "+
+    "Para não gerar uma Company incorreta, a exportação foi interrompida.");
   applyCompanyOverrides(map);await yieldUI();
   say("Identificando cargas e carrocerias…",28);
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do reboque não contém unidades cargo_data reconhecidas.");
@@ -2177,7 +2201,7 @@ async function generate(){
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
   // Sem compatibilidade: mantém as empresas e gera SCS neutralizador integral.
   // Isso é um resultado legítimo, não erro de análise.
-  if(!sim.plan.size)say("Nenhuma carga nova compatível; todas as empresas serão preservadas com permissões antigas neutralizadas.",51);
+  if(!sim.plan.size)say("Nenhum par IN/OUT compatível: verifique o resumo de setores no diagnóstico TXT; não existe correção segura sem identificar empresas reais.",51);
   // Não inventar fretes para completar uma grade ausente neste mapa.
   // Exporta somente as ofertas compatíveis e informa a limitação no diagnóstico.
   say("Criando DEF Company completa…",60);

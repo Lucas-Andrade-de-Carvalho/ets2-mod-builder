@@ -565,6 +565,63 @@ async function main(){
    assert.ok(depotSCS.file("def/company/"+id+"/"+dir+"/milho_granel.sii"),
     "Um depósito válido deve participar em ambos os sentidos: "+id+" "+dir);
 
+
+ // Regressão V6.2: DEF parcialmente genérica sem mercadoria identificável,
+ // mas empresas de setores específicos reconhecidas pelo próprio mapa.
+ const categoryDef=new JSZip(),categoryCargo=new JSZip();
+ for(const id of ["fazenda_teste","silo_centro","cooperativa_norte","materialse1",
+   "cons_rbr","ambev","supermercado_leste","marmoraria_centro","pedreira_sul",
+   "madeireira_centro","obras_leste","hortifruti_leste","reciclagem_madeira"]){
+  categoryDef.file("def/company/"+id+"/editor/a.sii","SiiNunit\n{}\n");
+  // O conteúdo não identifica mercadoria, mas a empresa está documentada.
+  companyFile(categoryDef,id,"out","out_old","carga3");
+  companyFile(categoryDef,id,"in","in_old","carga4");
+ }
+ for(const [id,name,body] of [
+  ["carga1","Carga de milho","alta"],["carga2","Carga de Soja","alta"],
+  ["carga4","Carga Madeira","baixa"],["carga7","Sacos de Batatas","alta"],
+  ["carga12","Cervejas","alta"],["carga14","Pedra Granito 1","baixa"],
+  ["carga16","Pallets Alto TESTE","alta"]
+ ]){
+  categoryCargo.file("cargo/"+id+".sui",
+   'cargo_data : cargo.'+id+' {\n name: "'+name+'"\n body_types[]: '+body+'\n}');
+ }
+ const categoryMap=await creator.loadMap(categoryDef),categoryLoads=await creator.loadCargo(categoryCargo);
+ const categorySim=creator.simulate(categoryMap,categoryLoads);
+ for(const id of ["carga1","carga2","carga4","carga7","carga12","carga14","carga16"]){
+  const p=categorySim.proof.find(x=>x.id===id);
+  assert.ok(p,"Categoria pode circular sem produto idêntico na DEF: "+id);
+  assert.ok(p.sourceIds.some(a=>p.destIds.some(b=>a!==b)),"Exigir pares distintos: "+id);
+  assert.notEqual(p.confidence,"documental","cargoN genérico não pode virar prova literal");
+ }
+ assert.ok(categorySim.proof.find(x=>x.id==="carga12").sourceIds.includes("ambev"));
+ assert.ok(categorySim.proof.find(x=>x.id==="carga12").destIds.includes("supermercado_leste"));
+ assert.ok(categorySim.proof.find(x=>x.id==="carga14").destIds.includes("materialse1"));
+ assert.ok(categorySim.proof.find(x=>x.id==="carga14").destIds.includes("cons_rbr"));
+ const categoryPack=await JSZip.loadAsync((await creator.build(categoryMap,categoryLoads,categorySim)).blob);
+ assert.ok(categoryPack.file("def/company/silo_centro/in/carga1.sii"));
+ assert.ok(categoryPack.file("def/company/silo_centro/out/carga1.sii"));
+ assert.deepEqual(creator.parseCompanyCargoUnits(
+  await categoryPack.file("def/company/fazenda_teste/out/out_old.sii").async("text"),
+  "out_old.sii"),[],"Neutralizar antiga cargoN sem destruir a empresa");
+ assert.match(creator.createDiagnosticText(categoryMap,categoryLoads,categorySim),/RESUMO DAS EMPRESAS POR SETOR/);
+
+ // Regressão: o arquivo original do Librelato traz 23 cargas internas
+ // e definições adicionais da base ETS2. Sem manifesto, excluir 5 extras.
+ const mixedCargo=new JSZip();
+ for(let n=1;n<=23;n++)
+  mixedCargo.file("cargo/carga"+n+".sui",'cargo_data : cargo.carga'+n+
+   ' {\n name: "Carga de milho"\n body_types[]: alta\n}');
+ for(const [id,name] of [["corn_b","Milho"],["soybean_b","Soja"],
+   ["potatoes_b","Batata"],["cott_seed","Sementes de Algodão"],
+   ["sugar_beet_b","@@cn_sugar_beet@@"]])
+  mixedCargo.file("cargo/"+id+".sui",'cargo_data : cargo.'+id+
+   ' {\n name: "'+name+'"\n body_types[]: alta\n}');
+ const mixedParsed=await creator.loadCargo(mixedCargo);
+ assert.equal(mixedParsed.cargos.size,23,"Não misturar cinco auxiliares com cargas reais do Librelato");
+ assert.equal(mixedParsed.scope.excluded.length,5);
+ assert.ok(mixedParsed.scope.strategy.includes("Librelato"));
+
  // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS
  // neutralizador integral, preservando suas empresas sem novas ofertas.
  const emptyWorld=new JSZip(),emptyCargo=new JSZip();
