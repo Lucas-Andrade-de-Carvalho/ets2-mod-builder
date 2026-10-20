@@ -112,6 +112,34 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // O nome é auxiliar: se ele contradiz os arquivos IN/OUT, a mercadoria
+ // efetivamente declarada deve prevalecer. O nome SOZINHO não libera frete.
+ function counterExample(id,role,old){
+  return{id,role,old:old.map(([dir,unit])=>({dir,unit,stem:"irrelevante"}))};
+ }
+ const nameMismatch=counterExample("posto_de_combustivel","posto",[["out","corn"],["in","fertilizer"]]);
+ const nameProfile=creator.companyCargoProfile(nameMismatch);
+ const nameResult=creator.companyCargoCompatibility(nameMismatch,nameProfile,"milho","out",{id:"carga1"});
+ assert.ok(nameResult,"Posto com cargo: corn precisa ser analisado como expedidor de milho");
+ assert.equal(nameResult.kind,"direta");
+ assert.equal(nameResult.roleConflict,true,"O diagnóstico deve identificar nome/setor contraditório");
+ assert.equal(creator.companyCargoCompatibility(nameMismatch,nameProfile,"cerveja","out",{id:"carga12"}),null);
+ const namedSteel=counterExample("gerdau","siderurgica",[["out","adubo"],["in","corn"]]);
+ assert.equal(creator.companyCargoCompatibility(namedSteel,creator.companyCargoProfile(namedSteel),
+  "adubo","out",{id:"carga3"})?.kind,"direta",
+  "Empresa chamada siderúrgica pode expedir adubo se a DEF comprovar");
+ const byNameOnly=counterExample("fazenda_milho","fazenda",[["out","diesel"],["in","petrol"]]);
+ assert.equal(creator.companyCargoCompatibility(byNameOnly,creator.companyCargoProfile(byNameOnly),
+  "milho","out",{id:"carga1"}),null,"O nome fazenda não inventa milho");
+ const idOpaque=counterExample("xy987","desconhecida",[["out","bricks"],["in","wood"]]);
+ assert.equal(creator.companyCargoCompatibility(idOpaque,creator.companyCargoProfile(idOpaque),
+  "tijolo","out",{id:"carga13"})?.kind,"direta");
+ const noCargo={id:"empresaA",role:"materiais",old:[{dir:"out",stem:"bricks",unit:null}]};
+ assert.equal(creator.companyCargoCompatibility(noCargo,creator.companyCargoProfile(noCargo),
+  "tijolo","out",{id:"carga13"})?.kind,"inferida",
+  "Sem cargo: não se pode alegar correspondência direta");
+
+
  // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS
  // neutralizador integral, preservando suas empresas sem novas ofertas.
  const emptyWorld=new JSZip(),emptyCargo=new JSZip();
@@ -316,8 +344,10 @@ async function main(){
   for(const co of [origin,dest]){
    criticalMap.file("def/company/"+co+"/editor/cidade.sii","SiiNunit\n{}\n");
   }
-  const outs=item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from];
-  const ins=item.id==="carga9"?["chapaaco","ferroconst"]:[item.to];
+  // Teste de integração: cargas só são obrigatórias quando a própria DEF
+  // comprova a mercadoria, e não quando há apenas itens vagamente relacionados.
+  const outs=item.id==="carga23"?["sorghum","corn"]:item.id==="carga9"?["steel_coils","chapaaco"]:[item.from];
+  const ins=item.id==="carga23"?["sorghum"]:item.id==="carga9"?["metal_coils","ferroconst"]:[item.to];
   for(const [dir,co,goods]of [["out",origin,outs],["in",dest,ins]])
    for(const [k,unit]of goods.entries())
     companyFile(criticalMap,co,dir,"evidencia_"+k,unit);

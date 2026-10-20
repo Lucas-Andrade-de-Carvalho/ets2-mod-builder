@@ -107,3 +107,8 @@ Fonte oficial: https://eurotrucksimulator2.com/modding_changes.php ("Changes in 
 ## Geração universal empresa por empresa (2026-10-20)
 
 O motor percorre cada empresa real da DEF e examina seus `IN` e `OUT` antes de associar as mercadorias efetivamente presentes na DEF do reboque. Associações inferidas por produtos relacionados ficam marcadas no diagnóstico. Se nenhuma carga for economicamente compatível, aquela empresa fica sem novas permissões e suas permissões originais são neutralizadas pela sobrescrita integral. Não há tabelas obrigatórias de empresas nem limites globais de produtores por carga. Cargas sem origem e destino distintos permanecem sem rota.
+
+
+### Prioridade do conteúdo IN/OUT sobre nomes (v3.1)
+
+O campo `cargo:` encontrado na DEF original é agora prova primária; um nome ou ID sugerindo setor diferente não bloqueia um cargo realmente declarado. Se houver conflito, ele será registrado no diagnóstico. Nomes de arquivos `.sii` podem auxiliar apenas como evidência inferida quando `cargo:` não foi identificado. Nomes e catálogo SCS não criam novas associações por si sós. Empresas sem mercadoria compatível seguem com IN/OUT antigos neutralizados.
