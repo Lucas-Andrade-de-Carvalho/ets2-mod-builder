@@ -266,6 +266,60 @@ async function main(){
   }
  }
 
+
+ // Integração da correção com perfis extraídos da DEF REAL anexada pelo usuário.
+ // Empresa IDs, mercadorias IN/OUT e combinações foram verificadas no ZIP
+ // def_company(1).zip (208 empresas, 6739 OUT, 7088 IN).
+ const actualProfiles=[
+  {id:"ped",out:["stones","gravel","ore","sand"],in:["cement"]},
+  {id:"car",out:["stones","gravel","ore"],in:["cement","iron_pipes","concrete"]},
+  {id:"arc",out:["big_bag_seed","graos","milho","soja"],in:["milho","soja","fertilizer"]},
+  {id:"aria_bd2",out:["beef3","milk"],in:["big_bag_seed","tractors"]},
+  {id:"rocasoja",out:["feijao","milho","soja"],in:["big_bag_seed","fertilizer"]},
+  {id:"cooper",out:["feijao","graos","milho","soja"],in:["feijao","graos","milho","soja","fertilizer"]},
+  {id:"itaacos",out:["iron_pipes","scrap_metals","largetubes"],in:["iron_pipes","largetubes"]},
+  {id:"gnt2",out:["metal_center","hmetal"],in:["metal_center","hmetal"]}
+ ];
+ const mapRealSubset=new JSZip(),libRealSubset=new JSZip();
+ for(const co of actualProfiles){
+  mapRealSubset.file("def/company/"+co.id+"/editor/test.sii","SiiNunit\\n{}\\n");
+  for(const dir of ["out","in"])for(const [i,unit]of co[dir].entries())
+   companyFile(mapRealSubset,co.id,dir,"real_"+i+"_"+dir,unit);
+ }
+ const missingEight=[
+  ["carga14","Pedra Granito 1","baixa"],["carga15","Pedra Granito 2","baixa"],
+  ["carga17","Ração Mineral Laranja","alta"],["carga18","Xerém","alta"],
+  ["carga19","Sacaria Ração","alta"],["carga20","Sacaria Ração 2","alta"],
+  ["carga5","Carga Pluma de Algodão","alta"],["carga9","Bobinas 2","baixa"]
+ ];
+ for(const [id,name,body]of missingEight)
+  libRealSubset.file("cargo/"+id+".sui",
+    'cargo_data : cargo.'+id+' {\\n name: "'+name+'"\\n body_types[]: '+body+'\\n}\\n');
+ const mapSubset=await creator.loadMap(mapRealSubset);
+ const libSubset=await creator.loadCargo(libRealSubset);
+ assert.equal(mapSubset.companies.size,actualProfiles.length);
+ const realSim=creator.simulate(mapSubset,libSubset);
+ assert.deepEqual(realSim.skipped.map(x=>x.id),[],
+  "DEF baseada em mercadorias reais deve permitir 8 cargas: "+JSON.stringify(realSim.skipped));
+ const realScs=await creator.build(mapSubset,libSubset,realSim);
+ const realArchive=await JSZip.loadAsync(realScs.blob);
+ const ids=new Set(actualProfiles.map(x=>x.id));
+ for(const [id]of missingEight){
+  const src=realSim.proof.find(x=>x.id===id);
+  assert.ok(src&&src.origins>0&&src.destinations>0,"Origem/destino inválido "+id);
+  for(const co of src.sourceIds)
+   assert.ok(realArchive.file("def/company/"+co+"/out/"+id+".sii"),"OUT ausente "+id+" "+co);
+  for(const co of src.destIds)
+   assert.ok(realArchive.file("def/company/"+co+"/in/"+id+".sii"),"IN ausente "+id+" "+co);
+ }
+ for(const path of Object.keys(realArchive.files)){
+  const match=path.match(/^def[/]company[/]([^/]+)[/](?:in|out)[/](carga[0-9]+)[.]sii$/i);
+  if(match){
+   assert.ok(ids.has(match[1]),"Empresa inventada "+match[1]);
+   assert.ok(missingEight.some(x=>x[0]===match[2]),"Cargo inventado "+match[2]);
+  }
+ }
+
  for(const [label,archive,expectedDepth] of [
   ["raiz",f.map,0],
   ["ZIP/SCS aninhado",f.wrapper,2]
