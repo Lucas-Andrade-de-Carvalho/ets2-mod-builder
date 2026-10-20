@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · INTELIGÊNCIA DE EVIDÊNCIAS · v5.0";
+const ENGINE_BUILD="2026-10-20 · ANÁLISE VALIDADA EM DEF REAIS · v5.1";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -186,6 +186,11 @@ const kind=name=>{
    .replace(/\b(soja|milho|sorgo)alta\b/g,"$1 alta")
    .replace(/\b(batata|laranja|cerveja)s\b/g,"$1");
  if(/\b(?:bobinas?|steel[ _-]?coils?|metal[ _-]?coils?)\b/i.test(x))return "bobinas_industriais";
+ // Sementes de algodão não são pluma de algodão beneficiada.
+ if(/\b(?:sementes?|seeds?)\b/.test(x)&&/\b(?:algodao|cotton)\b/.test(x))return null;
+ // Produto TESTE de paletes sem indicação de vazios/embalagem não é
+ // prova de expedição de paletes vazios ou carga paletizada.
+ if(/\b(?:teste|test)\b/.test(x)&&/\b(?:paletes?|pallets?)\b/.test(x))return null;
  for(const [k,re] of patterns)if(re.test(x))return k;
  return null;
 };
@@ -572,7 +577,9 @@ function farmCargoEvidence(c,type){
 // Interpreta campos cargo: respeitando comentários de linha/bloco e strings.
 // Devolve offsets para desativar permissões sem destruir outros campos SII.
 function maskSiiComments(source){
- const text=String(source),chars=[...text];let quote="",line=false,block=false;
+ // Offsets de regex e slice são posições UTF-16. Spread([...text]) usa
+ // pontos de código e perde alinhamento em SII com emoji/caracteres raros.
+ const text=String(source),chars=text.split("");let quote="",line=false,block=false;
  for(let i=0;i<text.length;i++){
   const ch=text[i],next=text[i+1];
   if(line){
@@ -704,15 +711,28 @@ async function loadCargo(zip){
  let i=0;
  for(const f of files.values()){
   if(!/\.(sii|sui)$/i.test(f.p))continue;
-  if((f.obj._data?.uncompressedSize||0)>500000)continue;
+  if((f.obj._data?.uncompressedSize||0)>500000)
+   throw Error("Definição cargo_data extensa demais para leitura confiável: "+f.p);
   const txt=await f.obj.async("text"),p=f.p;
+  if(txt.length>500000)throw Error("Definição cargo_data extensa demais para leitura confiável: "+p);
   if(/^def\/cargo\.[a-z0-9_-]+\.sii$/i.test(p))manifests.push(p);
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
   if(id&&/^[a-z][a-z0-9_]*$/i.test(id)){
    let label=(txt.match(/^\s*name\s*:\s*"([^"]+)"/mi)||[])[1]||"";
-   const unresolvedName=!label||label.includes("@@");
+   let unresolvedName=!label||label.includes("@@");
+   // IDs semanticamente explícitos (não cargoN) podem identificar três
+   // mercadorias padronizadas da DEF, mesmo quando locale @@ não está presente.
+   // Não aplicar esta regra a IDs genéricos do reboque ou produtos ambíguos.
+   const semanticLabels={corn_b:"Milho",soybean_b:"Soja",potatoes_b:"Batata"};
+   if(unresolvedName&&Object.hasOwn(semanticLabels,id.toLowerCase())){
+    label=semanticLabels[id.toLowerCase()];
+    unresolvedName=false;
+   }
    if(unresolvedName)label="Mercadoria não identificada ("+id+")";
    const bs=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\d*\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
+   if(cargos.has(id.toLowerCase()))
+    throw Error("ID de cargo_data duplicado em arquivos diferentes: "+
+      id+" ("+cargos.get(id.toLowerCase()).path+" e "+p+")");
    cargos.set(id.toLowerCase(),{id:id.toLowerCase(),unit:"cargo."+id.toLowerCase(),name:label,unresolvedName,body:[...new Set(bs)],path:p});
   }
   const ca=p.match(/^def\/cargo\/([a-z0-9_]+)\//i);
@@ -1403,8 +1423,8 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
  // Nome, ID e catálogo são sugestões, não veto sobre cargo: verdadeiro.
  const declared=profile.declared?.[dir]||new Set();
  const signature=findProductEvidence(profile,type,dir);
- const direct=declared.has(info.id.toLowerCase())||
-   signature.level==="especifica"||
+ // Compartilhar um identificador numérico entre mods não comprova produto.
+ const direct=signature.level==="especifica"||
    [...declared].some(unit=>oldCargoCategory(unit)===type);
  const coherence=economicCoherence(c,profile,type,dir);
  if(!coherence.allowed){
@@ -1539,7 +1559,7 @@ const PRODUCT_EVIDENCE=Object.freeze({
  adubo:/^(?:adubo|fertilizantes?|fertilizers?|ureia|urea)$/i,
  madeira:/^(?:madeira|madeirame|wood|timber|lumber|logs?|planks?|boards?)$/i,
  algodao:/^(?:pluma|cotton_?bales?|cottonlint|algodao_pluma|baled_?cotton)$/i,
- cimento:/^(?:cimento|cement|cement_bags?|cement_pallet)$/i,
+ cimento:/^(?:cimento|cement|cement_b|cement_bags?|cement_pallet)$/i,
  batata:/^(?:batatas?|potatoes?|potato_b)$/i,
  laranja:/^(?:laranjas?|oranges?|citrus_oranges?)$/i,
  cerveja:/^(?:cervejas?|beer|beer_c|cerveza)$/i,
@@ -1553,7 +1573,7 @@ const PRODUCT_EVIDENCE=Object.freeze({
 });
 const RELATED_STONE=/^(?:stones?|pedras?|marmore|marble|marble_blocks?|dimension_?stone)$/i;
 const EVIDENCE_REQUIRED=new Set(["milho","soja","sorgo","batata","laranja",
- "cerveja","cimento","tijolo","granito","algodao","racao",
+ "cerveja","cimento","tijolo","granito","algodao","racao","adubo","madeira","aco",
  "bobinas_industriais","palete_vazio","paletizado"]);
 function findProductEvidence(profile,type,dir){
  const units=profile.declared?.[dir]||new Set();

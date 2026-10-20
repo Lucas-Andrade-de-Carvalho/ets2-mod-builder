@@ -112,6 +112,93 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Regressão baseada nos tokens IN/OUT observados nas DEFs MINAS e
+ // em outra DEF brasileira: sem copiar arquivos privados para o repositório.
+ assert.equal(creator.kind("Sementes de Algodão"),null,
+  "Semente não pode se converter em pluma");
+ assert.equal(creator.kind("Pallets Alto TESTE"),null,
+  "Rótulo de teste genérico não é evidência de paletes vazios");
+ const sampleMap=new JSZip(),sampleCargo=new JSZip();
+ const sampleCompanies={
+  agromais:{out:["racao","adubo","fertilizante"],in:["milho","soja"]},
+  abcatacado:{in:["racao","batata","laranja","milho"],out:[]},
+  belgo:{out:["chapaaco","ferroconst"],in:["chapaaco"]},
+  cofepe:{in:["chapaaco","ferroconst"],out:["ferroconst"]},
+  ped:{out:["stones","gravel"],in:["cement"]},
+  empresa_sem_evidencia:{out:["sucata"],in:["diesel"]}
+ };
+ for(const [co,flow] of Object.entries(sampleCompanies)){
+  sampleMap.file("def/company/"+co+"/editor/filial.sii","SiiNunit\n{}\n");
+  for(const dir of ["in","out"])for(const [index,unit] of (flow[dir]||[]).entries())
+   companyFile(sampleMap,co,dir,unit+"_"+index,unit);
+ }
+ sampleCargo.file("cargo/carga17.sui",
+  'cargo_data : cargo.carga17 {\n name: "Ração Mineral Laranja"\n body_types[]: alta\n}\n');
+ sampleCargo.file("cargo/carga9.sui",
+  'cargo_data : cargo.carga9 {\n name: "Bobinas 2"\n body_types[]: baixa\n}\n');
+ sampleCargo.file("cargo/carga5.sui",
+  'cargo_data : cargo.carga5 {\n name: "Carga Pluma de Algodão"\n body_types[]: alta\n}\n');
+ sampleCargo.file("cargo/carga23.sui",
+  'cargo_data : cargo.carga23 {\n name: "Sorgoalto"\n body_types[]: alta\n}\n');
+ const minasParsedMap=await creator.loadMap(sampleMap);
+ const parsedCargo=await creator.loadCargo(sampleCargo);
+ const reality=creator.simulate(minasParsedMap,parsedCargo);
+ assert.equal(reality.proof.length,1,"Somente a ração tem origem e destino explícitos");
+ assert.equal(reality.proof[0].id,"carga17");
+ assert.equal(reality.proof[0].confidence,"documental");
+ assert.ok(reality.proof[0].sourceIds.includes("agromais"));
+ assert.ok(reality.proof[0].destIds.includes("abcatacado"));
+ for(const id of ["carga9","carga5","carga23"]){
+  assert.ok(reality.skipped.some(item=>item.id===id),
+    "Bobinas, pluma e sorgo não possuem produtos correspondentes");
+ }
+ assert.ok(!reality.plan.has("empresa_sem_evidencia"));
+ const realityBuilt=await creator.build(minasParsedMap,parsedCargo,reality);
+ const realitySCS=await JSZip.loadAsync(realityBuilt.blob);
+ assert.ok(realitySCS.file("def/company/agromais/out/carga17.sii"));
+ assert.ok(realitySCS.file("def/company/abcatacado/in/carga17.sii"));
+ for(const [co,dir,unit] of [["belgo","out","chapaaco_0"],
+  ["empresa_sem_evidencia","out","sucata_0"]]){
+  const generated=realitySCS.file("def/company/"+co+"/"+dir+"/"+unit+".sii");
+  assert.ok(generated,"Preservar arquivo original como neutralizador");
+  assert.deepEqual(creator.parseCompanyCargoUnits(await generated.async("text"),unit+".sii"),[],
+   "Neutralizar fretes incompatíveis");
+ }
+
+ // Strings com caracteres UTF-16 de dois code units não podem deslocar
+ // offsets de neutralização nem alterar comentários.
+ const unicodeSii='SiiNunit\n{\n // 🚚 carga de teste\\n'+
+  ' cargo_def : .a { cargo: "cargo.milho" } \n'+
+  ' cargo_def : .b { cargo: "cargo.soja" }\n}';
+ const corrected=creator.disableExistingCargo(unicodeSii,"unicode.sii");
+ assert.deepEqual(creator.parseCompanyCargoUnits(corrected,"unicode.sii"),[]);
+ assert.ok(corrected.includes("🚚"),"Texto Unicode original deve permanecer intacto");
+
+ // IDs semânticos localizados podem ser resolvidos; IDs genéricos não.
+ const labels=new JSZip();
+ for(const [id,locale] of [["corn_b","@@cn_maize@@"],["soybean_b","@@cn_soybean@@"],
+   ["potatoes_b","@@cn_potatoes@@"],["sugar_beet_b","@@cn_sugar_beet@@"]]){
+  labels.file("cargo/"+id+".sui",
+   'cargo_data : cargo.'+id+' {\n name: "'+locale+'"\n body_types[]: alta\n}\n');
+ }
+ const labelsData=await creator.loadCargo(labels);
+ for(const id of ["corn_b","soybean_b","potatoes_b"]){
+  assert.equal(labelsData.cargos.get(id).unresolvedName,false,"Nome semântico resolvido "+id);
+ }
+ assert.equal(labelsData.cargos.get("sugar_beet_b").unresolvedName,true,
+  "Mercadorias fora do dicionário semântico devem permanecer sem classificação");
+
+ // Não ignorar arquivos enormes ou IDs de cargo_data duplicados.
+ const repeated=new JSZip();
+ for(const path of ["cargo/carga1.sui","cargo/carga2.sui"])
+  repeated.file(path,'cargo_data : cargo.milho_repetido {\n name: "Milho"\n body_types[]: alta\n}');
+ await assert.rejects(creator.loadCargo(repeated),/duplicado/);
+ const cargoOversize=new JSZip();
+ cargoOversize.file("cargo/carga1.sui",
+  'cargo_data : cargo.carga1 {\n name: "Milho"\n body_types[]: alta\n}\n'+" ".repeat(520000));
+ await assert.rejects(creator.loadCargo(cargoOversize),/extensa demais/);
+
+
  // V5: a forma física e a mercadoria individual têm prioridade sobre
  // a semelhança entre produtos da mesma indústria.
  assert.equal(creator.kind("Bobina de aço"),"bobinas_industriais");
