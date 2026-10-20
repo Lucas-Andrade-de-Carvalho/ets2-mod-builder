@@ -112,6 +112,30 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Regressão derivada da DEF real def_company(1).zip, com 208 empresas e
+ // 6.739 arquivos OUT. Os IDs e mercadorias abaixo existem nessa DEF.
+ const sample=(id,role,from,to)=>({id,role,
+  old:[...from.map(unit=>({dir:"out",unit,stem:unit})),
+       ...to.map(unit=>({dir:"in",unit,stem:unit}))]});
+ const genuineSamples=[
+  ["granito","out",sample("ped","pedreira",["stones","gravel","ore","sand"],["cement"])],
+  ["granito","in",sample("quarry","pedreira",["stones","gravel","ore"],["cement","iron_pipes","metal_center"])],
+  ["racao","out",sample("arc","cooperativa",["big_bag_seed","graos","milho","soja"],["milho","soja","fertilizer"])],
+  ["racao","in",sample("aria_bd2","pecuaria",["beef3","milk"],["big_bag_seed","tractors"])],
+  ["algodao","out",sample("rocasoja","desconhecida",["feijao","milho","soja"],["big_bag_seed","fertilizer"])],
+  ["algodao","in",sample("cooper","cooperativa",["feijao","graos","milho","soja"],["feijao","graos","milho","soja","fertilizer"])],
+  ["bobinas_industriais","out",sample("itaacos","metalurgica",["iron_pipes","scrap_metals","largetubes"],["iron_pipes","largetubes"])],
+  ["bobinas_industriais","in",sample("itaacos","metalurgica",["iron_pipes","scrap_metals","largetubes"],["iron_pipes","largetubes"])]
+ ];
+ for(const [type,dir,company] of genuineSamples){
+  assert.ok(creator.realMapEconomicCandidate(company,type,dir),
+   "Regras novas não encontram evidência da DEF real: "+type+" "+dir+" "+company.id);
+ }
+ const misleading=sample("posto","posto",["stones","gravel","iron_pipes"],["cement"]);
+ assert.equal(creator.realMapEconomicCandidate(misleading,"granito","out"),null,
+  "Posto deve continuar excluído mesmo com dados absurdos");
+
+
  // Caso real reproduzido: DEF de mapa original tem IDs das mercadorias.
  // Já a DEF Company genérica 1/2 Librelato pode repetir cargo.cargaN
  // indiscriminadamente para praticamente todas as empresas.
