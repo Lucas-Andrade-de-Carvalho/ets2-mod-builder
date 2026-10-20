@@ -112,6 +112,26 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS
+ // neutralizador integral, preservando suas empresas sem novas ofertas.
+ const emptyWorld=new JSZip(),emptyCargo=new JSZip();
+ emptyWorld.file("def/company/p0/editor/city.sii","SiiNunit\n{}\n");
+ companyFile(emptyWorld,"p0","out","petroleum","diesel");
+ companyFile(emptyWorld,"p0","in","refinery","petrol");
+ emptyCargo.file("cargo/carga13.sui",
+  'cargo_data : cargo.carga13 {\n name: "Tijolos"\n body_types[]: baixa\n}\n');
+ const emptyWorldMap=await creator.loadMap(emptyWorld);
+ const emptyWorldLoads=await creator.loadCargo(emptyCargo);
+ const emptyWorldSim=creator.simulate(emptyWorldMap,emptyWorldLoads);
+ assert.equal(emptyWorldSim.plan.size,0);
+ assert.equal(emptyWorldSim.emptyCompanies.length,1);
+ const emptyWorldArchive=await creator.build(emptyWorldMap,emptyWorldLoads,emptyWorldSim);
+ const checkedEmpty=await JSZip.loadAsync(emptyWorldArchive.blob);
+ for(const item of ["def/company/p0/out/petroleum.sii","def/company/p0/in/refinery.sii"]){
+  assert.match(await checkedEmpty.file(item).async("text"),/cargo:\s*""/);
+ }
+
+
  // Diferentes mapas com IDs opacos: nenhuma associação deve depender
  // do nome da empresa ou de listas fixas de empresas.
  const universalMap=new JSZip(),universalCargo=new JSZip();
