@@ -22,6 +22,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+VERSION = '2.0.0'
+
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
  4:("madeira","Madeira"),5:("algodao","Pluma de algodao"),
@@ -116,6 +118,8 @@ def canonical_path(raw):
     if not path:return None
     # ZIPs de mapas podem comecar em def/company, company ou uma pasta raiz/...
     m=re.search(r'(?:^|/)(def/(?:company|cargo|vehicle)/.+)$',path,re.I)
+    if m:return m.group(1).lower()
+    m=re.search(r'(?:^|/)(def/cargo(?:\.[a-z0-9_-]+)?\.(?:sii|sui))$',path,re.I)
     if m:return m.group(1).lower()
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
@@ -392,6 +396,39 @@ def cargo_override(record):
         txt=re.sub(r'(\bcargo_data\s*:\s*cargo\.carga16\s*\{)',r'\1\n prob_coef: 0.08',txt,count=1,flags=re.I)
     return txt.encode("utf-8")
 
+
+def cargo_manifest_warnings(sources,records):
+    masters=[]
+    for source,archive in sources:
+        for path,blob in archive.items():
+            if re.fullmatch(r'def/cargo(?:\.[a-z0-9_-]+)?\.(?:sii|sui)',path):
+                masters.append((source,path,read_sii(blob)))
+    if not masters:
+        return ["Master def/cargo*.sii nao encontrado nos SCS anexados; "
+                "o registro das mercadorias precisa ser confirmado no jogo."]
+    joined="\n".join(t for src,p,t in masters).lower()
+    missing=[f"carga{n}" for n in MANIFEST if f"carga{n}" in records and
+             not re.search(r'(?<![a-z0-9_])carga'+str(n)+r'(?![a-z0-9_])',joined)]
+    notices=["Manifests identificados: "+
+             ", ".join(src+"/"+p for src,p,t in masters[:10])]
+    if missing:
+        notices.append("Cargas nao citadas literalmente nos manifestos: "+
+                       ", ".join(missing)+". Includes indiretos podem existir.")
+    return notices
+
+def hash_source(path):
+    h=hashlib.sha256();p=Path(path)
+    if p.is_dir():
+        files=sorted(x for x in p.rglob("*") if x.is_file())
+        for f in files:
+            h.update(str(f.relative_to(p)).replace("\\","/").encode("utf-8"))
+            with f.open("rb") as stream:
+                for part in iter(lambda:stream.read(1024*1024),b""):h.update(part)
+    else:
+        with p.open("rb") as stream:
+            for part in iter(lambda:stream.read(1024*1024),b""):h.update(part)
+    return h.hexdigest()
+
 def write_report(outdir,name,result):
     with open(outdir/(name+"_auditoria.json"),"w",encoding="utf-8") as f:
         json.dump(result,f,ensure_ascii=False,indent=2)
@@ -411,7 +448,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
     records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
-    errors=[];warnings=[]
+    errors=[];warnings=cargo_manifest_warnings(sources,records)
+    provenance=[{"arquivo":Path(p).name,"papel":label,"sha256":hash_source(p),
+                 "definicoes":len(arc)}
+                for (label,p),(_,arc) in zip(
+                    [("MOD PRINCIPAL",inputs["mod"]),("DEF 1",inputs["def1"]),
+                     ("DEF 2",inputs["def2"])],sources)]
     log("Trailer: "+str(totals["owned_body_files"])+" arquivos de carroceria propria; "+
         str(totals["owned_trailer_def_files"])+" trailer_defs novos; "+
         str(totals["legacy_trailer_def_files"])+" trailer_defs antigos.")
@@ -492,6 +534,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         for name,path in inputs["maps"].items():
             log("Gerando Company de "+name+"...")
             companies,count=checked_maps[name]
+            local_warnings=list(warnings)
             work={};evidence=[];bycargo={}
             for n,(category,title) in MANIFEST.items():
                 id=f"carga{n}"
@@ -504,7 +547,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
                              "origens_lista":outs,"destinos_lista":ins}
                 # Nao inventar rotas para completar 23/23.
-                if not outs or not ins: warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
+                if not outs or not ins: local_warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
                 for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             output_files={}
@@ -526,7 +569,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                           re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',read_sii(record["raw"])).encode("utf-8"))
             dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
             with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
-                for p,raw in sorted(output_files.items()):z.writestr(p,raw)
+                for p,raw in sorted(output_files.items()):
+                    entry=zipfile.ZipInfo(p,date_time=(2020,1,1,0,0,0))
+                    entry.external_attr=0o644<<16
+                    z.writestr(entry,raw,compress_type=zipfile.ZIP_DEFLATED,compresslevel=6)
             with zipfile.ZipFile(dest) as z:
                 if z.testzip() is not None:raise ValueError("Falha na integridade do ZIP: "+str(dest))
                 paths=set(z.namelist())
@@ -543,11 +589,15 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
                              "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
                              "out_originais":",".join(sorted(c.old_out))})
-            data={"mapa":name,"empresas":rows,"total_empresas":len(companies),
-                  "empresas_atendidas":len(work),"arquivos_inout_originais":count,
+            data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "total_empresas":len(companies),"empresas_atendidas":len(work),
+                  "arquivos_inout_originais":count,
                   "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
-                  "cadeias":bycargo,"evidencias":evidence,"avisos":list(warnings),
-                  "validacao":"SCS ZIP, paths IN/OUT, manifesto, cargo_data, trailer_def; nao e teste dentro do ETS2"}
+                  "cadeias":bycargo,"evidencias":evidence,
+                  "fontes_sha256":provenance+[{"arquivo":Path(path).name,"papel":"MAPA "+name,
+                                              "sha256":hash_source(path)}],
+                  "avisos":local_warnings,
+                  "validacao":"SCS ZIP, caminhos IN/OUT, body_types; disponibilidade no ETS2 nao testada"}
             write_report(outdir,name,data)
             log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
                 str(data["arquivos_inout_gerados"])+" permissões.")
