@@ -121,6 +121,27 @@
         "palete_vazio"
       ],
       "fact": "Paletes podem ser unidade de carga retornável ou embalagem que acompanha mercadorias. Um estabelecimento com cargas paletizadas não é necessariamente produtor ou expedidor de paletes vazios."
+    },
+    {
+      "id": "aco_produtos_planos",
+      "agency": "Instituto Aço Brasil",
+      "title": "Produtos planos: chapas e bobinas de aço",
+      "url": "https://www.acobrasil.org.br/site/produtos/",
+      "types": [
+        "bobinas_industriais",
+        "aco"
+      ],
+      "fact": "Bobinas integram a classe de produtos planos obtidos por laminação; tubos, arames e sucata pertencem a produtos/processos distintos e não comprovam movimentação de bobinas."
+    },
+    {
+      "id": "embrapa_fabrica_racao",
+      "agency": "Embrapa",
+      "title": "Produção de feno, silagem e ração em sistemas ILPF",
+      "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1128581/1/ProducaoFenoSilagemRacaoSistemaILPF.pdf",
+      "types": [
+        "racao"
+      ],
+      "fact": "A formulação de ração requer processamento e mistura de ingredientes; receber milho, soja ou insumos isoladamente não comprova expedição de ração pronta."
     }
   ],
   "policies": {
