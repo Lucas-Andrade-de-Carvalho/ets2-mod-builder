@@ -119,7 +119,7 @@ async function main(){
        ...to.map(unit=>({dir:"in",unit,stem:unit}))]});
  const genuineSamples=[
   ["granito","out",sample("ped","pedreira",["stones","gravel","ore","sand"],["cement"])],
-  ["granito","in",sample("quarry","pedreira",["stones","gravel","ore"],["cement","iron_pipes","metal_center"])],
+  ["granito","in",sample("car","desconhecida",["stones","gravel","ore"],["cement","iron_pipes","concrete"])],
   ["racao","out",sample("arc","cooperativa",["big_bag_seed","graos","milho","soja"],["milho","soja","fertilizer"])],
   ["racao","in",sample("aria_bd2","pecuaria",["beef3","milk"],["big_bag_seed","tractors"])],
   ["algodao","out",sample("rocasoja","desconhecida",["feijao","milho","soja"],["big_bag_seed","fertilizer"])],
