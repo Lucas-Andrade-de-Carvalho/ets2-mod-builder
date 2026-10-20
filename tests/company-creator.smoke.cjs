@@ -408,7 +408,7 @@ async function main(){
 
  assert.equal(element("companyCreateDownload").hidden,true);
  await element("companyCreateGenerate").listeners.click();
- assert.match(element("companyCreateStatus").textContent,/Company pronta:/);
+ assert.match(element("companyCreateStatus").textContent,/Company integral pronta:/);
  assert.equal(element("companyCreateDownload").hidden,false);
  assert.equal(element("companyCreateDownload").disabled,false);
  const output=await JSZip.loadAsync(generatedBytes);
@@ -420,17 +420,47 @@ async function main(){
   "def/company/fazenda01/editor/city.sii"
  ];
  for(const name of wanted)assert.ok(output.file(name),"Faltou "+name);
- assert.equal(output.file("def/company/fazenda01/out/milho_original.sii"),null);
+ // Deve COBRIR o caminho original, pois o mapa permanece ativo no jogo.
+ const obsolete=output.file("def/company/fazenda01/out/milho_original.sii");
+ assert.ok(obsolete,"Arquivo antigo sem substituição (o mapa reinjeta a carga)");
+ assert.match(await obsolete.async("text"),/\bcargo\s*:\s*""/,
+  "Arquivo original deve ter cargo vazio");
+ assert.doesNotMatch(await obsolete.async("text"),/cargo\.corn|cargo\.milho_original/i);
+ assert.match(creator.disableExistingCargo('SiiNunit\\n{\\n cargo_def: .a { cargo: "cargo.old" }\\n}'),
+  /cargo:\s*""/);
  const allowed=new Set(["fazenda01","silo01","lojamaterial01","obra01"]);
  const cargos=new Set(["carga1","carga13"]);
  for(const pathname of Object.keys(output.files)){
   const c=pathname.match(/^def\/company\/([^/]+)\//);
   if(c)assert.ok(allowed.has(c[1]),"Empresa inventada: "+c[1]);
   const cargo=pathname.match(/^def\/company\/[^/]+\/(?:in|out)\/([^/]+)\.sii$/);
-  if(cargo)assert.ok(cargos.has(cargo[1]),"Cargo inventado: "+cargo[1]);
+  if(cargo&&!cargos.has(cargo[1])){
+   const contents=await output.file(pathname).async("text");
+   assert.match(contents,/\bcargo\s*:\s*""/,
+    "Arquivo IN/OUT antigo não está neutralizado: "+pathname);
+  }
   assert.equal(/^def\/cargo\//.test(pathname),false,"O mod não pode recriar cargo_data");
  }
  element("companyCreateDownload").listeners.click();
+ // Nenhuma empresa pode herdar permissão antiga apenas por ficar sem rota.
+ const noReplacement=new JSZip();
+ noReplacement.file("def/company/deposito_sem_rota/editor/cidade.sii","SiiNunit\\n{}");
+ companyFile(noReplacement,"deposito_sem_rota","out","antiga_carga","old_steel");
+ companyFile(noReplacement,"deposito_sem_rota","in","antiga_recebida","old_wood");
+ const oldMap=await creator.loadMap(noReplacement);
+ const blank=await creator.build(oldMap,{cargos:new Map()}, {plan:new Map()});
+ const emptyZip=await JSZip.loadAsync(blank.blob);
+ for(const item of ["def/company/deposito_sem_rota/out/antiga_carga.sii",
+                    "def/company/deposito_sem_rota/in/antiga_recebida.sii"]){
+  assert.ok(emptyZip.file(item),"Empresa sem rota reteve permissão: "+item);
+  const txt=await emptyZip.file(item).async("text");
+  assert.match(txt,/cargo:\s*""/);
+  assert.doesNotMatch(txt,/cargo\.old_/);
+ }
+ assert.equal(blank.disabled,2);
+ assert.equal(blank.coverage,2);
+ assert.ok(emptyZip.file("def/company/deposito_sem_rota/editor/cidade.sii"));
+ 
  element("companyCreateDownload").listeners.click();
  assert.equal(downloadClicks,2,"Botão de download deve permitir repetição");
  assert.match(filename,/\.scs$/i);

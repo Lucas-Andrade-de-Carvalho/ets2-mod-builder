@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · IN/OUT real · DEF 208";
+const ENGINE_BUILD="2026-10-20 · SUBSTITUIÇÃO INTEGRAL IN/OUT · v2";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -1237,8 +1237,20 @@ function simulate(map,cargo){
 }
 
 const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"\"\n }\n}\n";
+// Uma remoção dentro do novo ZIP NÃO remove o arquivo da DEF original montada
+// pelo jogo. Conforme a documentação oficial SCS, cargo vazio desativa
+// aquela permissão. Preservar o MESMO caminho é indispensável.
+function disableExistingCargo(raw,p){
+ let count=0;
+ const result=String(raw).replace(/(\bcargo\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s}\r\n]+)/gi,
+  (_,prefix)=>{count++;return prefix+'""';});
+ if(count)return result;
+ // Arquivos de IN/OUT sem cargo conhecido também são neutralizados.
+ return "SiiNunit\n{\n}\n";
+}
 async function build(map,cargo,sim){
- const out=new JSZip(),keys=new Set(),generated=new Map(),removed=[];
+ const out=new JSZip(),keys=new Set(),generated=new Map();
+ const disabled=[],replacedOriginal=[],coveredOriginal=[];
  async function put(p,v){
   const key=p.toLowerCase();if(keys.has(key))throw Error("Duas definições com mesmo caminho: "+p);
   const bytes=v&&typeof v.async==="function"?await v.async("uint8array"):v;
@@ -1251,31 +1263,74 @@ async function build(map,cargo,sim){
    generated.set(p,cargoSii(id));
   }
  }
+ // Pendente por chave normalizada: tolerar capitalização do mapa.
+ const pending=new Map([...generated.entries()].map(([p,text])=>
+  [p.toLowerCase(),{p,text}]));
  let count=0;
  for(const x of map.files.values()){
   const m=companyMeta(x.p);
-  if(m&&(m.type==="in"||m.type==="out")){removed.push(x.p);continue}
-  if(m?.type==="permanent"&&((x.obj._data?.uncompressedSize||0)<300000)){
-   const txt=await x.obj.async("text");
-   if(/^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:/mi.test(txt))
-     throw Error("Lista de cargas dentro do arquivo da empresa "+x.p+" exige conversão específica; geração bloqueada.");
+  if(m&&(m.type==="in"||m.type==="out")){
+   coveredOriginal.push(x.p);
+   const replacement=pending.get(x.p.toLowerCase());
+   if(replacement){
+    // Já existe definição homônima: o cargo novo vence no mesmo caminho.
+    await put(x.p,replacement.text);
+    pending.delete(x.p.toLowerCase());
+    replacedOriginal.push(x.p);
+   }else{
+    // SEMPRE cobrir as permissões antigas, mesmo nas empresas que não
+    // recebem nenhuma carga Librelato. Assim não herdam fretes do mapa.
+    const original=await x.obj.async("text");
+    await put(x.p,disableExistingCargo(original,x.p));
+    disabled.push(x.p);
+   }
+  }else{
+   if(m?.type==="permanent"&&((x.obj._data?.uncompressedSize||0)<300000)){
+    const txt=await x.obj.async("text");
+    if(/^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:/mi.test(txt))
+      throw Error("Lista de cargas dentro do arquivo da empresa "+x.p+" exige conversão específica; geração bloqueada.");
+   }
+   await put(x.p,x.obj);
   }
-  await put(x.p,x.obj);
-  if((++count)%150===0){say("Preservando arquivos do mapa… "+count,54);await yieldUI()}
+  if((++count)%150===0){
+    say("Substituindo TODAS as permissões IN/OUT do mapa… "+count,54);
+    await yieldUI();
+  }
  }
- for(const [p,t]of generated)await put(p,t);
-
- const blob=await out.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:4},streamFiles:true},info=>say("Compactando Company… "+Math.round(info.percent)+"%",62+Math.round(info.percent*.28)));
+ for(const {p,text} of pending.values())await put(p,text);
+ const blob=await out.generateAsync({type:"blob",compression:"DEFLATE",
+  compressionOptions:{level:4},streamFiles:true},
+  info=>say("Compactando Company integral… "+Math.round(info.percent)+"%",
+   62+Math.round(info.percent*.28)));
  const check=await JSZip.loadAsync(blob,{createFolders:false});
+ const generatedLower=new Set([...generated.keys()].map(p=>p.toLowerCase()));
  for(const p of generated.keys()){
   const obj=check.file(p);
   if(!obj)throw Error("Faltou carga gerada: "+p);
-  if(!/cargo\s*:\s*"cargo\./i.test(await obj.async("text")))throw Error("Cargo não registrado corretamente em "+p);
+  if(!/\bcargo\s*:\s*"cargo\./i.test(await obj.async("text")))
+   throw Error("Cargo não registrado corretamente em "+p);
  }
- const generatedLower=new Set([...generated.keys()].map(p=>p.toLowerCase()));
- for(const p of removed)if(check.file(p)&&!generatedLower.has(p.toLowerCase()))throw Error("Cargo original permaneceu no arquivo: "+p);
- for(const x of map.files.values())if(companyMeta(x.p)?.type==="editor"&&!check.file(x.p))throw Error("Arquivo editor perdido: "+x.p);
- return{blob,count:generated.size,removed:removed.length}
+ let checked=0;
+ for(const p of coveredOriginal){
+  const obj=check.file(p);
+  if(!obj)throw Error("Arquivo IN/OUT original sem sobrescrita: "+p);
+  const content=await obj.async("text");
+  if(generatedLower.has(p.toLowerCase())){
+   if(!/\bcargo\s*:\s*"cargo\./i.test(content))
+    throw Error("Nova permissão inválida em "+p);
+  }else if(/\bcargo\s*:\s*(?:"[^"\r\n]*[^"\r\n]+"|'[^'\r\n]*[^'\r\n]+'|cargo\.[a-z0-9_]+)/i.test(content)){
+    throw Error("Cargo original não neutralizado em "+p);
+  }
+  if((++checked)%180===0)await yieldUI();
+ }
+ for(const x of map.files.values())
+  if(companyMeta(x.p)?.type==="editor"&&!check.file(x.p))
+   throw Error("Arquivo editor perdido: "+x.p);
+ const seenCompanies=new Set(coveredOriginal.map(p=>companyMeta(p).id));
+ return{blob,count:generated.size,removed:disabled.length+replacedOriginal.length,
+  disabled:disabled.length,replacedOriginal:replacedOriginal.length,
+  coverage:coveredOriginal.length,originalCompanies:seenCompanies.size};
+
 }
 function audit(map,cargo,sim){
  const companies=[...map.companies.values()],assigned=[...sim.plan.values()].reduce((n,p)=>n+p.in.size+p.out.size,0);
@@ -1419,10 +1474,13 @@ async function generate(){
    blob:out.blob,
    filename:"DEF_Company_Librelato_"+identifier+"_Universal.scs",
    count:out.count,
-   removed:out.removed
+   removed:out.removed,
+   disabled:out.disabled,
+   coverage:out.coverage,
+   originalCompanies:out.originalCompanies
   };
   updateDownloadUI();
-  say("Company pronta: "+out.count+" associações IN/OUT, "+map.companies.size+" empresas analisadas, "+map.archivesRead+" arquivo(s) interno(s) processado(s). Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Clique em Baixar Company .SCS. Motor: "+ENGINE_BUILD,100);
+  say("Company integral pronta: "+out.count+" novas associações, "+out.coverage+" arquivos IN/OUT antigos SOBRESCRITOS, "+out.disabled+" neutralizados (cargo vazio), "+map.companies.size+" empresas preservadas. Coloque este mod ACIMA da DEF do mapa. Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Baixe a Company .SCS. Motor: "+ENGINE_BUILD,100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
@@ -1446,5 +1504,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
