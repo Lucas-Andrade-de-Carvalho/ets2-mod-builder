@@ -250,7 +250,7 @@ async function main(){
   sem_setor_provado:{in:["diesel"],out:["scrap_metals"]}
  };
  for(const [name,trade] of Object.entries(enterprises)){
-  economyMap.file("def/company/"+name+"/editor/city.sii","SiiNunit\\n{}\\n");
+  economyMap.file("def/company/"+name+"/editor/city.sii","SiiNunit\n{}\n");
   for(const d of ["in","out"])for(const [i,item] of trade[d].entries())
    companyFile(economyMap,name,d,item+"_"+i,item);
  }
@@ -258,7 +258,7 @@ async function main(){
   ["steel_bundle","Bobinas de aço"],["sorghum_feed","Sorgo para ração"],
   ["cotton_lint","Pluma de algodão"],["empty_wood_pallets","Paletes vazios"]])
   economyCargo.file("cargo/"+id+".sui",
-   'cargo_data : cargo.'+id+' {\\n name: "'+name+'"\\n body_types[]: baixa\\n}');
+   'cargo_data : cargo.'+id+' {\n name: "'+name+'"\n body_types[]: baixa\n}');
  const econCompanies=await creator.loadMap(economyMap);
  const econLoads=await creator.loadCargo(economyCargo);
  const econSim=creator.simulate(econCompanies,econLoads);
