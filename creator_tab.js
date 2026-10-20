@@ -1751,19 +1751,22 @@ async function build(map,cargo,sim){
  for(const p of generated.keys()){
   const obj=check.file(p);
   if(!obj)throw Error("Faltou carga gerada: "+p);
-  if(!/\bcargo\s*:\s*"cargo\./i.test(await obj.async("text")))
-   throw Error("Cargo não registrado corretamente em "+p);
+  const expected=p.split("/").pop().replace(/\.sii$/i,"").toLowerCase();
+  const units=parseCompanyCargoUnits(await obj.async("text"),p);
+  if(units.length!==1||units[0]!==expected)
+   throw Error("Cargo gerado diferente da DEF solicitada: "+p);
  }
  let checked=0;
  for(const p of coveredOriginal){
   const obj=check.file(p);
   if(!obj)throw Error("Arquivo IN/OUT original sem sobrescrita: "+p);
-  const content=await obj.async("text");
+  const units=parseCompanyCargoUnits(await obj.async("text"),p);
   if(generatedLower.has(p.toLowerCase())){
-   if(!/\bcargo\s*:\s*"cargo\./i.test(content))
+   const expected=p.split("/").pop().replace(/\.sii$/i,"").toLowerCase();
+   if(units.length!==1||units[0]!==expected)
     throw Error("Nova permissão inválida em "+p);
-  }else if(/\bcargo\s*:\s*(?:"[^"\r\n]*[^"\r\n]+"|'[^'\r\n]*[^'\r\n]+'|cargo\.[a-z0-9_]+)/i.test(content)){
-    throw Error("Cargo original não neutralizado em "+p);
+  }else if(units.length){
+   throw Error("Cargo original não neutralizado em "+p+": "+units.join(","));
   }
   if((++checked)%180===0)await yieldUI();
  }
@@ -1847,8 +1850,8 @@ function createDiagnosticText(map,cargo,sim){
   "EMPRESAS (ID | SETOR IDENTIFICADO | EVIDÊNCIA | CARGAS IN ANTIGAS | CARGAS OUT ANTIGAS)"
  ];
  for(const c of map.companies.values()){
-  const ins=c.old.filter(x=>x.dir==="in").map(x=>x.unit||x.stem);
-  const outs=c.old.filter(x=>x.dir==="out").map(x=>x.unit||x.stem);
+  const ins=c.old.filter(x=>x.dir==="in").flatMap(x=>x.units?.length?x.units:[x.unit||"(SEM_CARGO)"]);
+  const outs=c.old.filter(x=>x.dir==="out").flatMap(x=>x.units?.length?x.units:[x.unit||"(SEM_CARGO)"]);
   rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(","),"categorias IN: "+[...(c.categories?.in||new Map())].map(x=>x.join("=")).join(","),"categorias OUT: "+[...(c.categories?.out||new Map())].map(x=>x.join("=")).join(",")].join(" | "));
  }
  rows.push("","FONTES PÚBLICAS DA INTELIGÊNCIA LOGÍSTICA (ID | ÓRGÃO | TÍTULO | URL | REGRA)");
@@ -1859,8 +1862,8 @@ function createDiagnosticText(map,cargo,sim){
   rows.push([r.company,r.cargo,r.dir,r.reason,r.sourceIds.join(",")].join(" | "));
  rows.push("","CARGAS REJEITADAS (ID | NOME | MOTIVOS)");
  for(const x of sim.skipped)rows.push([x.id,x.name,x.problems.join("; ")].join(" | "));
- rows.push("","CARGAS LIBERADAS E RAZÕES (ID | NOME | EXPEDIDORES | RECEBEDORES | HIPÓTESES)");
- for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
+ rows.push("","CARGAS LIBERADAS (ID | NOME | EXPEDIDORES | RECEBEDORES | CONFIANÇA | FONTES | HIPÓTESES)");
+ for(const p of sim.proof)rows.push([p.id,p.name,p.sourceIds.join(","),p.destIds.join(","),p.confidence,p.researchSources.join(","),p.notes.join("; "),"origens SCS: "+p.scsSourceIds.join(","),"destinos SCS: "+p.scsDestIds.join(",")].join(" | "));
  rows.push("","CARGAS CONTRADITÓRIAS BLOQUEADAS (EMPRESA | CARGO | SENTIDO | SETOR | MOTIVO)");
  for(const issue of sim.anomalies||[])
   rows.push([issue.company,issue.cargo,issue.direction,issue.role,issue.reason].join(" | "));
@@ -1923,9 +1926,9 @@ async function generate(){
   applyCompanyOverrides(map);await yieldUI();
   say("Identificando cargas e carrocerias…",28);
   const cargo=await loadCargo(await zipRead(two));if(!cargo.cargos.size)throw Error("A DEF do reboque não contém unidades cargo_data reconhecidas.");
-  say("Pesquisando conhecimento logístico documentado…",37);
+  say("Carregando e validando fontes logísticas documentadas…",37);
   const research=await loadLogisticsKnowledge();
-  say("Simulando logística com inteligência documental…",43);
+  say("Verificando evidências econômicas para cada empresa e carga…",43);
   const sim=simulate(map,cargo,research.data);renderLogisticsResearch(research,sim);audit(map,cargo,sim);
   latestDiagnostic=createDiagnosticText(map,cargo,sim);const diag=el("companyCreateSaveDiagnostic");if(diag)diag.hidden=false;
   // Sem compatibilidade: mantém as empresas e gera SCS neutralizador integral.
