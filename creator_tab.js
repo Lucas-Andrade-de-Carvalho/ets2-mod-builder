@@ -721,7 +721,15 @@ function roleSuitableForSpecificCargo(c,type,direction){
   const specific=specificFarmCrop(c);
   // Uma fazenda explicitamente de batatas não vira fornecedora de laranja e milho.
   // Fazenda genérica pode expedir batatas, laranjas ou pluma quando há destinatários reais.
-  if(specific&&specific!==type)return false;
+  if(specific&&specific!==type){
+   // Nome como "rocasoja" não é monocultura comprovada: a DEF pode mostrar
+   // várias culturas efetivas no OUT e fertilizantes no IN.
+   const diversified=type==="algodao"&&
+     freightEvidence(c,"out",/^(?:milho|soja|feijao|graos?|corn|soybeans?|rice)$/i)>=2&&
+     freightEvidence(c,"in",/^(?:fertilizer|adubo|fertilizante|big_bag_seed)$/i)>=1&&
+     freightEvidence(c,"in",/^(?:milho|soja|feijao|graos?|corn|soybeans?|rice)$/i)===0;
+   if(!diversified)return false;
+  }
  }
  return true;
 }
