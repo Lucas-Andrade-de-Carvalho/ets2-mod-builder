@@ -147,13 +147,14 @@ async function main(){
  const beerSim=creator.simulate(beerMapRead,beerCargo);
  const beerProof=beerSim.proof.find(p=>p.id==="carga12");
  assert.ok(beerProof,"Cerveja de marca real deve ter rota no MINAS");
- assert.deepEqual(beerProof.sourceIds.sort(),["ambev","jjdistibuido"]);
+ assert.deepEqual(beerProof.sourceIds.sort(),["ambev","bebida_generica","jjdistibuido"]);
+ // V6.1: bebidas genéricas documentam a CATEGORIA, não cerveja literal.
  assert.deepEqual(beerProof.destIds.sort(),["abcatacado","superabc"]);
- assert.equal(beerProof.confidence,"documental");
+ assert.notEqual(beerProof.confidence,"documental","Categoria não é identidade literal");
  assert.equal(beerSim.proof.some(p=>p.id==="carga6"),false,
   "Sem cimento real, não inventar origem/destino apenas por haver outras cargas de construção");
- assert.equal(beerSim.plan.has("bebida_generica"),false,
-  "Bebida genérica não demonstra cerveja");
+ assert.equal(beerSim.plan.get("bebida_generica")?.out.has("carga12"),true,
+  "Distribuição por categoria deve admitir saída de bebidas genéricas sem alegar cerveja literal");
  const beerBuilt=await creator.build(beerMapRead,beerCargo,beerSim);
  const beerPack=await JSZip.loadAsync(beerBuilt.blob);
  for(const company of ["ambev","jjdistibuido"])
@@ -163,7 +164,9 @@ async function main(){
  assert.deepEqual(creator.parseCompanyCargoUnits(
   await beerPack.file("def/company/bebida_generica/out/bebidas.sii").async("text"),
   "def/company/bebida_generica/out/bebidas.sii"),[],
-  "Empresa sem cerveja documentada tem OUT antigo neutralizado");
+  "Mercadoria antiga é neutralizada mesmo quando habilitada sua categoria");
+ assert.ok(beerPack.file("def/company/bebida_generica/out/carga12.sii"),
+  "A categoria de bebidas pode participar como OUT, mantendo distinção documental");
 
  // Sem manifesto, models vehicle/cargo fornecem o escopo de forma genérica.
  const modelScope=new JSZip();
@@ -182,8 +185,8 @@ async function main(){
  // em outra DEF brasileira: sem copiar arquivos privados para o repositório.
  assert.equal(creator.kind("Sementes de Algodão"),null,
   "Semente não pode se converter em pluma");
- assert.equal(creator.kind("Pallets Alto TESTE"),null,
-  "Rótulo de teste genérico não é evidência de paletes vazios");
+ assert.equal(creator.kind("Pallets Alto TESTE"),"paletizado",
+  "Mercadoria teste deve ser somente categoria genérica de paletes");
  const sampleMap=new JSZip(),sampleCargo=new JSZip();
  const sampleCompanies={
   agromais:{out:["racao","adubo","fertilizante"],in:["milho","soja"]},
@@ -209,15 +212,22 @@ async function main(){
  const minasParsedMap=await creator.loadMap(sampleMap);
  const parsedCargo=await creator.loadCargo(sampleCargo);
  const reality=creator.simulate(minasParsedMap,parsedCargo);
- assert.equal(reality.proof.length,1,"Somente a ração tem origem e destino explícitos");
- assert.equal(reality.proof[0].id,"carga17");
- assert.equal(reality.proof[0].confidence,"documental");
- assert.ok(reality.proof[0].sourceIds.includes("agromais"));
- assert.ok(reality.proof[0].destIds.includes("abcatacado"));
- for(const id of ["carga9","carga5","carga23"]){
+ // No modo categoria, chapas e ferragens documentam siderurgia,
+ // mas não comprovam bobinas literais; a confiança precisa refletir isso.
+ const feedProof=reality.proof.find(p=>p.id==="carga17");
+ const steelProof=reality.proof.find(p=>p.id==="carga9");
+ assert.ok(feedProof,"Ração literal deve preservar rota");
+ assert.ok(feedProof.directOut>0&&feedProof.directIn>0,
+  "Manter prova literal de ração em pelo menos um OUT e IN, mesmo quando a rota também envolve empresas por categoria");
+ assert.notEqual(feedProof.confidence,"documental",
+  "A confiança geral não pode ser documental quando há inclusão de categorias não literais");
+ assert.ok(feedProof.sourceIds.includes("agromais"));
+ assert.ok(feedProof.destIds.includes("abcatacado"));
+ assert.ok(steelProof,"Bobinas devem circular na categoria siderúrgica");
+ assert.notEqual(steelProof.confidence,"documental","Chapas não comprovam bobinas físicas");
+ for(const id of ["carga5","carga23"])
   assert.ok(reality.skipped.some(item=>item.id===id),
-    "Bobinas, pluma e sorgo não possuem produtos correspondentes");
- }
+   "Sem pares econômicos distintos da categoria, a carga não pode inventar empresas");
  assert.ok(!reality.plan.has("empresa_sem_evidencia"));
  const realityBuilt=await creator.build(minasParsedMap,parsedCargo,reality);
  const realitySCS=await JSZip.loadAsync(realityBuilt.blob);
@@ -281,7 +291,7 @@ async function main(){
   "Metal sucata + diesel de uma empresa opaca não autoriza nenhum frete");
  assert.equal(econSim.proof.length,5);
  assert.ok(econSim.contextualDecisions.length>=10);
- assert.equal(creator.kind("Pallets Alto TESTE"),null,"Carga ambígua não pode ser adivinhada");
+ assert.equal(creator.kind("Pallets Alto TESTE"),"paletizado","Palete genérico não é palete vazio comprovado");
  assert.equal(creator.economicContextCandidate({id:"f",role:"fazenda"},
   creator.companyCargoProfile({old:[{dir:"out",unit:"corn"},{dir:"out",unit:"soybeans"}]}),
   "sorgo","out"),null,"Produzir milho/soja não comprova sorgo");
@@ -528,6 +538,32 @@ async function main(){
   "tijolo","out",{id:"carga13"}),null,
   "Nome do arquivo nunca pode substituir evidência cargo: real");
 
+
+ // Duas empresas de ARMAZENAGEM, sem produtor nem consumidor final.
+ // A mesma categoria de grãos pode fazer IN e OUT em ambas.
+ const depots=new JSZip(),depotCargo=new JSZip();
+ for(const [id,inGoods,outGoods] of [
+  ["silo_leste",["wheat"],["barley"]],
+  ["cooperativa_oeste",["soybeans"],["grain"]]
+ ]){
+  depots.file("def/company/"+id+"/editor/filial.sii","SiiNunit\n{}\n");
+  for(const [dir,arr] of [["in",inGoods],["out",outGoods]])
+   for(const [i,good] of arr.entries())companyFile(depots,id,dir,good+"_"+i,good);
+ }
+ depotCargo.file("cargo/milho_granel.sui",
+  'cargo_data : cargo.milho_granel {\n name: "Milho"\n body_types[]: alta\n}');
+ const depotMap=await creator.loadMap(depots),depotLoads=await creator.loadCargo(depotCargo);
+ const depotSim=creator.simulate(depotMap,depotLoads);
+ const dp=depotSim.proof.find(x=>x.id==="milho_granel");
+ assert.ok(dp,"Grãos devem ser distribuídos sem produtor e consumidor final");
+ assert.deepEqual(dp.sourceIds.sort(),["cooperativa_oeste","silo_leste"]);
+ assert.deepEqual(dp.destIds.sort(),["cooperativa_oeste","silo_leste"]);
+ assert.notEqual(dp.confidence,"documental","Grão da mesma categoria não é milho idêntico");
+ const depotSCS=await JSZip.loadAsync((await creator.build(depotMap,depotLoads,depotSim)).blob);
+ for(const id of ["silo_leste","cooperativa_oeste"])
+  for(const dir of ["in","out"])
+   assert.ok(depotSCS.file("def/company/"+id+"/"+dir+"/milho_granel.sii"),
+    "Um depósito válido deve participar em ambos os sentidos: "+id+" "+dir);
 
  // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS
  // neutralizador integral, preservando suas empresas sem novas ofertas.
@@ -804,28 +840,34 @@ async function main(){
  const libSubset=await creator.loadCargo(libRealSubset);
  assert.equal(mapSubset.companies.size,actualProfiles.length);
  const realSim=creator.simulate(mapSubset,libSubset);
- // Estes dados reais não contêm OUT explícito de ração, pluma ou bobinas.
- // A ausência de rota é o resultado correto: conhecimento geral não é prova
- // de atividade econômica de uma empresa específica.
- const mustSkip=["carga14","carga15","carga17","carga18","carga19","carga20","carga5","carga9"];
- for(const id of mustSkip)assert.ok(realSim.skipped.some(x=>x.id===id),
-   "Não atribuir "+id+" sem mercadoria comprovada no OUT");
- assert.equal(realSim.plan.size,0,
-  "Sem comprovante de destino de granito/rações/pluma/bobinas, não inventar rotas");
+ // Distribuição por categoria: cargas podem circular entre estoque,
+ // revenda e processamento sem fabricante/final literal. Só as empresas
+ // existentes são admitidas; a incerteza segue registrada.
  const realScs=await creator.build(mapSubset,libSubset,realSim);
  const realArchive=await JSZip.loadAsync(realScs.blob);
  const ids=new Set(actualProfiles.map(x=>x.id));
- for(const [id]of missingEight){
+ assert.ok(realSim.proof.some(p=>p.confidence!=="documental"),
+  "Categorias relacionadas devem gerar decisões expressamente inferidas");
+ for(const [id] of missingEight){
   const src=realSim.proof.find(x=>x.id===id);
-  if(mustSkip.includes(id)){
-   assert.equal(src,undefined,"Carga indevidamente distribuída: "+id);
+  if(!src){
+   assert.ok(realSim.skipped.some(x=>x.id===id),
+    "Carga não distribuída precisa registrar a limitação");
    continue;
   }
-  assert.ok(src&&src.origins>0&&src.destinations>0,"Origem/destino inválido "+id);
-  for(const co of src.sourceIds)
-   assert.ok(realArchive.file("def/company/"+co+"/out/"+id+".sii"),"OUT ausente "+id+" "+co);
-  for(const co of src.destIds)
-   assert.ok(realArchive.file("def/company/"+co+"/in/"+id+".sii"),"IN ausente "+id+" "+co);
+  assert.ok(src.origins>0&&src.destinations>0,"Exigir empresas distintas em IN e OUT");
+  assert.ok(src.sourceIds.some(a=>src.destIds.some(b=>a!==b)),
+   "Sem par de empresas distintas para "+id);
+  for(const co of src.sourceIds){
+   assert.ok(ids.has(co),"Empresa OUT inventada: "+co);
+   assert.ok(realArchive.file("def/company/"+co+"/out/"+id+".sii"),
+    "OUT ausente "+id+" "+co);
+  }
+  for(const co of src.destIds){
+   assert.ok(ids.has(co),"Empresa IN inventada: "+co);
+   assert.ok(realArchive.file("def/company/"+co+"/in/"+id+".sii"),
+    "IN ausente "+id+" "+co);
+  }
  }
  for(const path of Object.keys(realArchive.files)){
   const match=path.match(/^def[/]company[/]([^/]+)[/](?:in|out)[/](carga[0-9]+)[.]sii$/i);

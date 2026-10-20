@@ -155,3 +155,7 @@ Consulte [QUALITY_V5.md](QUALITY_V5.md). O assistente exige evidências por merc
 - Cimento, bobinas, sorgo, pluma beneficiada, cerveja e paletes retornáveis analisados por fluxos reais e setor; rótulos ambíguos não ganham rota automaticamente.
 - O SCS mantém neutralização de permissões antigas e o diagnóstico documenta associações contextuais efetivas com grau de confiança.
 - Os testes CI são estruturais e sintéticos; não comprovam ofertas de frete dentro do ETS2.
+
+
+## V6.1 — roteamento por categorias econômicas
+A carga é analisada por categoria (grãos, insumos, construção, metal, fibras, madeira, bebidas, hortifruti, paletes). Empresas de comércio e armazenagem podem receber e expedir a mesma categoria: não é necessário identificar produtor e consumidor finais. Ainda é preciso haver empresas distintas nos sentidos IN/OUT e carroceria compatível. Exceções físicas e empresas incompatíveis permanecem bloqueadas. "Pallets Alto TESTE" pode circular apenas como categoria genérica, sem prova do tipo físico de palete.
