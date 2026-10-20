@@ -183,8 +183,8 @@ async function main(){
 
  // Regressão baseada nos tokens IN/OUT observados nas DEFs MINAS e
  // em outra DEF brasileira: sem copiar arquivos privados para o repositório.
- assert.equal(creator.kind("Sementes de Algodão"),null,
-  "Semente não pode se converter em pluma");
+ assert.equal(creator.kind("Sementes de Algodão"),"sementes_algodao",
+  "Semente deve receber categoria própria, jamais pluma");
  assert.equal(creator.kind("Pallets Alto TESTE"),"paletizado",
   "Mercadoria teste deve ser somente categoria genérica de paletes");
  const sampleMap=new JSZip(),sampleCargo=new JSZip();
@@ -325,8 +325,8 @@ async function main(){
  for(const id of ["corn_b","soybean_b","potatoes_b"]){
   assert.equal(labelsData.cargos.get(id).unresolvedName,false,"Nome semântico resolvido "+id);
  }
- assert.equal(labelsData.cargos.get("sugar_beet_b").unresolvedName,true,
-  "Mercadorias fora do dicionário semântico devem permanecer sem classificação");
+ assert.equal(labelsData.cargos.get("sugar_beet_b").unresolvedName,false,
+  "Beterraba de ID conhecido deve receber seu nome quando @@ não está resolvido");
 
  // Não ignorar arquivos enormes ou IDs de cargo_data duplicados.
  const repeated=new JSZip();
@@ -564,6 +564,71 @@ async function main(){
   for(const dir of ["in","out"])
    assert.ok(depotSCS.file("def/company/"+id+"/"+dir+"/milho_granel.sii"),
     "Um depósito válido deve participar em ambos os sentidos: "+id+" "+dir);
+
+
+ // V6.2: regra inviolável madeireira OUT, reciclagem/sucatão IN,
+ // com raridade real no cargo_data, sorteio reproduzível e sem dominar o mercado.
+ const palletWorld=new JSZip(),palletCargo=new JSZip();
+ const defined={
+  madeireira_alpha:{out:["lumber"],in:["logs"]},
+  serraria_beta:{out:["lumber"],in:["logs"]},
+  recicladora_centro:{in:["scrap_wood"],out:["lumber"]},
+  sucatao_velho:{in:["scrap_metals"],out:["scrap_metals"]},
+  supermercado_a:{in:["potatoes"],out:["pallets"]},
+  distribuidora_bebidas:{in:["beverages"],out:["beverages"]},
+  posto_brasil:{in:["diesel"],out:["diesel"]}
+ };
+ for(const [id,trade] of Object.entries(defined)){
+  palletWorld.file("def/company/"+id+"/editor/filial.sii","SiiNunit\n{}\n");
+  for(const dir of ["in","out"])for(const [i,unit] of (trade[dir]||[]).entries())
+   companyFile(palletWorld,id,dir,unit+"_"+i,unit);
+ }
+ for(let i=0;i<220;i++){
+  const id="loja_mercadorias_"+i;
+  palletWorld.file("def/company/"+id+"/editor/filial.sii","SiiNunit\n{}\n");
+  companyFile(palletWorld,id,"out","grain","corn");
+  companyFile(palletWorld,id,"in","grain","corn");
+ }
+ palletCargo.file("cargo/carga16.sui",
+  'cargo_data : cargo.carga16 {\n name: "Pallets Alto TESTE"\n body_types[]: alta\n prob_coef: 3.0\n mass: 900\n}');
+ palletCargo.file("cargo/carga1.sui",
+  'cargo_data : cargo.carga1 {\n name: "Milho"\n body_types[]: alta\n}');
+ const palletMap=await creator.loadMap(palletWorld);
+ const cargoSet=await creator.loadCargo(palletCargo);
+ const market=creator.simulate(palletMap,cargoSet);
+ const pallets=market.proof.find(x=>x.id==="carga16");
+ assert.ok(pallets,"Palete Alto necessita de pelo menos uma rota válida");
+ assert.ok(pallets.sourceIds.includes("madeireira_alpha"),"Madeireira expede palete");
+ assert.ok(pallets.sourceIds.includes("serraria_beta"),"Serraria expede palete");
+ assert.ok(pallets.destIds.includes("recicladora_centro"),"Reciclagem recebe palete");
+ assert.ok(pallets.destIds.includes("sucatao_velho"),"Sucatão recebe palete");
+ for(const id of ["madeireira_alpha","serraria_beta"])
+  assert.ok(!pallets.destIds.includes(id),"Madeireira/serraria nunca recebe palete alto");
+ for(const id of ["recicladora_centro","sucatao_velho"])
+  assert.ok(!pallets.sourceIds.includes(id),"Reciclagem/sucatão nunca expede palete alto");
+ assert.ok(!pallets.sourceIds.includes("posto_brasil"),"Posto não expede Palete Alto");
+ assert.ok(pallets.origins<=creator.PALLET_MARKET_POLICY.maxOut);
+ assert.ok(pallets.destinations<=creator.PALLET_MARKET_POLICY.maxIn);
+ assert.ok(market.proof.some(x=>x.id==="carga1"),"Outras cargas não podem desaparecer");
+ assert.ok(pallets.sourceIds.some(id=>id.startsWith("loja_mercadorias_")),
+  "Demais empresas devem participar, mas em amostra pequena");
+ const first=pallets.sourceIds.join(",")+"|"+pallets.destIds.join(",");
+ const again=creator.simulate(palletMap,cargoSet).proof.find(x=>x.id==="carga16");
+ assert.equal(first,again.sourceIds.join(",")+"|"+again.destIds.join(","),
+  "Sorteio deve ser reproduzível, não aleatório a cada execução");
+ const marketSCS=await JSZip.loadAsync((await creator.build(palletMap,cargoSet,market)).blob);
+ const limitedCargo=await marketSCS.file("def/cargo/carga16.sui").async("text");
+ assert.match(limitedCargo,/prob_coef:\s*0\.14/);
+ assert.match(limitedCargo,/mass:\s*900/,"Massa do mod original deve ser preservada");
+ assert.equal(marketSCS.file("def/cargo/carga1.sui"),null,
+  "Não alterar cargo_data de outras mercadorias");
+ assert.equal(marketSCS.file("def/company/madeireira_alpha/in/carga16.sii"),null);
+ assert.equal(marketSCS.file("def/company/recicladora_centro/out/carga16.sii"),null);
+ assert.ok(marketSCS.file("def/company/madeireira_alpha/out/carga16.sii"));
+ assert.ok(marketSCS.file("def/company/recicladora_centro/in/carga16.sii"));
+ assert.ok(creator.patchPalletCargoProbability(
+  'cargo_data : cargo.carga16 {\n name: "Pallets Alto TESTE"\n}',"carga16")
+  .includes("prob_coef: 0.14"),"Inserir coeficiente ausente na fonte original");
 
  // Um mapa só com postos e cargas incompatíveis ainda deve gerar o SCS
  // neutralizador integral, preservando suas empresas sem novas ofertas.
