@@ -30,4 +30,14 @@ assert.match(engine,/function companyCargoProfile\(/);
 assert.match(engine,/function economicCoherence\(/);
 assert.match(engine,/function disableExistingCargo\(/);
 assert.match(engine,/const ENGINE_BUILD=/);
+const kb=JSON.parse(read("logistics_knowledge.json"));
+assert.equal(kb.schema,1,"Versão inválida da base documental");
+assert.ok(kb.sources.length>=10,"Fontes insuficientes na inteligência logística");
+assert.ok(engine.includes("const OFFLINE_LOGISTICS_KNOWLEDGE=Object.freeze("+JSON.stringify(kb)+");"),
+ "A base offline embutida no HTML deve coincidir com logistics_knowledge.json");
+for(const source of kb.sources){
+ assert.ok(source.url.startsWith("https://"),"Fonte externa sem HTTPS: "+source.id);
+ assert.ok(source.title&&source.agency&&source.fact,"Fonte sem metadados: "+source.id);
+}
+
 console.log("OK: 6 abas, motor embutido sincronizado, scripts íntegros, parser e segurança presentes.");
