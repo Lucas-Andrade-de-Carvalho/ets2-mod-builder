@@ -412,7 +412,7 @@ async function main(){
   {id:"carga19",name:"Sacaria Ração",type:"racao",from:"racao",to:"animal_feed"},
   {id:"carga20",name:"Sacaria Ração 2",type:"racao",from:"racao",to:"animal_feed"},
   {id:"carga23",name:"Sorgoalto",type:"sorgo",from:"corn",to:"soybeans"},
-  {id:"carga5",name:"Carga Pluma de Algodão",type:"algodao",from:"cotton",to:"cotton"},
+  {id:"carga5",name:"Carga Pluma de Algodão",type:"algodao",from:"pluma",to:"pluma"},
   {id:"carga9",name:"Bobinas 2",type:"bobinas_industriais",from:"chapaaco",to:"ferroconst"}
  ];
  for(const [i,item] of cargoFlows.entries()){
@@ -541,13 +541,23 @@ async function main(){
  const libSubset=await creator.loadCargo(libRealSubset);
  assert.equal(mapSubset.companies.size,actualProfiles.length);
  const realSim=creator.simulate(mapSubset,libSubset);
- assert.deepEqual(realSim.skipped.map(x=>x.id),[],
-  "DEF baseada em mercadorias reais deve permitir 8 cargas: "+JSON.stringify(realSim.skipped));
+ // Estes dados reais não contêm OUT explícito de ração, pluma ou bobinas.
+ // A ausência de rota é o resultado correto: conhecimento geral não é prova
+ // de atividade econômica de uma empresa específica.
+ const mustSkip=["carga17","carga18","carga19","carga20","carga5","carga9"];
+ for(const id of mustSkip)assert.ok(realSim.skipped.some(x=>x.id===id),
+   "Não atribuir "+id+" sem mercadoria comprovada no OUT");
+ for(const id of ["carga14","carga15"])assert.ok(realSim.proof.some(x=>x.id===id),
+   "Preservar cargas minerais relacionadas quando apoiadas pela DEF");
  const realScs=await creator.build(mapSubset,libSubset,realSim);
  const realArchive=await JSZip.loadAsync(realScs.blob);
  const ids=new Set(actualProfiles.map(x=>x.id));
  for(const [id]of missingEight){
   const src=realSim.proof.find(x=>x.id===id);
+  if(mustSkip.includes(id)){
+   assert.equal(src,undefined,"Carga indevidamente distribuída: "+id);
+   continue;
+  }
   assert.ok(src&&src.origins>0&&src.destinations>0,"Origem/destino inválido "+id);
   for(const co of src.sourceIds)
    assert.ok(realArchive.file("def/company/"+co+"/out/"+id+".sii"),"OUT ausente "+id+" "+co);
