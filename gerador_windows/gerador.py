@@ -106,11 +106,21 @@ def clean_path(raw):
 
 def canonical_path(raw):
     path=clean_path(raw)
-    if not path: return None
+    if not path:return None
+    # ZIPs de mapas podem comecar em def/company, company ou uma pasta raiz/...
     m=re.search(r'(?:^|/)(def/(?:company|cargo|vehicle)/.+)$',path,re.I)
-    return m.group(1).lower() if m else None
+    if m:return m.group(1).lower()
+    m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
+    if m:return ("def/"+m.group(1)).lower()
+    m=re.search(r'(?:^|/)(cargo/[a-z0-9_]+(?:\.(?:sii|sui)|/[^/]+))$',path,re.I)
+    if m:return ("def/"+m.group(1)).lower()
+    m=re.search(r'(?:^|/)(vehicle/trailer_owned/.+)$',path,re.I)
+    if m:return ("def/"+m.group(1)).lower()
+    return None
 
 def read_sii(blob):
+    if b"\x00" in blob or blob.count(b"\xef\xbf\xbd")>3:
+        raise ValueError("Encontrado SII/SUI binario ou malformado; nao e seguro editar sem converter para texto")
     return blob.decode("utf-8-sig","replace")
 
 def cargo_tokens(text):
@@ -160,6 +170,11 @@ class Company:
 
 def classify_company(c):
     n=normal(c.name)
+    incoming=product_types(c.old_in);outgoing=product_types(c.old_out)
+    # Distinguir produtor rural de comercio agro: o historico IN/OUT supera
+    # um prefixo de nome ambiguo (por exemplo empresas que comecam com "agro").
+    if "adubo" in incoming and outgoing & {"milho","soja","batata","laranja","algodao"}:
+        c.role="fazenda";c.explicit_role=True;return
     # Identificadores precisos sao preferiveis a deducoes por uma palavra isolada.
     for role,pat in ROLE_KEYWORDS:
         if re.search(pat,n):
