@@ -727,7 +727,7 @@ function roleSuitableForSpecificCargo(c,type,direction){
 }
 
 const RELATED_FREIGHT_PATTERNS={
- stone:/^(?:granito|granitto|granite|marmore|marble|marble_blocks?|pedras?|pedra_?granito|blocos?_?pedra|lajotas?)$/i,
+ stone:/^(?:granito|granitto|granite|marmore|marble|marble_blocks?|stones?|pedras?|pedra_?granito|blocos?_?pedra|lajotas?)$/i,
  stoneReceiver:/^(?:pedras?|marmore|granito|granite|tijolos?|areias?|brita|tubosconcret|pisos?|telhas?|revestimentos?)$/i,
  feed:/^(?:racao|racoes|xerem|farelo|bran|animal_?feed|feedmeal|nutricaoanimal|suplementomineral|salmineral)$/i,
  feedInput:/^(?:milho|soja|sorgo|trigo|graos?|farelo|racao|racoes|feno|alfafa|salmineral|leite)$/i,
@@ -771,6 +771,80 @@ function isGenericCompanyMap(map){
  }
  return{count,generic,unparsed,share:count?generic/count:0};
 }
+// Evidência econômica do próprio mapa (208 empresas / 6.739 OUT / 7.088 IN).
+// Mercadorias observadas: stones, gravel, iron_pipes, scrap_metals,
+// metal_center, hmetal, graos, milho, soja, fertilizer e big_bag_seed.
+// Não confundir produtos relacionados com cargo idêntico: marcar hipóteses.
+function realMapEconomicCandidate(c,type,dir){
+ if(!c||["posto","correios","concessionaria","cana"].includes(c.role))return null;
+ const inCount=(re)=>freightEvidence(c,"in",re);
+ const outCount=(re)=>freightEvidence(c,"out",re);
+ const isOut=dir==="out";
+ const size=(c.old||[]).length;
+ const grain=/^(?:graos?|milho|soja|feijao|corn|maize|soybeans?|rice|rice_c|wheat|barley)$/i;
+ const metal=/^(?:iron_pipes|largetubes|metal_center|hmetal|steel|steel_?coils?|scrap_metals|wallpanels|sandwch_pnls)$/i;
+ const stone=/^(?:stones?|granito|granitto|granite|marble|marmore|pedras?)$/i;
+ const stoneOut=outCount(stone),stoneIn=inCount(stone);
+ const grainOut=outCount(grain),grainIn=inCount(grain);
+ const stockOut=outCount(/^(?:big_bag_seed|fertilizer|fertilizante|adubo|young_seed)$/i);
+ const fieldIn=inCount(/^(?:fertilizer|fertilizante|adubo|big_bag_seed|young_seed)$/i);
+ let score=0,reason="";
+ if(type==="granito"){
+  if(isOut&&stoneOut&&outCount(/^(?:gravel|sand|areia|ore|coal|calcario)$/i)){
+   score=98;reason="OUT stones + material mineral (origem de pedra; granito específico é inferência)";
+  }else if(!isOut&&stoneIn){
+   score=96;reason="IN stones/pedra registrado na DEF (granito específico é inferência)";
+  }else if(!isOut&&size<55&&
+   ["obras","materiais","logistica","desconhecida"].includes(c.role)&&
+   inCount(/^(?:cement|concrete|bricks|precast_strs|iron_pipes|wallpanels|floorpanels|roof_tiles)$/i)>=2){
+   score=74;reason="IN de múltiplos materiais de construção compatíveis com fornecimento de pedra";
+  }
+ }
+ if(type==="racao"){
+  const feed=outCount(/^(?:racao|racoes|xerem|animal_?feed|feedmeal|farelo|salmineral|suplementomineral)$/i);
+  const feedIn=inCount(/^(?:racao|racoes|xerem|animal_?feed|feedmeal|farelo|salmineral|suplementomineral)$/i);
+  if(isOut&&feed){score=120;reason="OUT de ração/alimento animal comprovado";}
+  else if(!isOut&&feedIn){score=120;reason="IN de ração/alimento animal comprovado";}
+  else if(isOut&&size<50&&grainIn>=2&&grainOut>=1&&stockOut>=1){
+   score=81;reason="comércio/cooperativa agrícola recebe grãos e expede grãos/insumos (ração inferida, não documentada)";
+  }else if(isOut&&size<50&&grainIn>=2&&stockOut>=2){
+   score=77;reason="revenda agropecuária recebe grãos e expede fertilizantes/sementes (ração inferida)";
+  }else if(!isOut&&size<50&&
+   outCount(/^(?:bois|beef3|beef_meat|milk|leite|goat_cheese)$/i)>=1&&
+   (inCount(/^(?:big_bag_seed|young_seed|graos|milho|soja|granel|plant_substr)$/i)>=1||
+    c.role==="pecuaria"||c.role==="fazenda")){
+   score=86;reason="criação animal/produção pecuária comprovada no OUT e insumos no IN (ração inferida)";
+  }
+ }
+ if(type==="algodao"){
+  const cotton=/^(?:cotton|cotton_bales?|pluma|algodao)$/i;
+  if(isOut&&outCount(cotton)){score=120;reason="OUT algodão/pluma comprovado";}
+  else if(!isOut&&inCount(cotton)){score=120;reason="IN algodão/pluma comprovado";}
+  else if(isOut&&size<40&&grainOut>=2&&fieldIn>=1&&grainIn===0&&
+   !["silo","cooperativa","logistica"].includes(c.role)){
+   score=66;reason="lavoura diversificada: múltiplos grãos no OUT e insumos no IN (algodão não comprovado)";
+  }else if(!isOut&&size<45&&grainIn>=2&&grainOut>=2&&fieldIn>=1&&
+    ["cooperativa","silo","fazenda","desconhecida"].includes(c.role)){
+   score=64;reason="cooperativa agrícola movimenta múltiplas culturas (recebimento de pluma é hipótese)";
+  }
+ }
+ if(type==="bobinas_industriais"){
+  const finishedOut=outCount(/^(?:iron_pipes|largetubes|metal_center|hmetal|wallpanels|sandwch_pnls)$/i);
+  const finishedIn=inCount(/^(?:iron_pipes|largetubes|metal_center|hmetal|wallpanels|sandwch_pnls)$/i);
+  const scrap=outCount(/^(?:scrap_metals)$/i);
+  if(isOut&&size<70&&
+   (finishedOut>=2||(finishedOut>=1&&scrap>=1))&&
+    (finishedIn>=1||["metalurgica","siderurgica"].includes(c.role))){
+   score=91;reason="OUT e IN de produtos metálicos industriais (bobinas específicas não confirmadas)";
+  }else if(!isOut&&size<80&&finishedIn>=2){
+   score=84;reason="recebe múltiplos produtos metálicos industriais (bobinas inferidas)";
+  }else if(!isOut&&size<70&&finishedIn>=1&&
+    ["metalurgica","siderurgica","obras","materiais"].includes(c.role)){
+   score=77;reason="recebe material metálico para beneficiamento/obra (bobinas inferidas)";
+  }
+ }
+ return score?{company:c,score,reason}:null;
+}
 function relatedCargoCandidate(c,type,dir){
  if(!c||["posto","correios","concessionaria","cana"].includes(c.role))return null;
  const n=(pattern,d=dir)=>freightEvidence(c,d,pattern);
@@ -783,6 +857,8 @@ function relatedCargoCandidate(c,type,dir){
  };
  const exactCount=n(exact[type]||/$^/);
  if(exactCount)return{company:c,score:110+exactCount*10,reason:"mercadoria correspondente declarada no "+dir.toUpperCase()+" da própria DEF"};
+ const economic=realMapEconomicCandidate(c,type,dir);
+ if(economic)return economic;
  let score=0,reason="";
  // Evidência de produtos relacionados: exigir coerência da operação IN e OUT,
  // evitando inventar uma fábrica só por um nome semelhante.
@@ -1271,5 +1347,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,relatedCargoCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
