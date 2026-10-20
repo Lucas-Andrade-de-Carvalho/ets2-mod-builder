@@ -112,6 +112,52 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // V5: a forma física e a mercadoria individual têm prioridade sobre
+ // a semelhança entre produtos da mesma indústria.
+ assert.equal(creator.kind("Bobina de aço"),"bobinas_industriais");
+ assert.equal(creator.kind("Bobinas 2"),"bobinas_industriais");
+ const documented=(id,entries)=>({id,role:"desconhecida",old:entries.map(([dir,unit])=>({dir,unit,stem:"arquivo_irrelevante"}))});
+ const cropFarm=documented("sem_nome",[
+  ["out","corn"],["out","soybeans"],["in","fertilizer"]]);
+ const cropProfile=creator.companyCargoProfile(cropFarm);
+ for(const [type,dir] of [["sorgo","out"],["batata","out"],["laranja","out"],
+  ["algodao","out"],["racao","out"],["cerveja","out"]]){
+  assert.equal(creator.findProductEvidence(cropProfile,type,dir).level,"ausente");
+  assert.equal(creator.logisticsIntelligenceDecision(cropFarm,cropProfile,type,dir,
+   {score:80,kind:"inferida",reason:"mesmo setor"}).blocked,true,
+   "Não deduzir "+type+" a partir de milho/soja");
+ }
+ const mill=documented("expedidor_siderurgico",[
+  ["out","iron_pipes"],["out","scrap_metals"],["in","metal_center"]]);
+ const millProfile=creator.companyCargoProfile(mill);
+ assert.equal(creator.findProductEvidence(millProfile,"bobinas_industriais","out").level,"ausente");
+ assert.equal(creator.logisticsIntelligenceDecision(mill,millProfile,
+  "bobinas_industriais","out",{score:88,kind:"inferida",reason:"metal"}).blocked,true);
+ const coil=documented("id_opaco",[
+  ["out","steel_coils"],["in","scrap_metals"]]);
+ const coilProfile=creator.companyCargoProfile(coil);
+ assert.equal(creator.findProductEvidence(coilProfile,"bobinas_industriais","out").level,"especifica");
+ assert.equal(creator.logisticsIntelligenceDecision(coil,coilProfile,
+  "bobinas_industriais","out",{score:120,kind:"direta",reason:"coil"}).confidence,"documental");
+ const quarry=documented("id_mineral",[
+  ["out","stones"],["out","gravel"],["in","cement"]]);
+ const quarryProof=creator.logisticsIntelligenceDecision(quarry,creator.companyCargoProfile(quarry),
+  "granito","out",{score:75,kind:"inferida",reason:"rochas"});
+ assert.equal(quarryProof.confidence,"relacionada");
+ const rawCotton=documented("produtor",[
+  ["out","cotton"],["in","fertilizer"]]);
+ assert.equal(creator.findProductEvidence(creator.companyCargoProfile(rawCotton),"algodao","out").level,
+  "ausente","Algodão em caroço não é automaticamente pluma beneficiada");
+ const unnamedCargo=new JSZip();
+ unnamedCargo.file("cargo/carga9.sui",
+  'cargo_data : cargo.carga9 {\n name: "@@cargo_localizado@@"\n body_types[]: alta\n}\n');
+ const unknownCargo=await creator.loadCargo(unnamedCargo);
+ assert.equal(unknownCargo.cargos.get("carga9").unresolvedName,true);
+ const unsupported=creator.simulate({companies:new Map([[coil.id,coil]])},unknownCargo);
+ assert.ok(unsupported.skipped.some(x=>x.id==="carga9"),
+  "ID carga9 não deve inferir bobinas sem uma descrição legível");
+
+
  // Inteligência documental interna: sem API paga, sem fabricador de fretes.
  const kb=creator.OFFLINE_LOGISTICS_KNOWLEDGE;
  assert.equal(creator.validateLogisticsKnowledge(kb),true);
