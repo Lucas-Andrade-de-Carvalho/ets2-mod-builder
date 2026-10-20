@@ -88,3 +88,8 @@ O contexto consolidado para outra conversa está em [HANDOFF_COMPANY_LOGISTICS.m
 ## Diagnóstico de DEFs genéricas (correção 20/10/2026)
 
 O gerador agora detecta quando a DEF enviada é composta quase totalmente por permissões `cargo.cargaN` (situação observada nas antigas DEF Companies 1/2 do Librelato). Essas permissões não comprovam a atividade econômica das empresas, portanto um arquivo dessa natureza não pode substituir a **DEF Company original do mapa**. Em arquivos grandes, a geração é bloqueada com orientação explícita. O diagnóstico registra a quantidade de registros genéricos e exibe os IDs reais em `cargo:` encontrados nos IN/OUT, não apenas os nomes dos arquivos `.sii`. As regras também identificam revendas de construção e agropecuárias por entradas de estoque e saídas de mercadorias relacionadas. Não se garante rota quando as provas faltam.
+
+
+### Correção com DEF real de 208 empresas (20/10/2026)
+
+Nova rotina de recuperação de rotas para granito, rações, pluma e bobinas: cruza **produtos reais** em IN e OUT, com limites conservadores por empresa, e marca explicitamente relações inferidas. Quando os cargos exatos não estão presentes na DEF original, disponibilidade no mapa não equivale a produção comprovada dessa mercadoria. Versão do motor aparece no status da aba para permitir identificar HTML antigo. Validação local do ZIP de entrada: 208 empresas, 6739 OUT e 7088 IN, oito cargos em questão; os testes no GitHub usam perfis amostrados dessas empresas, não o pacote completo ou o ETS2.
