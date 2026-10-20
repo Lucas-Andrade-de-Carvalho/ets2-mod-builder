@@ -378,7 +378,7 @@ const SCS_CARGO_CATEGORY_MAP=[
  ["cimento",/(?:^|[_ ]|\.)(?:cement(?:_bag|_pallet)?|cimento)(?:$|[_ ]|\.)/],
  ["tijolo",/(?:^|[_ ]|\.)(?:bricks?|tijolos?)(?:$|[_ ]|\.)/],
  ["telha",/(?:^|[_ ]|\.)(?:tiles?|telhas?|roof(?:ing)?)(?:$|[_ ]|\.)/],
- ["granito",/(?:^|[_ ]|\.)(?:granite|granito|marble|marmore)(?:$|[_ ]|\.)/],
+ ["granito",/(?:^|[_ ]|\.)(?:granite|granitto|granito|marble|marmore)(?:$|[_ ]|\.)/],
  ["cerveja",/(?:^|[_ ]|\.)(?:beer|cervejas?)(?:$|[_ ]|\.)/],
  ["racao",/(?:^|[_ ]|\.)(?:animal_?feed|feedmeal|racao|xerem)(?:$|[_ ]|\.)/],
  ["bobinas_industriais",/(?:^|[_ ]|\.)(?:steel_?coils?|metal_?coils?|bobinas?)(?:$|[_ ]|\.)/],
