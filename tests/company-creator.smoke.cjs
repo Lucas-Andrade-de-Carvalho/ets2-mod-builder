@@ -112,6 +112,30 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Regressão derivada da DEF real def_company(1).zip, com 208 empresas e
+ // 6.739 arquivos OUT. Os IDs e mercadorias abaixo existem nessa DEF.
+ const sample=(id,role,from,to)=>({id,role,
+  old:[...from.map(unit=>({dir:"out",unit,stem:unit})),
+       ...to.map(unit=>({dir:"in",unit,stem:unit}))]});
+ const genuineSamples=[
+  ["granito","out",sample("ped","pedreira",["stones","gravel","ore","sand"],["cement"])],
+  ["granito","in",sample("car","desconhecida",["stones","gravel","ore"],["cement","iron_pipes","concrete"])],
+  ["racao","out",sample("arc","cooperativa",["big_bag_seed","graos","milho","soja"],["milho","soja","fertilizer"])],
+  ["racao","in",sample("aria_bd2","pecuaria",["beef3","milk"],["big_bag_seed","tractors"])],
+  ["algodao","out",sample("rocasoja","desconhecida",["feijao","milho","soja"],["big_bag_seed","fertilizer"])],
+  ["algodao","in",sample("cooper","cooperativa",["feijao","graos","milho","soja"],["feijao","graos","milho","soja","fertilizer"])],
+  ["bobinas_industriais","out",sample("itaacos","metalurgica",["iron_pipes","scrap_metals","largetubes"],["iron_pipes","largetubes"])],
+  ["bobinas_industriais","in",sample("itaacos","metalurgica",["iron_pipes","scrap_metals","largetubes"],["iron_pipes","largetubes"])]
+ ];
+ for(const [type,dir,company] of genuineSamples){
+  assert.ok(creator.realMapEconomicCandidate(company,type,dir),
+   "Regras novas não encontram evidência da DEF real: "+type+" "+dir+" "+company.id);
+ }
+ const misleading=sample("posto","posto",["stones","gravel","iron_pipes"],["cement"]);
+ assert.equal(creator.realMapEconomicCandidate(misleading,"granito","out"),null,
+  "Posto deve continuar excluído mesmo com dados absurdos");
+
+
  // Caso real reproduzido: DEF de mapa original tem IDs das mercadorias.
  // Já a DEF Company genérica 1/2 Librelato pode repetir cargo.cargaN
  // indiscriminadamente para praticamente todas as empresas.
@@ -239,6 +263,60 @@ async function main(){
   if(ref){
    assert.ok(criticalAllowed.has(ref[1]),"Empresa não autorizada no .SCS: "+ref[1]);
    assert.ok(cargoFlows.some(x=>x.id===ref[2]),"Cargo inexistente no .SCS: "+ref[2]);
+  }
+ }
+
+
+ // Integração da correção com perfis extraídos da DEF REAL anexada pelo usuário.
+ // Empresa IDs, mercadorias IN/OUT e combinações foram verificadas no ZIP
+ // def_company(1).zip (208 empresas, 6739 OUT, 7088 IN).
+ const actualProfiles=[
+  {id:"ped",out:["stones","gravel","ore","sand"],in:["cement"]},
+  {id:"car",out:["stones","gravel","ore"],in:["cement","iron_pipes","concrete"]},
+  {id:"arc",out:["big_bag_seed","graos","milho","soja"],in:["milho","soja","fertilizer"]},
+  {id:"aria_bd2",out:["beef3","milk"],in:["big_bag_seed","tractors"]},
+  {id:"rocasoja",out:["feijao","milho","soja"],in:["big_bag_seed","fertilizer"]},
+  {id:"cooper",out:["feijao","graos","milho","soja"],in:["feijao","graos","milho","soja","fertilizer"]},
+  {id:"itaacos",out:["iron_pipes","scrap_metals","largetubes"],in:["iron_pipes","largetubes"]},
+  {id:"gnt2",out:["metal_center","hmetal"],in:["metal_center","hmetal"]}
+ ];
+ const mapRealSubset=new JSZip(),libRealSubset=new JSZip();
+ for(const co of actualProfiles){
+  mapRealSubset.file("def/company/"+co.id+"/editor/test.sii","SiiNunit\n{}\n");
+  for(const dir of ["out","in"])for(const [i,unit]of co[dir].entries())
+   companyFile(mapRealSubset,co.id,dir,"real_"+i+"_"+dir,unit);
+ }
+ const missingEight=[
+  ["carga14","Pedra Granito 1","baixa"],["carga15","Pedra Granito 2","baixa"],
+  ["carga17","Ração Mineral Laranja","alta"],["carga18","Xerém","alta"],
+  ["carga19","Sacaria Ração","alta"],["carga20","Sacaria Ração 2","alta"],
+  ["carga5","Carga Pluma de Algodão","alta"],["carga9","Bobinas 2","baixa"]
+ ];
+ for(const [id,name,body]of missingEight)
+  libRealSubset.file("cargo/"+id+".sui",
+    'cargo_data : cargo.'+id+' {\n name: "'+name+'"\n body_types[]: '+body+'\n}\n');
+ const mapSubset=await creator.loadMap(mapRealSubset);
+ const libSubset=await creator.loadCargo(libRealSubset);
+ assert.equal(mapSubset.companies.size,actualProfiles.length);
+ const realSim=creator.simulate(mapSubset,libSubset);
+ assert.deepEqual(realSim.skipped.map(x=>x.id),[],
+  "DEF baseada em mercadorias reais deve permitir 8 cargas: "+JSON.stringify(realSim.skipped));
+ const realScs=await creator.build(mapSubset,libSubset,realSim);
+ const realArchive=await JSZip.loadAsync(realScs.blob);
+ const ids=new Set(actualProfiles.map(x=>x.id));
+ for(const [id]of missingEight){
+  const src=realSim.proof.find(x=>x.id===id);
+  assert.ok(src&&src.origins>0&&src.destinations>0,"Origem/destino inválido "+id);
+  for(const co of src.sourceIds)
+   assert.ok(realArchive.file("def/company/"+co+"/out/"+id+".sii"),"OUT ausente "+id+" "+co);
+  for(const co of src.destIds)
+   assert.ok(realArchive.file("def/company/"+co+"/in/"+id+".sii"),"IN ausente "+id+" "+co);
+ }
+ for(const path of Object.keys(realArchive.files)){
+  const match=path.match(/^def[/]company[/]([^/]+)[/](?:in|out)[/](carga[0-9]+)[.]sii$/i);
+  if(match){
+   assert.ok(ids.has(match[1]),"Empresa inventada "+match[1]);
+   assert.ok(missingEight.some(x=>x[0]===match[2]),"Cargo inventado "+match[2]);
   }
  }
 
