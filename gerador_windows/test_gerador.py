@@ -133,6 +133,29 @@ class Regression(unittest.TestCase):
         result=g.generate(self.inp,self.root/"owned_only")
         self.assertEqual(len(result),3)
 
+    def test_failed_eldorado_has_diagnostic_and_no_partial_scs(self):
+        """Um ZIP desconhecido bloqueia os tres mapas e deixa evidencias uteis."""
+        bad=self.root/"eldorado.zip"
+        zip_write(bad,{
+          "eldorado/def/companies/fazenda.sii":"SiiNunit\n{}\n",
+          "eldorado/def/companys/empresa_a/in/milho_a.sii":old("milho_a"),
+          "eldorado/README.txt":"Formato diferente da Company usual"})
+        with self.assertRaisesRegex(ValueError,"DIAGNOSTICO_ARQUIVO"):
+            g.generate(self.inp,self.root/"failure_out")
+        self.assertEqual(list((self.root/"failure_out").glob("*.scs")),[])
+        reports=list((self.root/"failure_out").glob("DIAGNOSTICO_ARQUIVO_*.json"))
+        self.assertEqual(len(reports),1)
+        detail=json.loads(reports[0].read_text(encoding="utf-8"))
+        self.assertEqual(detail["total_arquivos"],3)
+        self.assertTrue(any("companys" in p for p in detail["amostra_geral"]))
+        self.assertTrue((self.root/"failure_out"/"FALHA_MAPAS_NAO_GERAR.txt").exists())
+
+    def test_diagnostic_supports_def_company_and_bare_root(self):
+        diag=g.describe_archive(self.root/"minas.zip")
+        self.assertGreater(diag["caminhos_in_out"],0)
+        self.assertGreater(diag["caminhos_reconhecidos"],0)
+        self.assertIn("pastas_raiz",diag)
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
