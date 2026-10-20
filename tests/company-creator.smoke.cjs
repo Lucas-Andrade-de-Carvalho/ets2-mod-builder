@@ -112,6 +112,19 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // A aba Arquivos/Gerar SCS (outra ferramenta do mesmo HTML) também deve
+ // rejeitar ZIPs inseguros, sem confundi-la com o gerador universal.
+ assert.equal(typeof windowShim.Ets2MainTest.validateMainArchive,"function");
+ const mainZip=new JSZip();mainZip.file("def/company/a/editor/city.sii","SiiNunit\n{}");
+ assert.equal(windowShim.Ets2MainTest.validateMainArchive(mainZip).entries,1);
+ assert.throws(()=>windowShim.Ets2MainTest.validateMainArchive({
+  files:{"def/../invalido.sii":{dir:false,_data:{uncompressedSize:30}}}
+ }),/inseguro/);
+ assert.throws(()=>windowShim.Ets2MainTest.validateMainArchive({
+  files:{"def/company/a/out/huge.sii":{dir:false,_data:{uncompressedSize:180*1024*1024}}}
+ }),/150 MB/);
+
+
  // Profissionalização da leitura: múltiplos cargo: no mesmo SII,
  // comentários ignorados, preservação das unidades e classificação manual.
  const multiCargo=new JSZip();
