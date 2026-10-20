@@ -131,3 +131,10 @@ A presença literal de `cargo:` é forte evidência documental, mas **não autor
 
 
 **Relatório técnico:** consulte [CODE_AUDIT_V4.md](CODE_AUDIT_V4.md) para falhas corrigidas, testes e limites conhecidos. Para sincronizar o código fonte com o HTML distribuído use `node scripts/sync-company-engine.cjs` (desenvolvimento apenas). O navegador não precisa de Node nem Python.
+
+
+## Inteligência logística documental integrada (v4.1)
+
+Ao clicar **Analisar e gerar Company**, o assistente combina automaticamente os produtos reais das definições IN/OUT do mapa com a base de conhecimento em `logistics_knowledge.json`. O HTML contém uma cópia offline das fontes e regras, permitindo funcionamento local sem API paga. Quando houver internet, consulta o mesmo conjunto de conhecimento público atualizado do próprio repositório; não envia nem conteúdo nem nomes das empresas ou arquivos do usuário para servidores externos. Esta consulta não é uma busca geral em mecanismos de pesquisa nem envolve modelo generativo. As fontes oficiais incluídas foram pesquisadas em 20/10/2026: Embrapa (grãos, ração, pluma), Instituto Aço Brasil (siderurgia) e ABCP (cimento). Novas fontes só devem entrar após validação documental.
+
+O assistente preserva a regra fundamental: o conhecimento geral sobre uma cadeia produtiva **não comprova a atividade de uma empresa específica**. Uma fazenda de milho não é automaticamente expedidora de pluma; tubos ou sucata não provam fabricação de bobinas; milho/soja não provam expedição de ração. Esses casos são bloqueados se não houver produtos compatíveis declarados em OUT. O TXT de auditoria registra fontes e razões das decisões. Não há garantia de 100% de cargas distribuídas; a ausência de rota pode ser correta.

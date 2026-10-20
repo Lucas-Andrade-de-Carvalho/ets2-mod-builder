@@ -8,6 +8,7 @@ on:
       - "engine_universal.js"
       - "scs_company_catalog.js"
       - "tests/**"
+      - "logistics_knowledge.json"
       - ".github/workflows/company-smoke.yml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "engine_universal.js"
       - "scs_company_catalog.js"
       - "tests/**"
+      - "logistics_knowledge.json"
       - ".github/workflows/company-smoke.yml"
 
 jobs:
