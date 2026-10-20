@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · COERÊNCIA ECONÔMICA · v3.2";
+const ENGINE_BUILD="2026-10-20 · AUDITORIA E SEGURANÇA · v4";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -41,6 +41,12 @@ function checkMapCompanyAgainstSCS(company){
  company.catalogConsulted=true;
  if(!reference){company.catalog=null;return null}
  company.catalog=reference;
+ // O catálogo fornece contexto, mas nunca apaga uma classificação manual
+ // ou uma atividade já corrigida por provas mais fortes do IN/OUT.
+ if(company.evidence==="classificação informada pelo usuário"||
+    company.evidence?.startsWith("categoria agroinsumos inferida de OUT")||
+    company.evidence?.startsWith("movimentação IN/OUT"))
+   return reference;
  company.role=reference.role;
  company.evidence="empresa padrão SCS reconhecida por "+reference.matchBy+": "+reference.name+" ("+reference.source+")";
  return reference;
@@ -265,11 +271,16 @@ async function mapFingerprint(map){
 // Leitor de pacotes ZIP, inclusive SCS/ZIP guardados dentro de outro ZIP.
 // Mantém os nomes internos: prefixos de pastas só são removidos na projeção
 // canonizada de def/company e def/cargo, nunca nos dados originais.
+// Limites combinados: um ZIP pequeno também pode declarar gigabytes de
+// arquivos expandidos. Rejeitar ANTES de descompactar evita travar o navegador.
 const ARCHIVE_LIMITS=Object.freeze({
  maxDepth:3,
  maxNestedFiles:32,
  maxEntries:120000,
- maxNestedBytes:320*1024*1024
+ maxNestedBytes:320*1024*1024,
+ maxExpandedBytes:800*1024*1024,
+ maxSingleEntryBytes:150*1024*1024,
+ maxCargoDefinitionBytes:1024*1024
 });
 const ARCHIVE_FILE=/\.(?:zip|scs)$/i;
 const ZIP_SIGNATURES=new Set(["504b0304","504b0506","504b0708"]);
@@ -289,7 +300,7 @@ async function zipRead(file){
 }
 async function resolveEntries(zip,kind){
  const matched=[],stack=[{zip,level:0,source:"arquivo enviado"}];
- let entryCount=0,nestedCount=0,skippedHashFS=0;
+ let entryCount=0,nestedCount=0,skippedHashFS=0,expandedBytes=0;
  const isRelevant=kind==="map"?companyPath:cargoPath;
  while(stack.length){
   const frame=stack.pop();
@@ -299,6 +310,14 @@ async function resolveEntries(zip,kind){
   for(const [raw,obj] of Object.entries(frame.zip.files)){
    if(obj.dir)continue;
    if(++entryCount>ARCHIVE_LIMITS.maxEntries)throw Error("Pacote muito grande: limite de "+ARCHIVE_LIMITS.maxEntries+" entradas alcançado. Selecione só a DEF do mapa.");
+   const declaredSize=obj._data?.uncompressedSize;
+   if(Number.isFinite(declaredSize)){
+    if(declaredSize>ARCHIVE_LIMITS.maxSingleEntryBytes)
+     throw Error("Arquivo expandido grande demais para uma DEF: "+raw);
+    expandedBytes+=declaredSize;
+    if(expandedBytes>ARCHIVE_LIMITS.maxExpandedBytes)
+     throw Error("ZIP expandido supera 800 MB. Separe apenas as definições necessárias, sem modelos ou texturas.");
+   }
    if(obj.unsafeOriginalName&&/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(obj.unsafeOriginalName))
      throw Error("Caminho inseguro encontrado no arquivo "+frame.source);
    const name=pathNorm(raw);
@@ -395,32 +414,21 @@ function oldCargoCategory(stemOrUnit){
 function categorizeExistingCompanyLoads(c){
  const result={in:new Map(),out:new Map(),unknownIn:0,unknownOut:0};
  for(const x of c.old){
-  const role=oldCargoCategory(x.unit)||oldCargoCategory(x.stem);
-  x.category=role;
-  if(role)result[x.dir].set(role,(result[x.dir].get(role)||0)+1);
-  else if(x.dir==="in")result.unknownIn++;
-  else result.unknownOut++;
+  const values=x.units?.length?x.units:[x.unit].filter(Boolean);
+  if(!values.length){
+   x.category=null;
+   if(x.dir==="in")result.unknownIn++;else result.unknownOut++;
+   continue;
+  }
+  for(const unit of values){
+   const role=oldCargoCategory(unit);
+   if(!x.category)x.category=role;
+   if(role)result[x.dir].set(role,(result[x.dir].get(role)||0)+1);
+   else if(x.dir==="in")result.unknownIn++;else result.unknownOut++;
+  }
  }
  return result;
 }
-
-// Uma mercadoria pode ser expedida de um estabelecimento de estoque ou revenda,
-// sem existir uma fábrica no mapa. Identificamos o ramo pelas cargas REAIS da DEF.
-const CONSTRUCTION_CARGO_MARKERS=[
- ["areia",/\b(areias?|sand)\b/],
- ["brita",/\b(brita|britas|gravel|cascalho)\b/],
- ["tijolo",/\b(tijolos?|bricks?|ceramic ?bricks?)\b/],
- ["piso",/\b(pisos?|floor(?:ing)?|azulejos?|revestimentos?)\b/],
- ["telha",/\b(telhas?|roof(?:ing)?|roof ?tiles?)\b/],
- ["tubo",/\b(tubos?|tubos? ?concret|tubos? ?mg|concrete ?pipes?|pipes?|tubulacoes?)\b/],
- ["ferragem",/\b(ferro ?const|b ?reforco|vergalhoes?|rebars?|armaduras?|ferragens?)\b/],
- ["calha",/\b(calhas?|gutters?)\b/],
- ["madeira",/\b(madeira|madeirame|wood|timber|lumber|tabuas?|planks?)\b/],
- ["granito",/\b(pedras?|granito|granite|marmore|marble|calcario|limestone)\b/],
- ["cimento",/\b(cimento|cement|argamassa|reboco|blocos? ?concret|concrete ?blocks?)\b/],
- ["aco",/\b(chapa ?aco|chapas? ?aco|steel ?plates?|sua?luminio)\b/]
-];
-const CONSTRUCTION_FINISHED=new Set(["tijolo","piso","telha","tubo","ferragem","calha","madeira","cimento","aco"]);
 function semanticConstructionType(raw){
  const val=norm(String(raw||"").replace(/^cargo[.:]/i,"")).replace(/[^a-z0-9 ]/g," ").trim();
  for(const [type,re]of CONSTRUCTION_CARGO_MARKERS)if(re.test(val))return type;
@@ -543,6 +551,55 @@ function farmCargoEvidence(c,type){
  return oldSpecificEvidence(c,type,"out");
 }
 
+// Interpreta campos cargo: respeitando comentários de linha/bloco e strings.
+// Devolve offsets para desativar permissões sem destruir outros campos SII.
+function maskSiiComments(source){
+ const text=String(source),chars=[...text];let quote="",line=false,block=false;
+ for(let i=0;i<text.length;i++){
+  const ch=text[i],next=text[i+1];
+  if(line){
+   if(ch==="\n"){line=false;continue}
+   if(ch!=="\r")chars[i]=" ";
+   continue;
+  }
+  if(block){
+   if(ch==="*"&&next==="/"){chars[i]=" ";chars[i+1]=" ";i++;block=false;continue}
+   if(ch!=="\n"&&ch!=="\r")chars[i]=" ";
+   continue;
+  }
+  if(quote){
+   if(ch==="\\"){i++;continue}
+   if(ch===quote)quote="";
+   continue;
+  }
+  if(ch==='"'||ch==="'"){quote=ch;continue}
+  if(ch==="/"&&next==="/"){chars[i]=" ";chars[i+1]=" ";i++;line=true;continue}
+  if(ch==="/"&&next==="*"){chars[i]=" ";chars[i+1]=" ";i++;block=true;continue}
+ }
+ return chars.join("");
+}
+function scanCompanyCargoFields(source){
+ const clean=maskSiiComments(source),fields=[];
+ const re=/(^|[{\n\r])(\s*cargo\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s}\r\n]+)/gmi;
+ let match;
+ while((match=re.exec(clean))){
+  const start=match.index+match[1].length+match[2].length;
+  const literal=match[0].slice(match[1].length+match[2].length);
+  const value=literal.replace(/^["']|["']$/g,"").trim();
+  fields.push({start,end:start+literal.length,value});
+ }
+ return fields;
+}
+function parseCompanyCargoUnits(source,path){
+ const fields=scanCompanyCargoFields(source),units=[];
+ for(const field of fields){
+  if(!field.value)continue; // cargo: "" neutraliza a permissão.
+  const m=field.value.match(/^cargo\.([a-z0-9_]+)$/i);
+  if(!m)throw Error("Referência cargo: inválida em "+path+": "+field.value.slice(0,80));
+  units.push(m[1].toLowerCase());
+ }
+ return [...new Set(units)];
+}
 async function loadMap(zip){
  const companies=new Map(),files=new Map();
  const resolution=await resolveEntries(zip,"map");
@@ -554,7 +611,7 @@ async function loadMap(zip){
   if(!companies.has(m.id))companies.set(m.id,{id:m.id,folder:m.rawId,name:"",role:"desconhecida",old:[],editor:0});
   const c=companies.get(m.id);
   if(m.type==="editor")c.editor++;
-  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,category:null});
+  if(m.type==="in"||m.type==="out")c.old.push({p,dir:m.type,stem:m.name.replace(/\.sii$/i,""),unit:null,units:[],category:null});
  }
  if(!companies.size){
   const sample=Object.keys(zip.files).filter(p=>!zip.files[p].dir).slice(0,6);
@@ -568,18 +625,26 @@ async function loadMap(zip){
   if(name)c.name=name[1];
   if((++i)%100===0)await yieldUI();
  }
- let parsedRelations=0,scannedRelations=0;
+ let parsedRelations=0,scannedRelations=0,withoutCargo=0;
+ const relationsByPath=new Map();
+ for(const c of companies.values())for(const item of c.old)
+  relationsByPath.set(item.p.toLowerCase(),item);
  for(const item of files.values()){
   const m=companyMeta(item.p);
   if(!m||(m.type!=="in"&&m.type!=="out"))continue;
-  const obj=item.obj;
-  if((obj._data?.uncompressedSize||0)>100000)continue;
-  const raw=await obj.async("text");
-  const match=raw.replace(/\/\/[^\n]*/g,"").match(/\bcargo\s*:\s*["']?cargo\.([a-z0-9_]+)/i);
-  if(match){
-   const c=companies.get(m.id);
-   const relation=c?.old.find(x=>x.p===item.p);
-   if(relation){relation.unit=match[1].toLowerCase();parsedRelations++}
+  const size=item.obj._data?.uncompressedSize||0;
+  if(size>ARCHIVE_LIMITS.maxCargoDefinitionBytes)
+   throw Error("Definição IN/OUT grande demais para interpretar com segurança: "+item.p);
+  const raw=await item.obj.async("text");
+  if(raw.length>ARCHIVE_LIMITS.maxCargoDefinitionBytes)
+   throw Error("Definição IN/OUT excede limite após extração: "+item.p);
+  const units=parseCompanyCargoUnits(raw,item.p);
+  const relation=relationsByPath.get(item.p.toLowerCase());
+  if(relation){
+   relation.units=units;
+   relation.unit=units[0]||null;
+   parsedRelations+=units.length;
+   if(!units.length)withoutCargo++;
   }
   if(++scannedRelations%180===0)await yieldUI();
  }
@@ -607,7 +672,7 @@ async function loadMap(zip){
   inferConstructionSupplyFromINOUT(c);
  }
 
- return{companies,files,parsedRelations,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
+ return{companies,files,parsedRelations,withoutCargo,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
@@ -625,7 +690,7 @@ async function loadCargo(zip){
   const txt=await f.obj.async("text"),p=f.p;
   if(/^def\/cargo\.[a-z0-9_-]+\.sii$/i.test(p))manifests.push(p);
   const id=(txt.match(/\bcargo_data\s*:\s*cargo\.([a-z0-9_]+)/i)||[])[1];
-  if(id&&/^carga\d+$/i.test(id)){
+  if(id&&/^[a-z][a-z0-9_]*$/i.test(id)){
    let label=(txt.match(/^\s*name\s*:\s*"([^"]+)"/mi)||[])[1]||"";
    if(!label||label.includes("@@")){const n=id.match(/^carga(\d+)$/i);label=n?names[Number(n[1])-1]||id:id}
    const bs=[...txt.matchAll(/^\s*body_types\s*(?:\[\s*\d*\s*\])?\s*:\s*["']?([a-z0-9_]+)/gim)].map(x=>x[1].toLowerCase());
@@ -1189,16 +1254,17 @@ const UNIVERSAL_FREIGHT={
  pallets:/^(?:empty_palet|empty_pallet|pallets?|paletes?|used_packag|wood_pallets?)$/i
 };
 function companyCargoProfile(c){
- // O campo cargo: é a prova forte. O nome do arquivo é só um indício fraco
- // quando cargo: não pôde ser interpretado.
+ // Fontes do perfil: SOMENTE cargo: real, não nome de empresa ou .sii.
  const groups={in:new Set(),out:new Set()},declared={in:new Set(),out:new Set()};
  for(const item of c.old||[]){
   if(!groups[item.dir])continue;
-  const real=String(item.unit||"").toLowerCase().replace(/^cargo[.:]/,"").trim();
-  const token=real||String(item.stem||"").toLowerCase().trim();
-  if(!token||/^carga\d+$/i.test(token))continue;
-  groups[item.dir].add(token);
-  if(real)declared[item.dir].add(real);
+  const values=item.units?.length?item.units:[item.unit].filter(Boolean);
+  for(const value of values){
+   const token=String(value).toLowerCase().replace(/^cargo[.:]/,"").trim();
+   if(!token||/^carga\d+$/i.test(token))continue;
+   groups[item.dir].add(token);
+   declared[item.dir].add(token);
+  }
  }
  const count=(dir,re)=>[...groups[dir]].filter(x=>re.test(x)).length;
  return{...groups,declared,count,total:groups.in.size+groups.out.size};
@@ -1334,13 +1400,9 @@ function companyCargoCompatibility(c,profile,type,dir,info,anomalies){
    reason:"cargo: documentado no "+dir.toUpperCase()+
      (mismatch?" (atividade econômica reavaliada: "+coherence.reason+")":"")};
  }
- // O nome do arquivo pode auxiliar, mas sozinho não vale evidência DIRETA.
- const filenameRelated=(!declared.size)&&
-   [...profile[dir]].some(unit=>oldCargoCategory(unit)===type);
+ // O nome do arquivo nunca cria permissão de frete.
  // Evitar extrapolar um operador genérico com quase todo o catálogo.
  if(profile.total>=95)return null;
- if(filenameRelated)return{score:57,kind:"inferida",
-  reason:"mercadoria sugerida pelo nome de arquivo, sem cargo: confirmado"};
  const outs=re=>n("out",re),ins=re=>n("in",re);
  let reason="",score=0; switch(type){
   case "milho":case "soja":case "sorgo":
@@ -1470,12 +1532,15 @@ const cargoSii=id=>"SiiNunit\n{\n cargo_def : ."+id+" {\n  cargo: \"cargo."+id+"
 // pelo jogo. Conforme a documentação oficial SCS, cargo vazio desativa
 // aquela permissão. Preservar o MESMO caminho é indispensável.
 function disableExistingCargo(raw,p){
- let count=0;
- const result=String(raw).replace(/(\bcargo\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s}\r\n]+)/gi,
-  (_,prefix)=>{count++;return prefix+'""';});
- if(count)return result;
- // Arquivos de IN/OUT sem cargo conhecido também são neutralizados.
- return "SiiNunit\n{\n}\n";
+ const source=String(raw),fields=scanCompanyCargoFields(source);
+ // Preservar arquivos sem cargo: em vez de produzir um SII sem unidade.
+ if(!fields.length)return source;
+ let result=source;
+ for(const item of [...fields].reverse())
+  result=result.slice(0,item.start)+'""'+result.slice(item.end);
+ if(parseCompanyCargoUnits(result,p).length)
+  throw Error("Não foi possível neutralizar todas as permissões: "+p);
+ return result;
 }
 async function build(map,cargo,sim){
  const out=new JSZip(),keys=new Set(),generated=new Map();
@@ -1616,6 +1681,7 @@ function createDiagnosticText(map,cargo,sim){
   "Empresas existentes na DEF consultadas no catálogo durante a distribuição: "+(sim.catalogChecks?.consulted??map.companies.size),
   "Empresas padrão reconhecidas entre elas: "+(sim.catalogChecks?.matched??0),
   "Referências cargo: lidas dos arquivos IN/OUT: "+(map.parsedRelations||0),
+  "Arquivos IN/OUT sem campo cargo ativo: "+(map.withoutCargo||0),
   "Integridade da DEF: "+JSON.stringify(isGenericCompanyMap(map)),
   "ATENÇÃO: uma Company formada majoritariamente por cargo.cargaN não documenta os produtos originais dos estabelecimentos.",
   "Empresas: "+map.companies.size,
@@ -1745,5 +1811,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
