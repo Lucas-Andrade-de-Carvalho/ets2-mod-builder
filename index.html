@@ -605,7 +605,7 @@ window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Err
 <script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · ANÁLISE VALIDADA EM DEF REAIS · v5.1";
+const ENGINE_BUILD="2026-10-20 · MERCADORIAS REAIS E MANIFESTO DO REBOQUE · v5.2";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -1302,6 +1302,45 @@ async function loadMap(zip){
 
  return{companies,files,parsedRelations,withoutCargo,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
+// Uma DEF pode conter mercadorias adicionais, externas ao reboque.
+// Prioridade de escopo: @include do manifesto > modelos físicos
+// vehicle/cargo/<id> > todos os cargos quando não há identificação.
+// Não depender de nomes "carga1"..."carga23" ou de um mapa específico.
+async function selectTrailerCargoScope(files,cargos,manifests){
+ const included=new Set(),visual=new Set();
+ const includeRe=/^\s*@include\s+["']([^"'\r\n]+)["']/gmi;
+ for(const entry of files.values()){
+  const folder=entry.p.toLowerCase();
+  const m=folder.match(/^def\/vehicle\/cargo\/([a-z0-9_]+)\//i);
+  if(m)visual.add(m[1].toLowerCase());
+ }
+ for(const name of manifests){
+  const entry=files.get(name.toLowerCase());if(!entry)continue;
+  const content=await entry.obj.async("text");
+  let m;
+  while((m=includeRe.exec(content))){
+   const raw=m[1].replace(/\\/g,"/").replace(/^\/+/,"");
+   const path=raw.replace(/^def\//i,"").replace(/^\.\//,"").toLowerCase();
+   const unit=path.match(/^cargo\/([a-z0-9_]+)\.(?:sii|sui)$/);
+   if(unit)included.add(unit[1]);
+  }
+  includeRe.lastIndex=0;
+ }
+ const manifestMatches=[...included].filter(x=>cargos.has(x));
+ const visualMatches=[...visual].filter(x=>cargos.has(x));
+ const chosen=manifestMatches.length?new Set(manifestMatches):
+   visualMatches.length?new Set(visualMatches):null;
+ const strategy=manifestMatches.length?"manifesto @include":
+   visualMatches.length?"modelos físicos vehicle/cargo":"sem manifesto/modelo (todas as definições)";
+ const excluded=[];
+ if(chosen)for(const [id,c] of [...cargos]){
+  if(chosen.has(id))continue;
+  excluded.push({id,name:c.name,reason:"não declarado no "+strategy});
+  cargos.delete(id);
+ }
+ return{strategy,excluded,manifestMatches:manifestMatches.length,
+  vehicleMatches:visualMatches.length,declared:included.size};
+}
 async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
  const resolution=await resolveEntries(zip,"cargo");
@@ -1346,8 +1385,9 @@ async function loadCargo(zip){
   }
   if((++i)%100===0)await yieldUI();
  }
+ const scope=await selectTrailerCargoScope(files,cargos,manifests);
  for(const c of cargos.values())c.trailer=trailer.get(c.id)||new Set();
- return{files,cargos,manifests,archivesRead:resolution.nestedCount}
+ return{files,cargos,manifests,archivesRead:resolution.nestedCount,scope}
 }
 
 const LEGACY_EVIDENCE={
@@ -2165,7 +2205,9 @@ const PRODUCT_EVIDENCE=Object.freeze({
  cimento:/^(?:cimento|cement|cement_b|cement_bags?|cement_pallet)$/i,
  batata:/^(?:batatas?|potatoes?|potato_b)$/i,
  laranja:/^(?:laranjas?|oranges?|citrus_oranges?)$/i,
- cerveja:/^(?:cervejas?|beer|beer_c|cerveza)$/i,
+ // Nomes comerciais da cerveja presentes em DEFs reais do MINAS.
+ // Bebidas genéricas não demonstram cerveja, mas estas marcas sim.
+ cerveja:/^(?:cervejas?|beer|beer_c|cerveza|amstel|antarctica|brahma|budweiser|devassa|heineken|schin|skol)$/i,
  tijolo:/^(?:tijolos?|bricks?|ceramic_bricks?)$/i,
  granito:/^(?:granito|granitto|granite|granite_blocks?)$/i,
  racao:/^(?:racao|racoes|xerem|feedmeal|feed_meal|animal_?feed|salmineral|suplementomineral)$/i,
@@ -2421,6 +2463,8 @@ function audit(map,cargo,sim){
  if(manual)warning.push(manual+" empresas classificadas manualmente.");
  if(!assignedCompanies)warning.push("Nenhum ponto real de expedição foi encontrado. Confira a DEF do mapa.");
  if(!cargo.manifests.length)warning.push("DEF sem arquivo de registro cargo.*.sii identificado.");
+ if(cargo.scope?.excluded.length)warning.push(
+  cargo.scope.excluded.length+" definições extras foram excluídas por não pertencerem ao manifesto/modelos do reboque.");
  const reasons=new Map();
  for(const item of sim.skipped)for(const reason of item.problems)reasons.set(reason,(reasons.get(reason)||0)+1);
  const ranked=[...reasons].sort((a,b)=>b[1]-a[1]);
@@ -2466,7 +2510,9 @@ function createDiagnosticText(map,cargo,sim){
   "Regras de inteligência documental: "+(sim.knowledge?.sources?.length||0)+" fontes",
   "Inconsistências econômicas bloqueadas pelo assistente: "+(sim.researchRejectedTotal||0),
   "Amostra detalhada das rejeições (limite de 600): "+(sim.researchRejected?.length||0),
-  "Cargas personalizadas do Librelato: "+cargo.cargos.size,
+  "Cargas efetivas do reboque: "+cargo.cargos.size,
+  "Escopo das cargas: "+(cargo.scope?.strategy||"sem especificação"),
+  "Definições extras excluídas: "+(cargo.scope?.excluded.length||0),
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
   "Definições de carroceria: "+[...cargo.cargos.values()].map(c=>c.id+" = "+(c.body.join("|")||"SEM BODY_TYPES")).join(", "),
   "",
@@ -2477,6 +2523,9 @@ function createDiagnosticText(map,cargo,sim){
   const outs=c.old.filter(x=>x.dir==="out").flatMap(x=>x.units?.length?x.units:[x.unit||"(SEM_CARGO)"]);
   rows.push([c.id,c.role,c.evidence||"nenhuma",ins.join(","),outs.join(","),"categorias IN: "+[...(c.categories?.in||new Map())].map(x=>x.join("=")).join(","),"categorias OUT: "+[...(c.categories?.out||new Map())].map(x=>x.join("=")).join(",")].join(" | "));
  }
+ rows.push("","CARGAS ENCONTRADAS NO ZIP MAS EXCLUÍDAS DO REBOQUE (ID | NOME | MOTIVO)");
+ for(const entry of cargo.scope?.excluded||[])
+  rows.push([entry.id,entry.name,entry.reason].join(" | "));
  rows.push("","FONTES PÚBLICAS DA INTELIGÊNCIA LOGÍSTICA (ID | ÓRGÃO | TÍTULO | URL | REGRA)");
  for(const s of sim.knowledge?.sources||[])
   rows.push([s.id,s.agency,s.title,s.url,s.fact].join(" | "));
@@ -2599,7 +2648,7 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();</script>
 </body>
 </html>

@@ -112,6 +112,72 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Integração diretamente derivada dos arquivos de origem MINAS:
+ // marcas comerciais de cerveja são produtos identificáveis, e as
+ // definições auxiliares do jogo não pertencem automaticamente ao reboque.
+ const beerMap=new JSZip(),beerDef=new JSZip();
+ for(const id of ["ambev","jjdistibuido","abcatacado","superabc","bebida_generica"]){
+  beerMap.file("def/company/"+id+"/editor/filial.sii","SiiNunit\n{}\n");
+ }
+ for(const brand of ["brahma","skol","heineken","amstel","antarctica","budweiser"]){
+  companyFile(beerMap,"ambev","out",brand,brand);
+  companyFile(beerMap,"jjdistibuido","out",brand,brand);
+  companyFile(beerMap,"abcatacado","in",brand,brand);
+  companyFile(beerMap,"superabc","in",brand,brand);
+ }
+ companyFile(beerMap,"bebida_generica","out","bebidas","bebidas");
+ beerDef.file("cargo/carga12.sui",
+  'cargo_data : cargo.carga12 {\n name: "Cervejas"\n body_types[]: alta\n}');
+ beerDef.file("cargo/carga6.sui",
+  'cargo_data : cargo.carga6 {\n name: "Carga de Cimento"\n body_types[]: baixa\n}');
+ beerDef.file("cargo/cott_seed.sui",
+  'cargo_data : cargo.cott_seed {\n name: "Sementes de Algodão"\n body_types[]: hopper\n}');
+ beerDef.file("cargo/sugar_beet_b.sui",
+  'cargo_data : cargo.sugar_beet_b {\n name: "@@cn_sugar_beet@@"\n body_types[]: granel\n}');
+ beerDef.file("cargo/corn_b.sui",
+  'cargo_data : cargo.corn_b {\n name: "@@cn_maize@@"\n body_types[]: granel\n}');
+ beerDef.file("cargo.librelato.sii",
+  'SiiNunit\n{\n@include "cargo/carga12.sui"\n@include "cargo/carga6.sui"\n}\n');
+ const beerCargo=await creator.loadCargo(beerDef);
+ assert.deepEqual([...beerCargo.cargos.keys()].sort(),["carga12","carga6"],
+  "Manifesto determina cargas reais, não todas as defs extras no ZIP");
+ assert.equal(beerCargo.scope.strategy,"manifesto @include");
+ assert.equal(beerCargo.scope.excluded.length,3);
+ const beerMapRead=await creator.loadMap(beerMap);
+ const beerSim=creator.simulate(beerMapRead,beerCargo);
+ const beerProof=beerSim.proof.find(p=>p.id==="carga12");
+ assert.ok(beerProof,"Cerveja de marca real deve ter rota no MINAS");
+ assert.deepEqual(beerProof.sourceIds.sort(),["ambev","jjdistibuido"]);
+ assert.deepEqual(beerProof.destIds.sort(),["abcatacado","superabc"]);
+ assert.equal(beerProof.confidence,"documental");
+ assert.equal(beerSim.proof.some(p=>p.id==="carga6"),false,
+  "Sem cimento real, não inventar origem/destino apenas por haver outras cargas de construção");
+ assert.equal(beerSim.plan.has("bebida_generica"),false,
+  "Bebida genérica não demonstra cerveja");
+ const beerBuilt=await creator.build(beerMapRead,beerCargo,beerSim);
+ const beerPack=await JSZip.loadAsync(beerBuilt.blob);
+ for(const company of ["ambev","jjdistibuido"])
+  assert.ok(beerPack.file("def/company/"+company+"/out/carga12.sii"));
+ for(const company of ["abcatacado","superabc"])
+  assert.ok(beerPack.file("def/company/"+company+"/in/carga12.sii"));
+ assert.deepEqual(creator.parseCompanyCargoUnits(
+  await beerPack.file("def/company/bebida_generica/out/bebidas.sii").async("text"),
+  "def/company/bebida_generica/out/bebidas.sii"),[],
+  "Empresa sem cerveja documentada tem OUT antigo neutralizado");
+
+ // Sem manifesto, models vehicle/cargo fornecem o escopo de forma genérica.
+ const modelScope=new JSZip();
+ modelScope.file("cargo/soja_custom.sui",
+  'cargo_data : cargo.soja_custom {\n name: "Soja"\n body_types[]: alta\n}');
+ modelScope.file("cargo/nem_do_reboque.sui",
+  'cargo_data : cargo.nem_do_reboque {\n name: "Sementes de Algodão"\n body_types[]: hopper\n}');
+ modelScope.file("vehicle/cargo/soja_custom/model_area.sii",
+  'SiiNunit\n{ cargo_model_match : .area { loading_method: custom } }\n');
+ const modelLoad=await creator.loadCargo(modelScope);
+ assert.deepEqual([...modelLoad.cargos.keys()],["soja_custom"]);
+ assert.equal(modelLoad.scope.strategy,"modelos físicos vehicle/cargo");
+
+
  // Regressão baseada nos tokens IN/OUT observados nas DEFs MINAS e
  // em outra DEF brasileira: sem copiar arquivos privados para o repositório.
  assert.equal(creator.kind("Sementes de Algodão"),null,
