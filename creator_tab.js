@@ -1600,7 +1600,7 @@ function renderLogisticsResearch(research,sim){
  const line=el("companyCreateResearchStatus"),list=el("companyCreateResearchSources");
  if(line)line.textContent="Inteligência logística automática: "+research.data.sources.length+
   " fontes documentais · "+research.origin+" · "+
-  (sim.researchRejected?.length||0)+" associações imprecisas bloqueadas.";
+  (sim.researchRejectedTotal||0)+" associações imprecisas bloqueadas.";
  if(!list)return;
  list.innerHTML=research.data.sources.map(s=>"<p><b>"+researchEscape(s.agency)+
    "</b> — <a href=\""+researchEscape(s.url)+"\" target=\"_blank\" rel=\"noopener noreferrer\">"+
@@ -1610,10 +1610,11 @@ function renderLogisticsResearch(research,sim){
 function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  const catalogChecks=consultCatalogForMapDistribution(map);
  const plan=new Map(),skipped=[],proof=[],assumptions=[],anomalies=[],researchRejected=[];
+ let researchRejectedTotal=0;
  const grouped={alta:0,baixa:0,outros:0},perCompany=[];
  const cargoChecks=new Map();
  for(const info of cargo.cargos.values()){
-  const type=kind(info.name)||(info.id==="carga9"?"bobinas_industriais":null);
+  const type=info.unresolvedName?null:kind(info.name);
   const body=info.body.filter(b=>!info.trailer.size||info.trailer.has(b));
   cargoChecks.set(info.id,{info,type,body,out:[],inn:[]});
  }
@@ -1626,6 +1627,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
     if(!evidence)continue;
     const ai=logisticsIntelligenceDecision(company,profile,entry.type,dir,evidence,knowledge);
     if(ai?.blocked){
+      researchRejectedTotal++;
       if(researchRejected.length<600)researchRejected.push({company:company.id,cargo:entry.info.id,
        dir,reason:ai.reason,sourceIds:ai.sourceIds});
       continue;
@@ -1638,7 +1640,7 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
  }
  for(const entry of cargoChecks.values()){
   const {info,type,body}=entry,issues=[],outs=entry.out,ins=entry.inn;
-  if(!type)issues.push("tipo econômico da mercadoria não identificado");
+  if(!type)issues.push(info.unresolvedName?"cargo_data sem nome legível: informe descrição real, não adivinhar pelo ID":"tipo econômico da mercadoria não identificado");
   if(!info.body.length)issues.push("sem body_types");
   if(!body.length)issues.push("carroceria incompatível");
   if(!outs.length&&type)issues.push("nenhuma empresa com expedição IN/OUT compatível");
@@ -1660,14 +1662,17 @@ function simulate(map,cargo,knowledge=OFFLINE_LOGISTICS_KNOWLEDGE){
   if(notes.length)assumptions.push({id:info.id,notes});
   for(const b of body)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
   const researchSources=[...new Set([...outs,...ins].flatMap(x=>x.evidence.sourceIds||[]))];
-  proof.push({id:info.id,name:info.name,type,researchSources,origins:outs.length,destinations:ins.length,
+  proof.push({id:info.id,name:info.name,type,researchSources,
+   confidence:outs.every(x=>x.evidence.confidence==="documental")&&ins.every(x=>x.evidence.confidence==="documental")?"documental":
+    [...outs,...ins].some(x=>x.evidence.confidence==="inferida")?"inferida":"relacionada",
+   origins:outs.length,destinations:ins.length,
    sourceIds:outs.map(x=>x.company.id),destIds:ins.map(x=>x.company.id),notes,
    categoryReasons:[],directOut:outs.filter(x=>x.evidence.kind==="direta").length,
    directIn:ins.filter(x=>x.evidence.kind==="direta").length,
    scsSourceIds:outs.filter(x=>x.company.catalog).map(x=>x.company.id),
    scsDestIds:ins.filter(x=>x.company.catalog).map(x=>x.company.id)});
  }
- return{plan,skipped,proof,grouped,assumptions,catalogChecks,perCompany,anomalies,researchRejected,knowledge,
+ return{plan,skipped,proof,grouped,assumptions,catalogChecks,perCompany,anomalies,researchRejected,researchRejectedTotal,knowledge,
   emptyCompanies:[...map.companies.keys()].filter(id=>!plan.has(id)),
   engine:"company-first"};
 }
@@ -1833,7 +1838,8 @@ function createDiagnosticText(map,cargo,sim){
   "Empresas sem cargas compatíveis: "+(sim.emptyCompanies?.length||0),
   "Incompatibilidades isoladas bloqueadas: "+(sim.anomalies?.length||0),
   "Regras de inteligência documental: "+(sim.knowledge?.sources?.length||0)+" fontes",
-  "Inconsistências econômicas bloqueadas pelo assistente: "+(sim.researchRejected?.length||0),
+  "Inconsistências econômicas bloqueadas pelo assistente: "+(sim.researchRejectedTotal||0),
+  "Amostra detalhada das rejeições (limite de 600): "+(sim.researchRejected?.length||0),
   "Cargas personalizadas do Librelato: "+cargo.cargos.size,
   "Empresas com evidência de revenda de materiais (IN/OUT): "+[...map.companies.values()].filter(c=>!!c.supplyProof).map(c=>c.id).join(", "),
   "Definições de carroceria: "+[...cargo.cargos.values()].map(c=>c.id+" = "+(c.body.join("|")||"SEM BODY_TYPES")).join(", "),
@@ -1967,5 +1973,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
