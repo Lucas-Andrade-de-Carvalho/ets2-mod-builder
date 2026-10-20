@@ -120,14 +120,36 @@ async function main(){
  const nameMismatch=counterExample("posto_de_combustivel","posto",[["out","corn"],["in","fertilizer"]]);
  const nameProfile=creator.companyCargoProfile(nameMismatch);
  const nameResult=creator.companyCargoCompatibility(nameMismatch,nameProfile,"milho","out",{id:"carga1"});
- assert.ok(nameResult,"Posto com cargo: corn precisa ser analisado como expedidor de milho");
- assert.equal(nameResult.kind,"direta");
- assert.equal(nameResult.roleConflict,true,"O diagnóstico deve identificar nome/setor contraditório");
+ assert.equal(nameResult,null,
+  "Posto não deve expedir milho só porque uma permissão isolada menciona corn");
+ assert.equal(creator.economicCoherence(nameMismatch,nameProfile,"milho","out").allowed,false,
+  "Receber fertilizante e expedir milho não prova uma fazenda em um posto");
  assert.equal(creator.companyCargoCompatibility(nameMismatch,nameProfile,"cerveja","out",{id:"carga12"}),null);
  const namedSteel=counterExample("gerdau","siderurgica",[["out","adubo"],["in","corn"]]);
+ const refused=[];
  assert.equal(creator.companyCargoCompatibility(namedSteel,creator.companyCargoProfile(namedSteel),
-  "adubo","out",{id:"carga3"})?.kind,"direta",
-  "Empresa chamada siderúrgica pode expedir adubo se a DEF comprovar");
+  "adubo","out",{id:"carga3"},refused),null,
+  "Siderúrgica não deve expedir adubo com única evidência OUT desconectada");
+ assert.equal(refused.length,1);
+ // Caso oposto: só uma empresa originalmente rotulada de outro setor mas
+ // reconfigurada para operar claramente um entreposto agro pode ser aceita.
+ const farmMarket=counterExample("metal_nome_antigo","metalurgica",[
+  ["out","adubo"],["out","fertilizante"],["out","equipagrico"],
+  ["out","racao"],["in","milho"],["in","big_bag_seed"]]);
+ const farmProfile=creator.companyCargoProfile(farmMarket);
+ assert.equal(creator.economicCoherence(farmMarket,farmProfile,"adubo","out").allowed,true);
+ assert.equal(creator.companyCargoCompatibility(farmMarket,farmProfile,
+  "adubo","out",{id:"carga3"})?.kind,"direta");
+ const steelActual=counterExample("siderurgica_verdadeira","siderurgica",[
+  ["out","steel"],["out","adubo"],["in","iron_pipes"],["in","big_bag_seed"]]);
+ assert.equal(creator.companyCargoCompatibility(steelActual,creator.companyCargoProfile(steelActual),
+  "adubo","out",{id:"carga3"}),null,
+  "Indústria com evidência real de aço não pode virar agroinsumos");
+ const verifiedSteel=counterExample("metal_opaque","desconhecida",[
+  ["out","steel"],["in","iron_pipes"]]);
+ assert.equal(creator.companyCargoCompatibility(verifiedSteel,creator.companyCargoProfile(verifiedSteel),
+  "aco","out",{id:"carga9"})?.kind,"direta");
+
  const byNameOnly=counterExample("fazenda_milho","fazenda",[["out","diesel"],["in","petrol"]]);
  assert.equal(creator.companyCargoCompatibility(byNameOnly,creator.companyCargoProfile(byNameOnly),
   "milho","out",{id:"carga1"}),null,"O nome fazenda não inventa milho");
