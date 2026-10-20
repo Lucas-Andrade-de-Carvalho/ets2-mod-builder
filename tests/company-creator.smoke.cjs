@@ -344,8 +344,10 @@ async function main(){
   for(const co of [origin,dest]){
    criticalMap.file("def/company/"+co+"/editor/cidade.sii","SiiNunit\n{}\n");
   }
-  const outs=item.id==="carga23"?["corn","soybeans"]:item.id==="carga9"?["chapaaco","ferroconst"]:[item.from];
-  const ins=item.id==="carga9"?["chapaaco","ferroconst"]:[item.to];
+  // Teste de integração: cargas só são obrigatórias quando a própria DEF
+  // comprova a mercadoria, e não quando há apenas itens vagamente relacionados.
+  const outs=item.id==="carga23"?["sorghum","corn"]:item.id==="carga9"?["steel_coils","chapaaco"]:[item.from];
+  const ins=item.id==="carga23"?["sorghum"]:item.id==="carga9"?["metal_coils","ferroconst"]:[item.to];
   for(const [dir,co,goods]of [["out",origin,outs],["in",dest,ins]])
    for(const [k,unit]of goods.entries())
     companyFile(criticalMap,co,dir,"evidencia_"+k,unit);
