@@ -254,6 +254,13 @@ def extract_map(path):
     old_file_count=0
     legacy=[]
     for p,raw in archive.items():
+        # Definicoes legadas no arquivo permanente sao ACRESCENTADAS pelo
+        # ETS2. Apenas limpar in/out nao as neutraliza (SCS Wiki).
+        if re.fullmatch(r'def/company/[a-z0-9_]+\.(?:sii|sui)',p,re.I):
+            txt=read_sii(raw)
+            if re.search(r'(?m)^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:',txt,re.I):
+                legacy.append(p)
+            continue
         m=RE_COMPANY_PATH.search(p)
         if not m:continue
         id,dir,filename=m.groups()
@@ -269,7 +276,11 @@ def extract_map(path):
         raise ValueError(f"{Path(path).name}: formato IN/OUT nao identificado. "+
                          "Veja o DIAGNOSTICO_ARQUIVO_*.json; o leitor NAO inventara "+
                          "empresas nem criara .scs a partir de dados desconhecidos.")
-    if legacy:raise ValueError("Company legada com in_cargo/out_cargo requer tratamento especifico: "+", ".join(legacy[:5]))
+    if legacy:raise ValueError(
+        "Foi encontrado in_cargo/out_cargo legado em company_permanent; "
+        "o ETS2 ACRESCENTA estas cargas mesmo se as pastas in/out forem neutralizadas. "
+        "Geracao bloqueada para nao produzir Company incompleta: "+
+        ", ".join(legacy[:5]))
     for c in companies.values():classify_company(c)
     return companies,old_file_count
 
@@ -384,9 +395,9 @@ def neutralize(raw,path):
         raise ValueError("Cargo antigo ainda ativo apos neutralizacao: "+path)
     return result.encode("utf-8")
 
-def cargo_override(record):
+def cargo_override(record,drop_skill=True):
     txt=read_sii(record["raw"])
-    if record["valuable"]:
+    if drop_skill and record["valuable"]:
         txt=re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',txt)
     # Reducao seletiva; nao altera corpo/modelos, que devem continuar no mod original.
     if re.search(r'(?im)^\s*prob_coef\s*:',txt):
@@ -560,13 +571,16 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                         output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
             # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
             # de skill somente no mod complementar; originais NUNCA sao editados.
-            if fix_skills:
-                for n in MANIFEST:
-                    id=f"carga{n}"
-                    record=records[id]
-                    if record["valuable"] or id=="carga16":
-                        output_files[record["path"]]=(cargo_override(record) if id=="carga16" else
-                          re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',read_sii(record["raw"])).encode("utf-8"))
+            for n in MANIFEST:
+                id=f"carga{n}"
+                record=records[id]
+                if id=="carga16":
+                    # Baixa frequencia, independentemente da opcao de habilidade.
+                    output_files[record["path"]]=cargo_override(record,drop_skill=fix_skills)
+                elif fix_skills and record["valuable"]:
+                    output_files[record["path"]]=re.sub(
+                        r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',
+                        read_sii(record["raw"])).encode("utf-8")
             dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
             with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
                 for p,raw in sorted(output_files.items()):
