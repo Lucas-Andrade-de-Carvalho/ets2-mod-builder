@@ -128,3 +128,6 @@ A presença literal de `cargo:` é forte evidência documental, mas **não autor
 **Regras técnicas:** analisar `cargo:` REAL, não somente o nome do arquivo; ler todas as referências de uma definição, ignorando comentários; não ignorar silenciosamente um IN/OUT grande ou inválido; manter empresas sem cargas e neutralizar antigas permissões corretamente; não alterar a atividade manual ao consultar o catálogo; recusar ZIPs absurdamente expandidos. Usar apenas empresas presentes no mapa e mercadorias presentes na DEF anexada. 
 
 **Validação:** o GitHub Actions executa testes estáticos e funcionais com Node 22 a cada modificação dos arquivos relevantes. Aprovação em CI não comprova comportamento no jogo. Para confirmar o resultado final, testar no Euro Truck Simulator 2 com mods na prioridade correta e conferir `game.log`, mercado de fretes e empresas vazias. Caso a DEF contiver outra forma de declarar cargas que o parser não reconheça, ampliar o suporte explicitamente e criar teste correspondente, em vez de assumir que não há mercadorias.
+
+
+**Relatório técnico:** consulte [CODE_AUDIT_V4.md](CODE_AUDIT_V4.md) para falhas corrigidas, testes e limites conhecidos. Para sincronizar o código fonte com o HTML distribuído use `node scripts/sync-company-engine.cjs` (desenvolvimento apenas). O navegador não precisa de Node nem Python.
