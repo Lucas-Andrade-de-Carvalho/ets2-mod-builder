@@ -112,6 +112,36 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Teste das mercadorias recuperadas de def_company(2).zip (208 empresas)
+ // sem presumir IDs ou nomes. Regras exigem prova IN/OUT e rejeitam
+ // distribuidores genéricos que carregam de tudo.
+ const profile=(id,out,inGoods)=>({id,role:"desconhecida",
+  old:[...out.map(unit=>({dir:"out",unit,stem:unit})),
+       ...inGoods.map(unit=>({dir:"in",unit,stem:unit}))]});
+ const fixtures=[
+  ["ped",["coal","gravel","ore","sand","stones"],["cement","concrete","diesel"]],
+  ["konstnr2",["digger500","forklifts","mobile_crane"],["bricks","chimney_syst","concrete","floorpanels","gravel","iron_pipes","roof_tiles","wallpanels"]],
+  ["arc",["big_bag_seed","feijao","graos","milho","soja"],["feijao","fertilizer","graos","milho","soja"]],
+  ["aria_bd2",["beef3","milk"],["big_bag_seed","tractors"]],
+  ["rocasoja",["feijao","milho","soja"],["big_bag_seed","fertilizer","tractors"]],
+  ["cooper",["big_bag_seed","feijao","graos","milho","soja"],["feijao","fertilizer","graos","milho","soja"]],
+  ["itaacos",["iron_pipes","largetubes","roof_tiles","sandwch_pnls","scrap_metals","wallpanels"],["iron_pipes","largetubes","sandwch_pnls","wallpanels"]],
+  ["itcc2",["cement","concr_beams","floorpanels","iron_pipes","largetubes","wallpanels"],["cement","gravel","largetubes","metal_center"]]
+ ];
+ const mapFacts={companies:new Map(fixtures.map(([id,o,i])=>[id,profile(id,o,i)]))};
+ const needed=[["granito","out"],["granito","in"],["racao","out"],["racao","in"],
+  ["algodao","out"],["algodao","in"],["bobinas_industriais","out"],["bobinas_industriais","in"]];
+ for(const [type,dir] of needed){
+  const got=creator.evidenceFromRealFlows(mapFacts,type,dir);
+  assert.ok(got.companies.length,"Falha ao recuperar "+type+"/"+dir+" da DEF real");
+ }
+ const junk=profile("generic_port",Array.from({length:120},(_,i)=>"cargo"+i),
+   Array.from({length:120},(_,i)=>"cargo"+i));
+ const withJunk={companies:new Map([...mapFacts.companies,[junk.id,junk]])};
+ for(const [type,dir] of needed)
+  assert.equal(creator.evidenceFromRealFlows(withJunk,type,dir).companies.some(x=>x.id===junk.id),false);
+
+
  // Regressão derivada da DEF real def_company(1).zip, com 208 empresas e
  // 6.739 arquivos OUT. Os IDs e mercadorias abaixo existem nessa DEF.
  const sample=(id,role,from,to)=>({id,role,

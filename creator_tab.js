@@ -2,6 +2,7 @@
 (function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
+const ENGINE_BUILD="2026-10-20 · IN/OUT real · DEF 208";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -1107,6 +1108,72 @@ function palletEndpoints(map,type){
  return{out:sources,inn:destinations,notes,categoryReasons:[],directOut:sources.filter(c=>hasCargoInDirection(c,"out",PALLET_OUT_PATTERN)).length,directIn:destinations.filter(c=>hasCargoInDirection(c,"in",PALLET_OUT_PATTERN)).length};
 }
 
+// Segundo avaliador independente, voltado a empresas sem nomes descritivos.
+// Pontua pares de mercadorias observadas nos dois sentidos e nunca inventa
+// qualquer empresa ou cargo. As cargas não declaradas literalmente são hipóteses.
+function evidenceFromRealFlows(map,type,dir){
+ const grains=/^(?:graos?|milho|soja|feijao|beans|corn|maize|soybeans?|rice|rice_c|wheat|barley)$/i;
+ const seeds=/^(?:big_bag_seed|fertilizer|fertilizante|adubo|young_seed)$/i;
+ const stones=/^(?:stones?|granito|granitto|granite|marble|marmore|pedras?)$/i;
+ const minerals=/^(?:gravel|sand|areia|ore|coal)$/i;
+ const building=/^(?:cement|concrete|iron_pipes|largetubes|wallpanels|floorpanels|roof_tiles|precast_strs|gravel|sand|bricks|concr_beams|logs|sawpanels)$/i;
+ const metals=/^(?:iron_pipes|largetubes|metal_center|hmetal|wallpanels|sandwch_pnls)$/i;
+ const livestock=/^(?:beef3|beef_meat|milk|leite|wool|cattle)$/i;
+ const forbidden=new Set(["posto","correios","concessionaria","cana"]);
+ const cap={granito:{out:9,in:8},racao:{out:9,in:8},algodao:{out:4,in:5},bobinas_industriais:{out:4,in:8}};
+ if(!cap[type])return{companies:[],notes:[]};
+ const matches=[];
+ for(const c of map.companies.values()){
+  if(forbidden.has(c.role))continue;
+  const size=c.old?.length||0;
+  const n=(direction,re)=>freightEvidence(c,direction,re);
+  const out=re=>n("out",re),inn=re=>n("in",re);
+  let score=0,reason="";
+  if(type==="granito"){
+   if(dir==="out"&&size<=58&&out(stones)&&out(minerals)){
+    score=95+4*out(stones)+out(minerals);
+    reason="OUT documentado de pedras e agregados minerais; granito exato é hipótese";
+   }else if(dir==="in"&&size<=100&&(inn(stones)||(!out(stones)&&inn(building)>=3))){
+    score=85+3*inn(stones)+inn(building);
+    reason="IN documentado de pedras ou múltiplos materiais de construção";
+   }
+  }else if(type==="racao"){
+   if(dir==="out"&&size<=48&&inn(grains)>=2&&out(grains)>=1&&out(seeds)>=1){
+    score=90+out(grains)+inn(grains);
+    reason="recebe grãos e expede sementes/insumos; comercialização de ração inferida";
+   }else if(dir==="in"&&size<=50&&out(livestock)>=1&&(inn(seeds)+inn(grains))>=1){
+    score=90+inn(seeds)+inn(grains);
+    reason="pecuária documentada no OUT e insumos agrícolas no IN";
+   }
+  }else if(type==="algodao"){
+   if(dir==="out"&&size<=39&&out(grains)>=2&&inn(seeds)>=1&&inn(grains)===0){
+    score=87+out(grains);
+    reason="lavoura diversificada, com insumos IN e culturas OUT; algodão inferido";
+   }else if(dir==="in"&&size<=48&&out(grains)>=2&&inn(grains)>=2&&inn(/^(?:fertilizer|adubo|fertilizante)$/i)>=1){
+    score=84+inn(grains);
+    reason="cooperativa agrícola com entrada de múltiplas culturas; pluma inferida";
+   }
+  }else if(type==="bobinas_industriais"){
+   if(dir==="out"&&size<=79&&out(metals)>=2&&inn(metals)>=1){
+    score=95+out(metals);
+    reason="OUT/IN de múltiplos produtos metalúrgicos; bobinas específicas inferidas";
+   }else if(dir==="in"&&size<=79&&inn(metals)>=2&&out(stones)===0){
+    score=88+inn(metals);
+    reason="IN documentado de diversos produtos metálicos industriais";
+   }
+  }
+  if(score)matches.push({company:c,score,reason});
+ }
+ matches.sort((a,b)=>b.score-a.score||a.company.id.localeCompare(b.company.id));
+ // Priorizar pontos com mercadorias realmente específicas, sem transformar
+ // operadores genéricos com centenas de permissões em produtores.
+ const chosen=matches.slice(0,cap[type][dir]);
+ return{
+  companies:chosen.map(x=>x.company),
+  notes:chosen.length?[dir.toUpperCase()+" por perfil de estoque observado: "+
+    chosen.map(x=>x.company.id+" ("+x.reason+")").join("; ")]:[]
+ };
+}
 function simulate(map,cargo){
  // Verifica cada empresa PRESENTE no mapa ao iniciar a distribuição.
  // Se houver coincidência exata com empresa SCS, usa o setor do catálogo.
@@ -1122,6 +1189,24 @@ function simulate(map,cargo){
   if(!allowed.length)problems.push("carroceria incompatível");
   const chosen=spec?((type==="paletizado"||type==="palete_vazio")?palletEndpoints(map,type):chooseEndpoints(map,type,spec,info.id)):{out:[],inn:[],notes:[]};
   let outs=chosen.out,ins=chosen.inn;
+  // Recurso final para IDs de empresa opacos. Só tenta recuperar direções
+  // que ficaram sem evidência no avaliador inicial.
+  if(spec&&["granito","racao","algodao","bobinas_industriais"].includes(type)){
+   if(!outs.length){
+    const recovered=evidenceFromRealFlows(map,type,"out");
+    outs=recovered.companies;chosen.notes.push(...recovered.notes);
+   }
+   if(!ins.length){
+    const recovered=evidenceFromRealFlows(map,type,"in");
+    ins=recovered.companies;chosen.notes.push(...recovered.notes);
+   }
+   // Quando a empresa que recebe também expede, só há rota se houver
+   // ao menos um expedidor diferente. Nunca conectar uma empresa a si mesma.
+   if(outs.length&&ins.length&&!outs.some(a=>ins.some(b=>a.id!==b.id))){
+    const r=evidenceFromRealFlows(map,type,"in");
+    for(const c of r.companies)if(outs.some(a=>a.id!==c.id)){ins=[c];chosen.notes.push(...r.notes);break}
+   }
+  }
   if(!outs.length&&spec){
    const observed=[...map.companies.values()].reduce((n,c)=>n+(c.old||[]).filter(x=>x.dir==="out").length,0);
    problems.push("sem expedidor comprovado para esta mercadoria após analisar "+observed+" arquivos OUT de "+map.companies.size+" empresas (não é apenas busca por nome/ID)");
@@ -1241,6 +1326,7 @@ let latestDiagnostic=null;
 function createDiagnosticText(map,cargo,sim){
  const rows=[
   "ETS2 COMPANY LOGISTICS - DIAGNÓSTICO DE ARQUIVOS",
+  "Motor: "+ENGINE_BUILD,
   "Catálogo consultado: "+SCS_COMPANY_CATALOG.length+" referências; somente para classificar empresas existentes.",
   "Empresas existentes na DEF consultadas no catálogo durante a distribuição: "+(sim.catalogChecks?.consulted??map.companies.size),
   "Empresas padrão reconhecidas entre elas: "+(sim.catalogChecks?.matched??0),
@@ -1336,7 +1422,7 @@ async function generate(){
    removed:out.removed
   };
   updateDownloadUI();
-  say("Company pronta: "+out.count+" associações IN/OUT, "+map.companies.size+" empresas analisadas, "+map.archivesRead+" arquivo(s) interno(s) processado(s). Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Clique em Baixar Company .SCS.",100);
+  say("Company pronta: "+out.count+" associações IN/OUT, "+map.companies.size+" empresas analisadas, "+map.archivesRead+" arquivo(s) interno(s) processado(s). Grade baixa: "+sim.grouped.baixa+"; grade alta: "+sim.grouped.alta+". Clique em Baixar Company .SCS. Motor: "+ENGINE_BUILD,100);
  }catch(e){say("Erro: "+(e?.message||String(e)),0)}
  finally{busy=false;ui.run.disabled=false;updateDownloadUI()}
 }
@@ -1346,6 +1432,7 @@ if(el("companyCreateSaveDiagnostic"))el("companyCreateSaveDiagnostic").addEventL
 for(const id of ["companyCreateMapFile","companyCreateCargoFile"])el(id).addEventListener("change",()=>{clearCompanyDownload();const input=el(id),label=el(id+"Name");label.textContent=input.files?.[0]?.name||"Selecione um arquivo ZIP/SCS";say("Arquivo selecionado.",0)});
 if(el("companyCreateOverrides"))el("companyCreateOverrides").addEventListener("input",clearCompanyDownload);
 updateDownloadUI();
+if(ui.message)ui.message.textContent="Motor carregado: "+ENGINE_BUILD;
 
 function renderSCSCatalog(){
  const input=el("companyCreateCatalogSearch"),root=el("companyCreateCatalogResults");
@@ -1359,5 +1446,5 @@ function renderSCSCatalog(){
 if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventListener("input",renderSCSCatalog);
 renderSCSCatalog();
 
-window.CompanyCreatorTest={kind,known,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
+window.CompanyCreatorTest={kind,known,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
 })();
