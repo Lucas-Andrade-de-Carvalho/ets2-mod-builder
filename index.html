@@ -1302,7 +1302,7 @@ async function loadMap(zip){
 
  return{companies,files,parsedRelations,withoutCargo,catalogMatched:[...companies.values()].filter(c=>c.catalog).length,archivesRead:resolution.nestedCount}
 }
-async // Uma DEF pode conter mercadorias adicionais, externas ao reboque.
+// Uma DEF pode conter mercadorias adicionais, externas ao reboque.
 // Prioridade de escopo: @include do manifesto > modelos físicos
 // vehicle/cargo/<id> > todos os cargos quando não há identificação.
 // Não depender de nomes "carga1"..."carga23" ou de um mapa específico.
@@ -1341,7 +1341,7 @@ async function selectTrailerCargoScope(files,cargos,manifests){
  return{strategy,excluded,manifestMatches:manifestMatches.length,
   vehicleMatches:visualMatches.length,declared:included.size};
 }
-function loadCargo(zip){
+async function loadCargo(zip){
  const files=new Map(),cargos=new Map(),manifests=[],trailer=new Map();
  const resolution=await resolveEntries(zip,"cargo");
  for(const [raw,obj,source] of resolution.matched){
