@@ -112,6 +112,39 @@ async function makesFixtures(){
 async function main(){
  const f=await makesFixtures();
 
+ // Inteligência documental interna: sem API paga, sem fabricador de fretes.
+ const kb=creator.OFFLINE_LOGISTICS_KNOWLEDGE;
+ assert.equal(creator.validateLogisticsKnowledge(kb),true);
+ assert.ok(kb.sources.length>=5,"Fontes documentadas integradas");
+ const suspect={id:"agricola_generica",role:"desconhecida",old:[
+  {dir:"out",unit:"corn"},{dir:"out",unit:"soybeans"},
+  {dir:"in",unit:"fertilizer"}]};
+ const ps=creator.companyCargoProfile(suspect);
+ const evidence={score:70,kind:"inferida",reason:"culturas diversificadas"};
+ for(const type of ["algodao","racao","bobinas_industriais"]){
+  const decision=creator.logisticsIntelligenceDecision(suspect,ps,type,"out",evidence,kb);
+  assert.equal(decision.blocked,true,"Não inventar "+type+" por semelhança econômica");
+  assert.ok(decision.sourceIds.length>0,"Rejeição deve citar fonte: "+type);
+ }
+ const algodoeira={id:"n1",role:"desconhecida",old:[
+  {dir:"out",unit:"pluma"},{dir:"in",unit:"cotton"}]};
+ const pAlg=creator.companyCargoProfile(algodoeira);
+ assert.equal(creator.logisticsIntelligenceDecision(algodoeira,pAlg,
+   "algodao","out",{score:120,kind:"direta",reason:"pluma OUT"},kb).blocked,undefined);
+ const rações={id:"r1",role:"desconhecida",old:[{dir:"out",unit:"racao"},{dir:"in",unit:"corn"}]};
+ assert.equal(creator.logisticsIntelligenceDecision(rações,creator.companyCargoProfile(rações),
+  "racao","out",{score:120,kind:"direta",reason:"ração real"},kb).blocked,undefined);
+ const sider={id:"s1",role:"desconhecida",old:[{dir:"out",unit:"steel_coils"},{dir:"in",unit:"scrap_metals"}]};
+ assert.equal(creator.logisticsIntelligenceDecision(sider,creator.companyCargoProfile(sider),
+  "bobinas_industriais","out",{score:120,kind:"direta",reason:"coils OUT"},kb).blocked,undefined);
+ const absent={id:"empty",role:"desconhecida",old:[]};
+ assert.equal(creator.logisticsIntelligenceDecision(absent,creator.companyCargoProfile(absent),
+  "algodao","out",null,kb),null);
+ assert.equal(creator.validateLogisticsKnowledge({...kb,sources:kb.sources.map((x,i)=>i?x:{...x,url:"http://example.com"})}),false);
+ const automated=await creator.loadLogisticsKnowledge();
+ assert.equal(automated.data.sources.length,kb.sources.length);
+
+
  // A aba Arquivos/Gerar SCS (outra ferramenta do mesmo HTML) também deve
  // rejeitar ZIPs inseguros, sem confundi-la com o gerador universal.
  assert.equal(typeof windowShim.Ets2MainTest.validateMainArchive,"function");
