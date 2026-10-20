@@ -111,6 +111,34 @@ async function makesFixtures(){
 
 async function main(){
  const f=await makesFixtures();
+ // Regressão brasileira V6.3: tokens reais do company.zip original
+ // (não se confunde relação de categoria com produto documental idêntico).
+ const aliases=[
+  ["graos","milho_a"],["graos","milho_b"],["graos","rbr_milho"],
+  ["graos","soja_a"],["graos","rbr_soja"],
+  ["fertilizantes","rbr_npk_10"],["construcao","cimento"],
+  ["construcao","tijolo_b"],["rochas","brita"],["rochas","rbr_calcario"],
+  ["siderurgia","bobina"],["siderurgia","barrasferro"],
+  ["madeira","madeirase_b"],["madeira","troncos_di"],
+  ["hortifruti","batata_a"],["hortifruti","laranja_b"],
+  ["bebidas","bebidas_b"],["bebidas","refrigerant"],
+  ["nutricao","racao"],["nutricao","milho_b"],
+  ["paletes","paletev"],["paletes","rbr_sucata"],
+  ["sementes","sementes"],["beterraba","sugar_beet_b"]
+ ];
+ for(const [cat,unit] of aliases)assert.ok(creator.CARGO_CATEGORY_INDEX[cat].goods.test(unit),
+  "Alias real da DEF precisa ser reconhecido: "+cat+" = "+unit);
+ assert.equal(creator.CARGO_CATEGORY_INDEX.graos.goods.test("diesel"),false,
+  "Combustível não pertence à categoria de grãos");
+ const aliasProfile=creator.companyCargoProfile({old:[
+  {dir:"out",unit:"milho_a"},{dir:"in",unit:"rbr_soja"}]});
+ assert.ok(creator.categoryCargoCandidate({id:"silo_demo",role:"silo"},aliasProfile,
+  "milho","out"),"Silo com milho_a expedido permite mercadoria por categoria");
+ assert.ok(creator.categoryCargoCandidate({id:"silo_demo",role:"silo"},aliasProfile,
+  "milho","in"),"Silo com rbr_soja recebido recebe grãos sem produtor final");
+ assert.equal(creator.categoryCargoCandidate({id:"posto_demo",role:"posto"},aliasProfile,
+  "milho","out"),null,"Posto não expede milho mesmo se tokens laterais existirem");
+
 
  // Integração diretamente derivada dos arquivos de origem MINAS:
  // marcas comerciais de cerveja são produtos identificáveis, e as
