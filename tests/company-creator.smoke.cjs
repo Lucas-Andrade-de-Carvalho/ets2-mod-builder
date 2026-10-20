@@ -282,7 +282,7 @@ async function main(){
  ];
  const mapRealSubset=new JSZip(),libRealSubset=new JSZip();
  for(const co of actualProfiles){
-  mapRealSubset.file("def/company/"+co.id+"/editor/test.sii","SiiNunit\\n{}\\n");
+  mapRealSubset.file("def/company/"+co.id+"/editor/test.sii","SiiNunit\n{}\n");
   for(const dir of ["out","in"])for(const [i,unit]of co[dir].entries())
    companyFile(mapRealSubset,co.id,dir,"real_"+i+"_"+dir,unit);
  }
@@ -294,11 +294,18 @@ async function main(){
  ];
  for(const [id,name,body]of missingEight)
   libRealSubset.file("cargo/"+id+".sui",
-    'cargo_data : cargo.'+id+' {\\n name: "'+name+'"\\n body_types[]: '+body+'\\n}\\n');
+    'cargo_data : cargo.'+id+' {\n name: "'+name+'"\n body_types[]: '+body+'\n}\n');
  const mapSubset=await creator.loadMap(mapRealSubset);
  const libSubset=await creator.loadCargo(libRealSubset);
  assert.equal(mapSubset.companies.size,actualProfiles.length);
  const realSim=creator.simulate(mapSubset,libSubset);
+ if(realSim.skipped.length){
+  for(const co of mapSubset.companies.values())
+   console.error("REAL_SUBSET_DEBUG",co.id,co.role,
+    "bo-out",creator.relatedCargoCandidate(co,"bobinas_industriais","out")?.score,
+    "bo-in",creator.relatedCargoCandidate(co,"bobinas_industriais","in")?.score,
+    "cotton-out",creator.relatedCargoCandidate(co,"algodao","out")?.score);
+ }
  assert.deepEqual(realSim.skipped.map(x=>x.id),[],
   "DEF baseada em mercadorias reais deve permitir 8 cargas: "+JSON.stringify(realSim.skipped));
  const realScs=await creator.build(mapSubset,libSubset,realSim);
