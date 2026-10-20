@@ -89,12 +89,50 @@ class Regression(unittest.TestCase):
         src=self.root/"rodotrem.scs"
         with zipfile.ZipFile(src) as z:
             contents={x.filename:z.read(x) for x in z.infolist()}
-        contents["def/cargo/carga1/rodotrem.sii"]=(
-            "SiiNunit\n{ trailer_def : .a { body_type: errado } }\n")
+        # Incompatibilidade verdadeira: carroceria de carga1 deixou de existir
+        # em todos os trailer_owned/body e trailer_defs compatíveis.
+        contents["def/cargo/carga1.sui"]=(
+            'cargo_data : cargo.carga1 {\n name: "Milho"\n'
+            ' body_types[]: tanque_inexistente\n valuable: true\n}\n')
         zip_write(src,contents)
         with self.assertRaisesRegex(ValueError,"carga1"):
             g.generate(self.inp,self.root/"invalid")
         self.assertFalse((self.root/"invalid"/"ETS2_MINAS_GERAIS_COMPANY.scs").exists())
+
+    def test_global_trailer_defs_without_legacy_folders(self):
+        """Reboque proprio (ETS2 1.32+) usa def/vehicle/trailer_defs."""
+        src=self.root/"rodotrem.scs"
+        with zipfile.ZipFile(src) as z:
+            content={x.filename:z.read(x) for x in z.infolist()
+                     if not x.filename.startswith("def/cargo/") or "/" not in x.filename[len("def/cargo/"):]}
+        content["def/vehicle/trailer_defs/limeira_alta.sii"]=(
+            "SiiNunit\n{\n trailer_def : .alta {\n body_type: alta\n"
+            " chain_type: hct\n }\n}\n")
+        content["def/vehicle/trailer_defs/limeira_baixa.sii"]=(
+            "SiiNunit\n{\n trailer_def : .baixa {\n body_type: baixa\n"
+            " chain_type: hct\n }\n}\n")
+        zip_write(src,content)
+        records,legacy,owned,global_defs,counts=g.cargo_inventory([
+            ("MOD",g.zip_members(src))])
+        self.assertEqual(len(records),23)
+        self.assertFalse(any(legacy.values()))
+        self.assertEqual(global_defs,{"alta","baixa"})
+        self.assertEqual(counts["owned_trailer_def_files"],2)
+        # O gerador NAO deve bloquear ausencia da estrutura antiga.
+        result=g.generate(self.inp,self.root/"new_layout")
+        self.assertEqual(len(result),3)
+
+    def test_owned_trailer_without_legacy_or_global_defs(self):
+        """Cargo e reboque proprio compatíveis nao exigem trailer_def por carga."""
+        src=self.root/"rodotrem.scs"
+        with zipfile.ZipFile(src) as z:
+            content={x.filename:z.read(x) for x in z.infolist()
+                     if not x.filename.startswith("def/cargo/carga") or
+                     x.filename.endswith(".sui")}
+        zip_write(src,content)
+        result=g.generate(self.inp,self.root/"owned_only")
+        self.assertEqual(len(result),3)
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
