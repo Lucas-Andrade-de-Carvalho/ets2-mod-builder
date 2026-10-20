@@ -602,8 +602,7 @@ $("defFiles").addEventListener('change',async e=>{state.defFiles=[...e.target.fi
 window.Ets2MainTest={validateMainArchive};
 window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Erro interno: '+e.message,'bad')});
 </script>
-<script>
-(function(){
+<script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
 const ENGINE_BUILD="2026-10-20 · CONTEXTO ECONÔMICO AUDITÁVEL · v6.0";
@@ -2761,7 +2760,6 @@ if(el("companyCreateCatalogSearch"))el("companyCreateCatalogSearch").addEventLis
 renderSCSCatalog();
 
 window.CompanyCreatorTest={kind,known,economicContextCandidate,selectTrailerCargoScope,findProductEvidence,PRODUCT_EVIDENCE,EVIDENCE_REQUIRED,validateLogisticsKnowledge,loadLogisticsKnowledge,OFFLINE_LOGISTICS_KNOWLEDGE,logisticsIntelligenceDecision,maskSiiComments,scanCompanyCargoFields,parseCompanyCargoUnits,companyCargoProfile,companyCargoCompatibility,economicCoherence,disableExistingCargo,evidenceFromRealFlows,ENGINE_BUILD,relatedCargoCandidate,realMapEconomicCandidate,relatedCargoFallback,chooseEndpoints,detailedMovement,isGenericCompanyMap,inferRoleFromHistoricalFreights,createDiagnosticText,companyPath,cargoPath,companyMeta,flows,loadMap,loadCargo,simulate,build,scsCatalogLookup,SCS_COMPANY_CATALOG,oldCargoCategory,catalogForMapCompany,consultCatalogForMapDistribution,resolveEntries,isZipMagic,discoverBareCompanyRoots,mapFingerprint};
-})();
-</script>
+})();</script>
 </body>
 </html>
