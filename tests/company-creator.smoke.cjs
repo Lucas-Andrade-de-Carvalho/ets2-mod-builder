@@ -299,13 +299,6 @@ async function main(){
  const libSubset=await creator.loadCargo(libRealSubset);
  assert.equal(mapSubset.companies.size,actualProfiles.length);
  const realSim=creator.simulate(mapSubset,libSubset);
- if(realSim.skipped.length){
-  for(const co of mapSubset.companies.values())
-   console.error("REAL_SUBSET_DEBUG",co.id,co.role,
-    "bo-out",creator.relatedCargoCandidate(co,"bobinas_industriais","out")?.score,
-    "bo-in",creator.relatedCargoCandidate(co,"bobinas_industriais","in")?.score,
-    "cotton-out",creator.relatedCargoCandidate(co,"algodao","out")?.score);
- }
  assert.deepEqual(realSim.skipped.map(x=>x.id),[],
   "DEF baseada em mercadorias reais deve permitir 8 cargas: "+JSON.stringify(realSim.skipped));
  const realScs=await creator.build(mapSubset,libSubset,realSim);
