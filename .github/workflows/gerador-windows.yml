@@ -1,0 +1,45 @@
+name: Compilar Gerador Windows
+
+on:
+  push:
+    paths:
+      - "gerador_windows/**"
+      - ".github/workflows/gerador-windows.yml"
+  pull_request:
+    paths:
+      - "gerador_windows/**"
+      - ".github/workflows/gerador-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validar sintaxe e executar testes de regressao
+        shell: pwsh
+        run: |
+          python -m py_compile gerador_windows/gerador.py
+          python -m unittest discover -s gerador_windows -p "test_*.py" -v
+      - name: Instalar PyInstaller
+        run: python -m pip install pyinstaller==6.16.0
+      - name: Gerar EXE de interface grafica
+        run: python -m PyInstaller --onefile --windowed --name ETS2_Company_Gerador --distpath dist gerador_windows/gerador.py
+      - name: Executar EXE real com tres mapas sinteticos
+        shell: pwsh
+        run: python gerador_windows/smoke_exe.py dist/ETS2_Company_Gerador.exe
+      - name: Conferir arquivo Windows
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/ETS2_Company_Gerador.exe")) { throw "EXE nao gerado" }
+          if ((Get-Item "dist/ETS2_Company_Gerador.exe").Length -lt 2000000) { throw "EXE incompleto" }
+      - name: Disponibilizar EXE no GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gerador-ETS2-Windows
+          path: dist/ETS2_Company_Gerador.exe
+          retention-days: 30
