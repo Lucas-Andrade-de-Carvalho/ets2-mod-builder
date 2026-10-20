@@ -577,7 +577,7 @@ window.addEventListener('error',e=>{if(e?.message)setStatus($("mainStatus"),'Err
 <script>(function(){
 "use strict";
 const el=id=>document.getElementById(id),ui={map:el("companyCreateMapFile"),cargo:el("companyCreateCargoFile"),run:el("companyCreateGenerate"),message:el("companyCreateStatus"),bar:el("companyCreateBar"),report:el("companyCreateReport"),detail:el("companyCreateDetail"),download:el("companyCreateDownload"),downloadInfo:el("companyCreateDownloadInfo")};
-const ENGINE_BUILD="2026-10-20 · UNIVERSAL EMPRESA A EMPRESA · v3";
+const ENGINE_BUILD="2026-10-20 · IN/OUT PRIORITÁRIO · v3.1";
 const names=["milho","soja","adubo","madeira","pluma de algodão","cimento","sacos de batata","sacos de laranja","bobinas 2","cimento em palete","cimento em cinta","cerveja","tijolos","pedra de granito","pedra de granito","palete alto","ração mineral","xerém ração","sacaria de ração","sacaria de ração","soja alta","milho alto","sorgo para ração"];
 const patterns=[
 ["sorgo",/\bsorgo\b/],["racao",/\b(racao|xerem|alimento para gado|feed animal)\b/],["milho",/\bmilho\b/],["soja",/\bsoja\b/],
@@ -1764,39 +1764,44 @@ const UNIVERSAL_FREIGHT={
  pallets:/^(?:empty_palet|empty_pallet|pallets?|paletes?|used_packag|wood_pallets?)$/i
 };
 function companyCargoProfile(c){
- const groups={in:new Set(),out:new Set()};
+ // O campo cargo: é a prova forte. O nome do arquivo é só um indício fraco
+ // quando cargo: não pôde ser interpretado.
+ const groups={in:new Set(),out:new Set()},declared={in:new Set(),out:new Set()};
  for(const item of c.old||[]){
   if(!groups[item.dir])continue;
-  const token=String(item.unit||item.stem||"").toLowerCase().replace(/^cargo[.:]/,"").trim();
+  const real=String(item.unit||"").toLowerCase().replace(/^cargo[.:]/,"").trim();
+  const token=real||String(item.stem||"").toLowerCase().trim();
   if(!token||/^carga\d+$/i.test(token))continue;
   groups[item.dir].add(token);
+  if(real)declared[item.dir].add(real);
  }
  const count=(dir,re)=>[...groups[dir]].filter(x=>re.test(x)).length;
- return{...groups,count,total:groups.in.size+groups.out.size};
+ return{...groups,declared,count,total:groups.in.size+groups.out.size};
 }
 function companyCargoCompatibility(c,profile,type,dir,info){
- const n=profile.count,other=dir==="out"?"in":"out",f=UNIVERSAL_FREIGHT;
+ const n=profile.count,f=UNIVERSAL_FREIGHT;
  if(!profile[dir].size)return null;
- if(["posto","correios","concessionaria"].includes(c.role))return null;
- if(c.role==="cana"&&(type!=="adubo"||dir!=="in"))return null;
- const direct=profile[dir].has(info.id.toLowerCase())||
-   [...profile[dir]].some(unit=>oldCargoCategory(unit)===type)||
-   oldSpecificEvidence(c,type,dir);
+ // SEMPRE examinar a DEF antes de olhar o rótulo da empresa.
+ // Nome, ID e catálogo são sugestões, não veto sobre cargo: verdadeiro.
+ const declared=profile.declared?.[dir]||new Set();
+ const direct=declared.has(info.id.toLowerCase())||
+   [...declared].some(unit=>oldCargoCategory(unit)===type);
  if(direct){
-  // Cargos especiais não são extrapolados do nome de uma companhia.
-  return{score:120,kind:"direta",reason:"cargo ou categoria registrada no "+dir.toUpperCase()};
+  const roles=flows[type]?.[dir]||[];
+  const mismatch=c.role!=="desconhecida"&&roles.length&&!roles.includes(c.role);
+  return{score:120,kind:"direta",roleConflict:!!mismatch,
+   reason:"cargo: documentado no "+dir.toUpperCase()+
+     (mismatch?" (atividade real diverge do nome/setor sugerido: "+c.role+")":"")};
  }
- // Empresas com centenas de cargas não são consideradas produtoras de
- // mercadorias adicionais apenas por operarem logística de carga geral.
+ // O nome do arquivo pode auxiliar, mas sozinho não vale evidência DIRETA.
+ const filenameRelated=(!declared.size)&&
+   [...profile[dir]].some(unit=>oldCargoCategory(unit)===type);
+ // Evitar extrapolar um operador genérico com quase todo o catálogo.
  if(profile.total>=95)return null;
- // Usa regras genéricas por produtos, sem identificação por nome da empresa.
- const related=relatedCargoCandidate(c,type,dir);
- if(related)return{score:related.score,kind:"inferida",reason:related.reason};
- const scoped=evidenceFromRealFlows({companies:new Map([[c.id,c]])},type,dir);
- if(scoped.companies.length)return{score:70,kind:"inferida",reason:scoped.notes.join("; ")};
+ if(filenameRelated)return{score:57,kind:"inferida",
+  reason:"mercadoria sugerida pelo nome de arquivo, sem cargo: confirmado"};
  const outs=re=>n("out",re),ins=re=>n("in",re);
- let reason="",score=0;
- switch(type){
+ let reason="",score=0; switch(type){
   case "milho":case "soja":case "sorgo":
    if(dir==="out"&&outs(f.grain)>=2&&ins(f.fertilizer)>0&&ins(f.grain)===0){
     score=72;reason="lavoura com diversos grãos expedidos e insumos recebidos";
@@ -1903,7 +1908,7 @@ function simulate(map,cargo){
    plan.get(x.company.id).in.add(info.id);
   }
   const notes=[...outs.map(x=>({...x,dir:"OUT"})),...ins.map(x=>({...x,dir:"IN"}))]
-   .filter(x=>x.evidence.kind!=="direta")
+   .filter(x=>x.evidence.kind!=="direta"||x.evidence.roleConflict)
    .map(x=>x.company.id+" "+x.dir+": "+x.evidence.reason);
   if(notes.length)assumptions.push({id:info.id,notes});
   for(const b of body)if(b==="alta"||b==="baixa")grouped[b]++;else grouped.outros++;
