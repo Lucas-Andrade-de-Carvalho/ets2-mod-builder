@@ -215,16 +215,38 @@ def extract_map(path):
     return companies,old_file_count
 
 def cargo_inventory(mods):
+    """Cargo_data + 2 sistemas distintos de trailer_def do ETS2.
+
+    Legado: def/cargo/<cargo>/<reboque>.sii
+    Reboque proprio: def/vehicle/trailer_defs/ e trailer_owned/<id>/body/
+    NUNCA exigir def/cargo/<cargo>/ para cargas de reboque proprio.
+    """
     records={}
-    trailers=defaultdict(set)
+    legacy_trailers=defaultdict(set)
+    ownable_trailer_defs=set()
     owned_bodies=set()
+    totals={"owned_body_files":0,"owned_trailer_def_files":0,"legacy_trailer_def_files":0}
     for source,archive in mods:
         for path,raw in archive.items():
-            if path.startswith("def/vehicle/trailer_owned/") and path.endswith((".sii",".sui")):
-                owned_bodies.update(RE_TRAILER_BODY.findall(read_sii(raw)))
+            if not path.endswith((".sii",".sui")):continue
+            # Carrocerias das configuracoes compraveis pelo jogador.
+            if path.startswith("def/vehicle/trailer_owned/") and "/body/" in path:
+                text=read_sii(raw)
+                types=set(RE_TRAILER_BODY.findall(text))
+                if types:
+                    owned_bodies.update(types)
+                    totals["owned_body_files"]+=1
+            # A partir do ETS2 1.32 trailer_def de reboque proprio
+            # pertence a def/vehicle/trailer_defs, nao a def/cargo/cargaN/.
+            if path.startswith("def/vehicle/trailer_defs/"):
+                text=read_sii(raw)
+                if re.search(r'\btrailer_def\s*:',text,re.I):
+                    ownable_trailer_defs.update(RE_TRAILER_BODY.findall(text))
+                    totals["owned_trailer_def_files"]+=1
             m=RE_CARGO_PATH.search(path)
-            if not m or not path.endswith((".sii",".sui")):continue
-            cid,sub=m.groups();txt=read_sii(raw)
+            if not m:continue
+            cid,sub=m.groups()
+            txt=read_sii(raw)
             if sub is None:
                 ids=RE_CARGO_UNIT.findall(txt)
                 for id in ids:
@@ -236,8 +258,9 @@ def cargo_inventory(mods):
                                   "valuable":bool(re.search(r'\bvaluable\s*:\s*true\b',txt,re.I)),
                                   "adr":bool(re.search(r'\badr_class\s*:\s*[1-9]',txt,re.I))}
             elif re.search(r'\btrailer_def\s*:',txt,re.I):
-                trailers[cid].update(RE_TRAILER_BODY.findall(txt))
-    return records,trailers,owned_bodies
+                legacy_trailers[cid].update(RE_TRAILER_BODY.findall(txt))
+                totals["legacy_trailer_def_files"]+=1
+    return records,legacy_trailers,owned_bodies,ownable_trailer_defs,totals
 
 def permits(c,category,dir):
     role=c.role
@@ -332,28 +355,56 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         if not arc:raise ValueError(f"{label}: nenhuma definicao def/ legivel encontrada")
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
-    records,trailers,owned=cargo_inventory(sources)
+    records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
     errors=[];warnings=[]
+    log("Trailer: "+str(totals["owned_body_files"])+" arquivos de carroceria propria; "+
+        str(totals["owned_trailer_def_files"])+" trailer_defs novos; "+
+        str(totals["legacy_trailer_def_files"])+" trailer_defs antigos.")
+    log("Body types das carrocerias: "+str(sorted(owned))+
+        " | trailer_defs globais: "+str(sorted(ownable_defs)))
+    if not owned:
+        warnings.append("SEM CARROCERIAS trailer_owned/*/body nos SCS originais. "+
+                        "Impossivel garantir compatibilidade com o reboque proprio; "+
+                        "verifique se existem no jogo base ou em outro mod.")
+    if not ownable_defs and not any(legacy.values()):
+        warnings.append("Nenhuma trailer_def foi encontrada nos originais fornecidos. "+
+                        "O arquivo pode depender das defs base do ETS2 ou de outra fonte; "+
+                        "nao significa automaticamente falha para reboque proprio.")
     for n,(category,description) in MANIFEST.items():
         id=f"carga{n}"
         r=records.get(id)
-        if not r:errors.append(f"{id} ({description}): cargo_data ausente no reboque");continue
-        if not r["body"]:errors.append(f"{id}: body_types ausente no cargo_data");continue
-        suitable=trailers.get(id,set())&r["body"]
-        if not suitable:errors.append(f"{id}: sem trailer_def e body_type correspondentes ({sorted(r['body'])} x {sorted(trailers.get(id,set()))})")
-        if r["adr"]:warnings.append(f"{id}: exige habilidade ADR; verificar se intencional")
-        if r["valuable"]:warnings.append(f"{id}: valuable=true"+(" (correcao somente no mod gerado)" if fix_skills else " (habilidade de alto valor exigida)"))
-    if not owned:
-        warnings.append("Nao foram encontrados body_types de trailer_owned; verificar configuracao especifica no jogo.")
-    else:
-        used=set().union(*(r["body"] for id,r in records.items() if id in {f"carga{n}" for n in MANIFEST}))
-        if not used & owned:errors.append("Nenhum body_type das 23 cargas coincide com os body_types do mod de reboque proprio")
+        if not r:
+            errors.append(f"{id} ({description}): cargo_data ausente no reboque")
+            continue
+        if not r["body"]:
+            errors.append(f"{id}: body_types ausente no cargo_data")
+            continue
+        # Validacao primaria para Mercado de Cargas com reboque proprio.
+        # Nao usar um trailer_def LEGADO como requisito obrigatorio.
+        if owned and not (r["body"]&owned):
+            errors.append(f"{id}: nenhum body_type compativel com as carrocerias "+
+                          f"do reboque proprio: carga={sorted(r['body'])}, "+
+                          f"trailer_owned={sorted(owned)}")
+        # O trailer_def global eh uma camada adicional; sua ausencia nao
+        # significa que def/cargo/<cargo>/ tenha de existir.
+        if ownable_defs and not (r["body"]&ownable_defs):
+            warnings.append(f"{id}: nao ha trailer_def global com body_type "+
+                            f"{sorted(r['body'])}; confirme trailer_body_set do reboque.")
+        if legacy.get(id) and not (r["body"]&legacy[id]):
+            warnings.append(f"{id}: trailer_def legado nao tem body_type equivalente; "+
+                            "pode ser irrelevante para a configuracao propria.")
+        if r["adr"]:
+            warnings.append(f"{id}: exige habilidade ADR; verificar se intencional")
+        if r["valuable"]:
+            warnings.append(f"{id}: valuable=true"+
+                            (" (correcao somente no mod gerado)" if fix_skills else
+                             " (habilidade de alto valor exigida)"))
     if errors:
         outdir.joinpath("FALHA_DIAGNOSTICO.txt").write_text(
             "GERACAO BLOQUEADA: corrigir problemas tecnicos antes de entregar Companies.\n\n"+
             "\n".join(errors)+"\n\nAVISOS\n"+"\n".join(warnings),encoding="utf-8")
         raise ValueError("Diagnostico tecnico bloqueou geracao:\n- "+"\n- ".join(errors[:12]))
-    log("Cargo_data, body_types e trailer_def: verificacoes essenciais aprovadas.")
+    log("Validacao de cargo_data e carroceria de reboque proprio concluida; avisos no relatorio.")
     results=[]
     for name,path in inputs["maps"].items():
         log("Analisando mapa "+name+"...")
