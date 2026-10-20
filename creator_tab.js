@@ -1031,6 +1031,10 @@ function chooseEndpoints(map,type,spec,cargoId=""){
  if(["racao","sorgo","algodao","bobinas_industriais"].includes(type)){
    for(const c of [...inn]){
      if(!out.has(c))continue;
+     // Uma empresa que recebe e expede material pode ter ambos os papéis.
+     // Só remova o IN inferido quando não existir outro expedidor distinto;
+     // caso contrário a regra apagava TODOS os recebedores de bobinas.
+     if([...out].some(source=>source.id!==c.id))continue;
      if(["materiais","logistica","cooperativa"].includes(c.role))continue;
      if(oldSpecificEvidence(c,type,"in"))continue;
      inn.delete(c);
