@@ -5,6 +5,13 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import os
+import shutil
+import tempfile
+import collections
+import hashlib
+import threading
+import queue
 import json
 import re
 import sys
@@ -14,6 +21,8 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+
+VERSION = '2.0.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -110,7 +119,12 @@ def canonical_path(raw):
     # ZIPs de mapas podem comecar em def/company, company ou uma pasta raiz/...
     m=re.search(r'(?:^|/)(def/(?:company|cargo|vehicle)/.+)$',path,re.I)
     if m:return m.group(1).lower()
+    m=re.search(r'(?:^|/)(def/cargo(?:\.[a-z0-9_-]+)?\.(?:sii|sui))$',path,re.I)
+    if m:return m.group(1).lower()
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
+    if m:return ("def/"+m.group(1)).lower()
+    # Company permanente avulsa (empresa.sii) nos ZIPs de mapa.
+    m=re.search(r'(?:^|/)(company/[a-z0-9_]+\.(?:sii|sui))$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
     m=re.search(r'(?:^|/)(cargo/[a-z0-9_]+(?:\.(?:sii|sui)|/[^/]+))$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
@@ -159,6 +173,49 @@ def zip_members(path, wanted=None):
         if not path.is_dir():zf.close()
     return out
 
+
+def describe_archive(path, limit=50):
+    """Diagnostico independente do extrator; funciona ate para ZIPs desconhecidos."""
+    p=Path(path)
+    if p.is_dir():
+        names=[str(x.relative_to(p)).replace("\\","/") for x in p.rglob("*") if x.is_file()]
+        sizes={}
+    elif zipfile.is_zipfile(p):
+        with zipfile.ZipFile(p) as z:
+            inf=[x for x in z.infolist() if not x.is_dir()]
+            names=[x.filename.replace("\\","/") for x in inf]
+            sizes={x.filename:x.file_size for x in inf}
+    else:
+        return {"arquivo":p.name,"erro":"Nao e ZIP valido nem pasta extraida"}
+    normalized=[clean_path(n) or n for n in names]
+    company_like=[n for n in normalized if re.search(r'(^|/)(company|companies|def_company)(/|\.)',n,re.I)]
+    inout=[n for n in normalized if re.search(r'/(in|out)/[^/]+\.(?:sii|sui)$',n,re.I)]
+    legacy=[n for n in normalized if re.search(r'/(company|companies)/[a-z0-9_]+\.(?:sii|sui)$',n,re.I)]
+    canonical=[n for n in normalized if canonical_path(n)]
+    top=collections.Counter(n.split("/")[0] for n in normalized)
+    extensions=collections.Counter(Path(n).suffix.lower() for n in normalized)
+    return {
+        "arquivo":p.name,"total_arquivos":len(names),
+        "tamanho_total_declarado":sum(sizes.values()),
+        "pastas_raiz":top.most_common(20),"extensoes":extensions.most_common(16),
+        "caminhos_reconhecidos":len(canonical),
+        "arquivos_parecidos_com_company":len(company_like),
+        "caminhos_in_out":len(inout),"arquivos_permanentes_possiveis":len(legacy),
+        "amostra_company":company_like[:limit],
+        "amostra_in_out":inout[:limit],
+        "amostra_geral":normalized[:limit],
+        "avisos":[]
+    }
+
+def export_diagnostic(path, dest, issue=""):
+    report=describe_archive(path)
+    if issue:report["erro_de_leitura"]=str(issue)
+    folder=Path(dest);folder.mkdir(parents=True,exist_ok=True)
+    name=re.sub(r'[^a-zA-Z0-9_-]','_',Path(path).stem)[:55]
+    target=folder/("DIAGNOSTICO_ARQUIVO_"+name+".json")
+    target.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+    return target
+
 @dataclass
 class Company:
     name:str
@@ -197,6 +254,13 @@ def extract_map(path):
     old_file_count=0
     legacy=[]
     for p,raw in archive.items():
+        # Definicoes legadas no arquivo permanente sao ACRESCENTADAS pelo
+        # ETS2. Apenas limpar in/out nao as neutraliza (SCS Wiki).
+        if re.fullmatch(r'def/company/[a-z0-9_]+\.(?:sii|sui)',p,re.I):
+            txt=read_sii(raw)
+            if re.search(r'(?m)^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:',txt,re.I):
+                legacy.append(p)
+            continue
         m=RE_COMPANY_PATH.search(p)
         if not m:continue
         id,dir,filename=m.groups()
@@ -209,8 +273,14 @@ def extract_map(path):
             if re.search(r'(?m)^\s*(in_cargo|out_cargo)(?:\[\d*\])?\s*:',read_sii(raw)):
                 legacy.append(p)
     if not companies or old_file_count==0:
-        raise ValueError(f"{Path(path).name}: nenhuma pasta def/company/<empresa>/in|out com cargas foi encontrada")
-    if legacy:raise ValueError("Company legada com in_cargo/out_cargo requer tratamento especifico: "+", ".join(legacy[:5]))
+        raise ValueError(f"{Path(path).name}: formato IN/OUT nao identificado. "+
+                         "Veja o DIAGNOSTICO_ARQUIVO_*.json; o leitor NAO inventara "+
+                         "empresas nem criara .scs a partir de dados desconhecidos.")
+    if legacy:raise ValueError(
+        "Foi encontrado in_cargo/out_cargo legado em company_permanent; "
+        "o ETS2 ACRESCENTA estas cargas mesmo se as pastas in/out forem neutralizadas. "
+        "Geracao bloqueada para nao produzir Company incompleta: "+
+        ", ".join(legacy[:5]))
     for c in companies.values():classify_company(c)
     return companies,old_file_count
 
@@ -325,9 +395,9 @@ def neutralize(raw,path):
         raise ValueError("Cargo antigo ainda ativo apos neutralizacao: "+path)
     return result.encode("utf-8")
 
-def cargo_override(record):
+def cargo_override(record,drop_skill=True):
     txt=read_sii(record["raw"])
-    if record["valuable"]:
+    if drop_skill and record["valuable"]:
         txt=re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',txt)
     # Reducao seletiva; nao altera corpo/modelos, que devem continuar no mod original.
     if re.search(r'(?im)^\s*prob_coef\s*:',txt):
@@ -336,6 +406,39 @@ def cargo_override(record):
         # Campo deve estar dentro de cargo_data; inserido imediatamente depois da abertura.
         txt=re.sub(r'(\bcargo_data\s*:\s*cargo\.carga16\s*\{)',r'\1\n prob_coef: 0.08',txt,count=1,flags=re.I)
     return txt.encode("utf-8")
+
+
+def cargo_manifest_warnings(sources,records):
+    masters=[]
+    for source,archive in sources:
+        for path,blob in archive.items():
+            if re.fullmatch(r'def/cargo(?:\.[a-z0-9_-]+)?\.(?:sii|sui)',path):
+                masters.append((source,path,read_sii(blob)))
+    if not masters:
+        return ["Master def/cargo*.sii nao encontrado nos SCS anexados; "
+                "o registro das mercadorias precisa ser confirmado no jogo."]
+    joined="\n".join(t for src,p,t in masters).lower()
+    missing=[f"carga{n}" for n in MANIFEST if f"carga{n}" in records and
+             not re.search(r'(?<![a-z0-9_])carga'+str(n)+r'(?![a-z0-9_])',joined)]
+    notices=["Manifests identificados: "+
+             ", ".join(src+"/"+p for src,p,t in masters[:10])]
+    if missing:
+        notices.append("Cargas nao citadas literalmente nos manifestos: "+
+                       ", ".join(missing)+". Includes indiretos podem existir.")
+    return notices
+
+def hash_source(path):
+    h=hashlib.sha256();p=Path(path)
+    if p.is_dir():
+        files=sorted(x for x in p.rglob("*") if x.is_file())
+        for f in files:
+            h.update(str(f.relative_to(p)).replace("\\","/").encode("utf-8"))
+            with f.open("rb") as stream:
+                for part in iter(lambda:stream.read(1024*1024),b""):h.update(part)
+    else:
+        with p.open("rb") as stream:
+            for part in iter(lambda:stream.read(1024*1024),b""):h.update(part)
+    return h.hexdigest()
 
 def write_report(outdir,name,result):
     with open(outdir/(name+"_auditoria.json"),"w",encoding="utf-8") as f:
@@ -356,7 +459,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
     records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
-    errors=[];warnings=[]
+    errors=[];warnings=cargo_manifest_warnings(sources,records)
+    provenance=[{"arquivo":Path(p).name,"papel":label,"sha256":hash_source(p),
+                 "definicoes":len(arc)}
+                for (label,p),(_,arc) in zip(
+                    [("MOD PRINCIPAL",inputs["mod"]),("DEF 1",inputs["def1"]),
+                     ("DEF 2",inputs["def2"])],sources)]
     log("Trailer: "+str(totals["owned_body_files"])+" arquivos de carroceria propria; "+
         str(totals["owned_trailer_def_files"])+" trailer_defs novos; "+
         str(totals["legacy_trailer_def_files"])+" trailer_defs antigos.")
@@ -405,139 +513,288 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             "\n".join(errors)+"\n\nAVISOS\n"+"\n".join(warnings),encoding="utf-8")
         raise ValueError("Diagnostico tecnico bloqueou geracao:\n- "+"\n- ".join(errors[:12]))
     log("Validacao de cargo_data e carroceria de reboque proprio concluida; avisos no relatorio.")
-    results=[]
+    # FASE 1: preflight dos 3 mapas. Nenhuma Company e publicada se um mapa falhar.
+    checked_maps={}
+    map_failures={}
     for name,path in inputs["maps"].items():
-        log("Analisando mapa "+name+"...")
-        companies,count=extract_map(path)
-        work={};evidence=[];bycargo={}
-        for n,(category,title) in MANIFEST.items():
-            id=f"carga{n}"
-            outs=[];ins=[]
+        log("Verificando estrutura de "+name+" ...")
+        try:
+            checked_maps[name]=extract_map(path)
+            log(name+": "+str(len(checked_maps[name][0]))+" empresas reconhecidas.")
+        except Exception as exc:
+            map_failures[name]=str(exc)
+            diag=export_diagnostic(path,outdir,str(exc))
+            log("ERRO em "+name+": "+str(exc))
+            log("Diagnostico salvo: "+str(diag))
+    if map_failures:
+        report=outdir/"FALHA_MAPAS_NAO_GERAR.txt"
+        report.write_text("Nenhum SCS novo foi publicado por esta execucao. "+
+                          "Nao use resultados parciais ou de execucoes anteriores.\n\n"+
+                          "\n".join(k+": "+v for k,v in map_failures.items())+
+                          "\n\nArquivos DIAGNOSTICO_ARQUIVO_*.json foram criados na pasta de saida.\n",
+                          encoding="utf-8")
+        raise ValueError("Analise interrompida sem publicar Companies. "+
+                         "Confira FALHA_MAPAS_NAO_GERAR.txt e envie o "+
+                         "DIAGNOSTICO_ARQUIVO_*.json do mapa com erro.")
+    results=[]
+    # FASE 2: construcao inteira em pasta temporaria, invisivel para cliente.
+    publish_dir=outdir
+    staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
+    outdir=Path(staging.name)
+    try:
+        for name,path in inputs["maps"].items():
+            log("Gerando Company de "+name+"...")
+            companies,count=checked_maps[name]
+            local_warnings=list(warnings)
+            work={};evidence=[];bycargo={}
+            for n,(category,title) in MANIFEST.items():
+                id=f"carga{n}"
+                outs=[];ins=[]
+                for c in companies.values():
+                    for direction,results_list in (("out",outs),("in",ins)):
+                        why=permits(c,category,direction)
+                        if why:results_list.append(c.name)
+                        if why:evidence.append({"empresa":c.name,"direcao":direction,"carga":id,"categoria":category,"justificativa":why})
+                bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
+                             "origens_lista":outs,"destinos_lista":ins}
+                # Nao inventar rotas para completar 23/23.
+                if not outs or not ins: local_warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
+                for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
+                for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
+            output_files={}
             for c in companies.values():
-                for direction,results_list in (("out",outs),("in",ins)):
-                    why=permits(c,category,direction)
-                    if why:results_list.append(c.name)
-                    if why:evidence.append({"empresa":c.name,"direcao":direction,"carga":id,"categoria":category,"justificativa":why})
-            bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
-                         "origens_lista":outs,"destinos_lista":ins}
-            # Nao inventar rotas para completar 23/23.
-            if not outs or not ins: warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
-            for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
-            for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
-        output_files={}
-        for c in companies.values():
-            for p,raw in c.files.items():
-                output_files[p]=neutralize(raw,p)
-        for cid,dirs in work.items():
-            for direction in ("in","out"):
-                for id in dirs[direction]:
-                    output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
-        # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
-        # de skill somente no mod complementar; originais NUNCA sao editados.
-        if fix_skills:
+                for p,raw in c.files.items():
+                    output_files[p]=neutralize(raw,p)
+            for cid,dirs in work.items():
+                for direction in ("in","out"):
+                    for id in dirs[direction]:
+                        output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
+            # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
+            # de skill somente no mod complementar; originais NUNCA sao editados.
             for n in MANIFEST:
                 id=f"carga{n}"
                 record=records[id]
-                if record["valuable"] or id=="carga16":
-                    output_files[record["path"]]=(cargo_override(record) if id=="carga16" else
-                      re.sub(r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',read_sii(record["raw"])).encode("utf-8"))
-        dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
-        with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
-            for p,raw in sorted(output_files.items()):z.writestr(p,raw)
-        with zipfile.ZipFile(dest) as z:
-            if z.testzip() is not None:raise ValueError("Falha na integridade do ZIP: "+str(dest))
-            paths=set(z.namelist())
-            if not all(p in paths for c in companies.values() for p in c.files):
-                raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
-            for id,info in bycargo.items():
-                for company in info["origens_lista"]:
-                    if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
-                for company in info["destinos_lista"]:
-                    if f"def/company/{company}/in/{id}.sii" not in paths:raise ValueError("Permissao IN ausente")
-        rows=[]
-        for cid,c in sorted(companies.items()):
-            selected=work.get(cid,{"in":set(),"out":set()})
-            rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
-                         "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
-                         "out_originais":",".join(sorted(c.old_out))})
-        data={"mapa":name,"empresas":rows,"total_empresas":len(companies),
-              "empresas_atendidas":len(work),"arquivos_inout_originais":count,
-              "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
-              "cadeias":bycargo,"evidencias":evidence,"avisos":list(warnings),
-              "validacao":"SCS ZIP, paths IN/OUT, manifesto, cargo_data, trailer_def; nao e teste dentro do ETS2"}
-        write_report(outdir,name,data)
-        log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
-            str(data["arquivos_inout_gerados"])+" permissões.")
-        results.append((name,str(dest),data))
-    outdir.joinpath("LEIA_PRIMEIRO.txt").write_text(
-        "ETS2 COMPANY LOGISTICS - GERADOR OFFLINE\n\n"+
-        "1. Utilize somente a Company do mapa ativo.\n"+
-        "2. Mantenha o mod principal do Librelato ativo.\n"+
-        "3. Desative DEF Company 1 e DEF Company 2 antigas, quando forem complementos conflitantes.\n"+
-        "4. Deixe o novo SCS acima das DEFs do mapa e do reboque.\n"+
-        "5. Teste carrocerias Grade Alta e Grade Baixa e atualize economia.\n"+
-        "6. O Mercado de Cargas de reboque PROPRIO exige carroceria e configuracao correspondente.\n"+
-        "7. Se o mercado ficar vazio, anexe game.log.txt e dados da configuracao instalada.\n"+
-        "ATENCAO: analise estatica nao prova ofertas no jogo.\n\n"+
-        "\n".join(warnings),encoding="utf-8")
+                if id=="carga16":
+                    # Baixa frequencia, independentemente da opcao de habilidade.
+                    output_files[record["path"]]=cargo_override(record,drop_skill=fix_skills)
+                elif fix_skills and record["valuable"]:
+                    output_files[record["path"]]=re.sub(
+                        r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',
+                        read_sii(record["raw"])).encode("utf-8")
+            dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
+            with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
+                for p,raw in sorted(output_files.items()):
+                    entry=zipfile.ZipInfo(p,date_time=(2020,1,1,0,0,0))
+                    entry.external_attr=0o644<<16
+                    z.writestr(entry,raw,compress_type=zipfile.ZIP_DEFLATED,compresslevel=6)
+            with zipfile.ZipFile(dest) as z:
+                if z.testzip() is not None:raise ValueError("Falha na integridade do ZIP: "+str(dest))
+                paths=set(z.namelist())
+                if not all(p in paths for c in companies.values() for p in c.files):
+                    raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
+                for id,info in bycargo.items():
+                    for company in info["origens_lista"]:
+                        if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
+                    for company in info["destinos_lista"]:
+                        if f"def/company/{company}/in/{id}.sii" not in paths:raise ValueError("Permissao IN ausente")
+            rows=[]
+            for cid,c in sorted(companies.items()):
+                selected=work.get(cid,{"in":set(),"out":set()})
+                rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
+                             "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
+                             "out_originais":",".join(sorted(c.old_out))})
+            data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "total_empresas":len(companies),"empresas_atendidas":len(work),
+                  "arquivos_inout_originais":count,
+                  "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
+                  "cadeias":bycargo,"evidencias":evidence,
+                  "fontes_sha256":provenance+[{"arquivo":Path(path).name,"papel":"MAPA "+name,
+                                              "sha256":hash_source(path)}],
+                  "avisos":local_warnings,
+                  "validacao":"SCS ZIP, caminhos IN/OUT, body_types; disponibilidade no ETS2 nao testada"}
+            write_report(outdir,name,data)
+            log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
+                str(data["arquivos_inout_gerados"])+" permissões.")
+            results.append((name,str(publish_dir/dest.name),data))
+        outdir.joinpath("LEIA_PRIMEIRO.txt").write_text(
+            "ETS2 COMPANY LOGISTICS - GERADOR OFFLINE\n\n"+
+            "1. Utilize somente a Company do mapa ativo.\n"+
+            "2. Mantenha o mod principal do Librelato ativo.\n"+
+            "3. Desative DEF Company 1 e DEF Company 2 antigas, quando forem complementos conflitantes.\n"+
+            "4. Deixe o novo SCS acima das DEFs do mapa e do reboque.\n"+
+            "5. Teste carrocerias Grade Alta e Grade Baixa e atualize economia.\n"+
+            "6. O Mercado de Cargas de reboque PROPRIO exige carroceria e configuracao correspondente.\n"+
+            "7. Se o mercado ficar vazio, anexe game.log.txt e dados da configuracao instalada.\n"+
+            "ATENCAO: analise estatica nao prova ofertas no jogo.\n\n"+
+            "\n".join(warnings),encoding="utf-8")
+            # Apenas publicar apos TODOS os SCS serem gerados e validados.
+        for generated in sorted(outdir.iterdir()):
+            if generated.is_file():
+                os.replace(generated,publish_dir/generated.name)
+        log("PUBLICACAO CONCLUIDA: 3 mapas, relatórios e SCS verificados.")
+    finally:
+        staging.cleanup()
     return results
 
 def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
-    root=tk.Tk();root.title("ETS2 Company Logistics - Gerador Offline");root.geometry("930x650")
-    frame=ttk.Frame(root,padding=16);frame.pack(fill="both",expand=True)
-    ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",16,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="Escolha os 7 arquivos originais. Nenhum arquivo enviado ou alterado.",wraplength=850).pack(anchor="w",pady=(2,16))
+    root=tk.Tk()
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.0")
+    root.geometry("1010x740")
+    root.minsize(860,650)
+    style=ttk.Style(root)
+    if "clam" in style.theme_names():style.theme_use("clam")
+    style.configure("Main.TButton",font=("Segoe UI",10,"bold"),padding=(14,10))
+    frame=ttk.Frame(root,padding=16)
+    frame.pack(fill="both",expand=True)
+    ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
+    ttk.Label(frame,text="v2.0  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
+              font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
+    ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
+              font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
     widgets={}
     fields=[
        ("mod","Mod principal Librelato (.scs)"),
        ("def1","DEF Company 1 original (.scs)"),
        ("def2","DEF Company 2 original (.scs)"),
-       ("txt","TXT com a lista das 23 cargas"),
+       ("txt","TXT com as 23 cargas"),
        ("minas","Mapa Minas Gerais (.zip)"),
        ("eldorado","Mapa Eldorado (.zip)"),
        ("rbr","Mapa RBR (.zip)"),
        ("output","Pasta de saida")
     ]
+    controls=[]
     for key,label in fields:
-        row=ttk.Frame(frame);row.pack(fill="x",pady=4)
-        ttk.Label(row,text=label,width=35).pack(side="left")
+        row=ttk.Frame(frame);row.pack(fill="x",pady=3)
+        ttk.Label(row,text=label,width=32).pack(side="left")
         value=tk.StringVar();widgets[key]=value
-        ttk.Entry(row,textvariable=value).pack(side="left",fill="x",expand=True,padx=6)
+        ttk.Entry(row,textvariable=value).pack(side="left",fill="x",expand=True,padx=7)
         def choose(k=key,v=value):
-            if k=="output":p=filedialog.askdirectory()
-            else:p=filedialog.askopenfilename(title="Selecione "+k)
+            p=filedialog.askdirectory(title="Selecione a pasta de resultados") if k=="output" else (
+                filedialog.askopenfilename(title="Selecione "+k))
             if p:v.set(p)
-        ttk.Button(row,text="Selecionar",command=choose).pack(side="right")
-    fix_var=tk.BooleanVar(value=True)
-    ttk.Checkbutton(frame,text="Remover exigencia de Carga de Alto Valor das 23 cargas comuns (na Company gerada, nao no original)",variable=fix_var).pack(anchor="w",pady=(9,4))
-    console=tk.Text(frame,height=12,wrap="word",state="disabled")
-    console.pack(fill="both",expand=True,pady=8)
-    def log(msg):
-        console.configure(state="normal");console.insert("end",msg+"\n")
-        console.see("end");console.configure(state="disabled");root.update_idletasks()
-    def start():
+        bt=ttk.Button(row,text="Selecionar",command=choose)
+        bt.pack(side="right")
+        controls.append(bt)
+    config_dir=Path(os.environ.get("APPDATA",str(Path.home())))/"ETS2_Company_Logistics"
+    config_file=config_dir/"preferencias_v2.json"
+    try:
+        saved=json.loads(config_file.read_text(encoding="utf-8"))
+        for k in widgets:
+            value=saved.get(k,"")
+            if value and Path(value).exists():widgets[k].set(value)
+    except (OSError,ValueError,TypeError):pass
+    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(8,4))
+    fix_var=tk.BooleanVar(value=False)
+    ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
+                    variable=fix_var).pack(anchor="w")
+    ttk.Label(options_row,text="As rotas sao inferidas a partir das DEFs; nenhuma cadeia sem origem/destino e inventada.",
+              font=("Segoe UI",9)).pack(anchor="w")
+    progress=ttk.Progressbar(frame,mode="indeterminate")
+    progress.pack(fill="x",pady=(6,4))
+    status=tk.StringVar(value="Pronto. Selecione os arquivos ou gere um diagnostico primeiro.")
+    ttk.Label(frame,textvariable=status,wraplength=900).pack(anchor="w")
+    console=tk.Text(frame,height=12,wrap="word",state="disabled",font=("Consolas",9))
+    console.pack(fill="both",expand=True,pady=7)
+    actions=ttk.Frame(frame);actions.pack(fill="x",pady=6)
+    work_queue=queue.Queue()
+    busy=[False]
+    def append_log(message):
+        console.configure(state="normal")
+        console.insert("end",str(message)+"\n")
+        console.see("end");console.configure(state="disabled")
+    def persist():
         try:
-            needed=[key for key,_ in fields]
-            if not all(widgets[k].get().strip() for k in needed):
-                messagebox.showerror("Arquivos incompletos","Selecione os sete arquivos e a pasta de saida.");return
-            with open(widgets["txt"].get(),encoding="utf-8-sig") as f:
-                manifest=f.read()
+            config_dir.mkdir(parents=True,exist_ok=True)
+            config_file.write_text(json.dumps({k:v.get() for k,v in widgets.items()},indent=2),
+                                   encoding="utf-8")
+        except OSError as exc:
+            append_log("Aviso: nao consegui salvar os caminhos: "+str(exc))
+    def check_paths(include_librelato):
+        required=[k for k,_ in fields if k!="output"]
+        if not include_librelato:required=["minas","eldorado","rbr"]
+        needed=required+["output"]
+        missing=[k for k in needed if not widgets[k].get().strip()]
+        if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
+        invalid=[k for k in required if not Path(widgets[k].get()).exists()]
+        if invalid:raise ValueError("Arquivo ou pasta inexistente: "+", ".join(invalid))
+    def change_busy(value):
+        busy[0]=value
+        for c in controls+[btn_diag,btn_generate]:
+            c.configure(state="disabled" if value else "normal")
+        if value:progress.start(12)
+        else:progress.stop()
+    def worker_generate(snapshot,fix):
+        try:
+            txt=Path(snapshot["txt"]).read_text(encoding="utf-8-sig")
             for n in MANIFEST:
-                if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",manifest,re.I):
-                    raise ValueError(f"TXT nao identifica carga{n}; confira se e a lista correta")
-            inp={"mod":widgets["mod"].get(),"def1":widgets["def1"].get(),
-                 "def2":widgets["def2"].get(),
-                 "maps":{"Minas_Gerais":widgets["minas"].get(),
-                         "Eldorado":widgets["eldorado"].get(),
-                         "RBR":widgets["rbr"].get()}}
-            data=generate(inp,widgets["output"].get(),log=log,fix_skills=fix_var.get())
-            messagebox.showinfo("Concluido",f"Gerados {len(data)} arquivos SCS. Confira as auditorias e teste no ETS2.")
-        except Exception as ex:
-            log("ERRO: "+str(ex))
-            messagebox.showerror("Geracao interrompida",str(ex))
-    ttk.Button(frame,text="ANALISAR E GERAR 3 COMPANIES",command=start).pack(pady=8)
+                if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",txt,re.I):
+                    raise ValueError("TXT incompleto: falta carga"+str(n))
+            inp={"mod":snapshot["mod"],"def1":snapshot["def1"],
+                 "def2":snapshot["def2"],
+                 "maps":{"Minas_Gerais":snapshot["minas"],
+                         "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}}
+            items=generate(inp,snapshot["output"],
+                           log=lambda msg:work_queue.put(("log",msg)),fix_skills=fix)
+            work_queue.put(("success","Gerados "+str(len(items))+
+                " arquivos SCS. Audite os JSON/CSV e valide no ETS2 antes de entregar."))
+        except Exception as exc:
+            work_queue.put(("error",str(exc)))
+    def worker_diagnostic(snapshot):
+        try:
+            out=Path(snapshot["output"])
+            for key in ("minas","eldorado","rbr"):
+                p=export_diagnostic(snapshot[key],out)
+                work_queue.put(("log",key+": diagnostico salvo em "+str(p)))
+            work_queue.put(("success","Diagnosticos dos 3 mapas exportados. "+
+                            "Envie o JSON do Eldorado para investigar a estrutura real."))
+        except Exception as exc:
+            work_queue.put(("error","Falha no diagnostico: "+str(exc)))
+    def run(action):
+        if busy[0]:return
+        try:
+            check_paths(include_librelato=(action=="generate"))
+            persist()
+            snapshot={k:v.get() for k,v in widgets.items()}
+            change_busy(True)
+            status.set("Analisando arquivos; aguarde...")
+            fun=worker_generate if action=="generate" else worker_diagnostic
+            args=(snapshot,fix_var.get()) if action=="generate" else (snapshot,)
+            threading.Thread(target=fun,args=args,daemon=True).start()
+        except Exception as exc:
+            messagebox.showerror("Campos incompletos",str(exc))
+    def pump():
+        try:
+            while True:
+                event,value=work_queue.get_nowait()
+                if event=="log":
+                    append_log(value)
+                    status.set(str(value)[:160])
+                elif event in ("error","success"):
+                    change_busy(False)
+                    status.set("Concluido" if event=="success" else "Interrompido sem validar os 3 mapas.")
+                    append_log(("CONCLUIDO: " if event=="success" else "ERRO: ")+value)
+                    (messagebox.showinfo if event=="success" else messagebox.showerror)(
+                        "Processamento concluido" if event=="success" else "Processamento interrompido",
+                        value)
+        except queue.Empty:
+            pass
+        root.after(125,pump)
+    btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR OS 3 MAPAS",
+                        command=lambda:run("diagnostic"),style="Main.TButton")
+    btn_diag.pack(side="left",padx=(0,8))
+    btn_generate=ttk.Button(actions,text="2. VALIDAR E GERAR 3 COMPANIES",
+                            command=lambda:run("generate"),style="Main.TButton")
+    btn_generate.pack(side="left",padx=6)
+    def open_folder():
+        p=widgets["output"].get()
+        if not p or not Path(p).is_dir():
+            messagebox.showwarning("Pasta indisponivel","Selecione primeiro uma pasta de saida.")
+            return
+        if sys.platform=="win32":os.startfile(p)
+    ttk.Button(actions,text="Abrir pasta de saida",command=open_folder).pack(side="right")
+    root.after(125,pump)
     root.mainloop()
 
 def main():
