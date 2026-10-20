@@ -164,9 +164,13 @@ class Regression(unittest.TestCase):
             'SiiNunit\n{\n company_permanent : company.agrish {\n'
             ' in_cargo[]: cargo.milho_a\n }\n}\n')
         zip_write(src,contents)
-        with self.assertRaisesRegex(ValueError,"company_permanent"):
+        with self.assertRaisesRegex(ValueError,"FALHA_MAPAS_NAO_GERAR"):
             g.generate(self.inp,self.root/"legacy_rejected")
         self.assertEqual(list((self.root/"legacy_rejected").glob("*.scs")),[])
+        reports=list((self.root/"legacy_rejected").glob("DIAGNOSTICO_ARQUIVO_*.json"))
+        self.assertEqual(len(reports),1)
+        details=json.loads(reports[0].read_text(encoding="utf-8"))
+        self.assertIn("company_permanent",details["erro_de_leitura"])
 
     def test_reproducible_output_and_source_hashes(self):
         one=g.generate(self.inp,self.root/"first")
