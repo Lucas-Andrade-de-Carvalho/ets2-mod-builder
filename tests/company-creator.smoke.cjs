@@ -408,7 +408,7 @@ async function main(){
 
  assert.equal(element("companyCreateDownload").hidden,true);
  await element("companyCreateGenerate").listeners.click();
- assert.match(element("companyCreateStatus").textContent,/Company pronta:/);
+ assert.match(element("companyCreateStatus").textContent,/Company integral pronta:/);
  assert.equal(element("companyCreateDownload").hidden,false);
  assert.equal(element("companyCreateDownload").disabled,false);
  const output=await JSZip.loadAsync(generatedBytes);
