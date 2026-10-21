@@ -1,3 +1,18 @@
+## V2.2 — Logistica realista da Grade Baixa
+
+A tela do Mercado de Cargas revelou falsas origens para bobinas e cimento.
+Agora o gerador separa rigorosamente os papeis de produtores e consumidores.
+
+- **Bobinas de aço (carga9)**: somente siderurgicas identificadas (como Gerdau/Cofer) podem expedir. Fiat e outras montadoras podem receber insumos, mas nao sao produtoras de bobinas. Fabricantes de equipamentos so recebem bobinas se a DEF original comprovar a entrada. Obras genericas nao recebem bobinas sem justificativa.
+- **Cimento (carga6, 10, 11)**: sai de cimenteiras e revendas com historico de venda; fabricas de pre-moldados, como Carmoprem, recebem cimento para fabricar outros produtos, mas nao sao cimenteiras.
+- **Granito (carga14, 15)**: origens em pedreiras e marmorarias identificadas, com destino coerente em beneficiamento, revenda ou obra.
+- **Classificacao segura**: uma empresa nao vira siderurgica so porque o arquivo OUT original tem bobinas. Diferenciacao entre produtos como vergalhoes, barras de ferro e bobinas.
+- **Auditoria adicional**: gerados MAPA_rotas_justificadas.csv e o campo rejeicoes_grade_baixa nos JSON. A planilha inclui o setor da empresa, origem/destino, cargo e motivo da atribuicao.
+
+Regere as tres Companies com o V2.2. Desative os SCS antigos que apresentam rotas de FIAT/MC Equipamentos expedindo bobinas ou Carmoprem expedindo cimento; nao basta substituir o executavel. Os testes automatizados sao sinteticos e nao certificam todas as empresas reais; audite os arquivos produzidos e teste no ETS2.
+
+---
+
 ## V2.1 — ZIP Eldorado reconhecido
 
 O diagnostico original confirmou 14.758 arquivos SII, incluindo 13.892 entradas IN/OUT com pastas de empresas diretamente na raiz (ex.: ambev/out/bebidas.sii, alc_cle/editor/clementina.sii). O leitor agora converte automaticamente para def/company/<empresa>/<in|out|editor>/<arquivo>.sii e preserva os editores byte a byte. Nao altere o ZIP original. Testes de volume usando dados sinteticos reproduzem as contagens do mapa. Nenhum arquivo privado do mapa foi publicado neste repositorio. O mercado dentro do ETS2 ainda exige validacao real com reboque proprio, perfil e carroceria.
