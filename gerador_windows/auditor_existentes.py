@@ -292,6 +292,24 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                                  ",".join(before_fields),",".join(after_fields),
                                  "SIM" if not before_fields else "NAO",
                                  "SIM" if raw!=changed[path] else "NAO"])
+        # Uma linha por CADA empresa conhecida no mapa, inclusive sem carga:
+        # mostra as instancias editor que foram encontradas na DEF (nao
+        # equivale a validar o prefab da cidade dentro do jogo).
+        with (out/("EMPRESAS_COMPLETAS_"+name.upper()+".csv")).open(
+                "w",newline="",encoding="utf-8-sig") as fp:
+            writer=csv.writer(fp,delimiter=";")
+            writer.writerow(["empresa","setor","classificacao_por_nome_ou_evidencia",
+                             "instancias_editor_na_def","arquivos_editor_na_def",
+                             "in_atuais","out_atuais","total_permissoes"])
+            for company,c in sorted(baseline.items()):
+                ins=sorted(final_active[company]["in"],key=lambda x:int(x[5:]))
+                outs=sorted(final_active[company]["out"],key=lambda x:int(x[5:]))
+                editor_names=sorted(c.editor_files)
+                writer.writerow([
+                    company,c.role,
+                    "EXPLICITA" if c.explicit_role else "INFERIDA_OU_DESCONHECIDA",
+                    len(editor_names),",".join(x.rsplit("/",1)[-1] for x in editor_names),
+                    ",".join(ins),",".join(outs),len(ins)+len(outs)])
         with (out/("COBERTURA_"+name.upper()+"_23.csv")).open("w",newline="",
                                                           encoding="utf-8-sig") as fp:
             writer=csv.writer(fp,delimiter=";")
