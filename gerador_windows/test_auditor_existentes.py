@@ -100,6 +100,36 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertLess(report["rotas_completas_depois"],23)
         self.assertEqual(report["status"],"REVISÃO_MANUAL_NECESSÁRIA")
 
+    def test_analogous_transport_safety_applies_to_minas_and_rbr(self):
+        for map_name in ("Minas_Gerais","RBR"):
+            with self.subTest(map=map_name):
+                out=self.root/("audit_"+map_name)
+                result=audit.run(g,{map_name:{"existing":self.existing,
+                                             "map_def":self.baseline}},out)[0]
+                with zipfile.ZipFile(out/result["arquivo_corrigido"]) as z:
+                    self.assertIn(b'cargo: ""',
+                                  z.read("def/company/brasilog/out/carga7.sii"))
+                    self.assertIn(b'cargo: ""',
+                                  z.read("def/company/eldorado_bananas/in/carga7.sii"))
+                    self.assertIn(b'cargo: ""',
+                                  z.read("def/company/fiat/out/carga9.sii"))
+                self.assertEqual(result["mapa"],map_name)
+
+    def test_exhaustive_reports_include_empty_and_editor_company_files(self):
+        self.invoke(out=self.root/"complete_inventory")
+        folder=self.root/"complete_inventory"
+        import csv
+        with (folder/"INVENTARIO_COMPLETO_ELDORADO.csv").open(
+             encoding="utf-8-sig",newline="") as fp:
+            rows=list(csv.DictReader(fp,delimiter=";"))
+        self.assertEqual(len(rows),10)  # todos os IN/OUT ja existentes no SCS
+        with (folder/"EMPRESAS_COMPLETAS_ELDORADO.csv").open(
+             encoding="utf-8-sig",newline="") as fp:
+            all_rows=list(csv.DictReader(fp,delimiter=";"))
+        self.assertEqual(len(all_rows),len(self.fixture.company_raw) if False else 11)
+        # A empresa de banana aparece na DEF mesmo sem receber batatas validas.
+        self.assertIn("eldorado_bananas",{row["empresa"] for row in all_rows})
+
     def test_audit_only_creates_ledger_not_scs(self):
         out=self.root/"dry_run"
         self.invoke(mode="auditar",out=out)
