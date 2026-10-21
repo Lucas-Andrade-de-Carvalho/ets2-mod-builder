@@ -79,7 +79,14 @@ def safe_reason(g, c,cat,direction,map_name):
     return why
 
 def explicit_confidence(c):
-    return c.explicit_role and c.role not in {"desconhecida","hub_generico","atacadista","hortifruti"}
+    if not c.explicit_role:return False
+    if c.role in {"desconhecida","hub_generico","atacadista"}:return False
+    # CEASA e hortifrutis explicitamente identificados possuem funcao real
+    # de compra e revenda; nao confundir com empresa generica de transporte.
+    if c.role=="hortifruti":
+        return bool(re.search(r"ceasa|hortif|sacolao|fruit_warehouse|produce_market",
+                              c.name,re.I))
+    return True
 
 def can_add(g,c,cat,direction,map_name):
     why=safe_reason(g,c,cat,direction,map_name)
