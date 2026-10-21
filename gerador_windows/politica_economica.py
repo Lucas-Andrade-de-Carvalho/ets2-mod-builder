@@ -268,7 +268,9 @@ def coverage(companies,manifest,decision_fn=None):
                                               "evidencia":d.evidence,"confianca":d.certainty}
                 if d.allowed:container.add(cargo)
         locations=city_references(c)
-        company_rows.append({"empresa":c.name,"atividade":ident.role,
+        company_rows.append({"empresa":c.name,
+            "nome_exibido_def":getattr(c,"display_name",""),
+            "atividade":ident.role,
             "confianca_classificacao":ident.certainty,"justificativa":ident.evidence,
             "instancias_editor":len(locations),"in_esperados":sorted(ins),
             "out_esperados":sorted(outs),"decisoes":reasons})
