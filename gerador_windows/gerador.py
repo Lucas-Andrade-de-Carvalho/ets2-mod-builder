@@ -510,6 +510,14 @@ def write_report(outdir,name,result):
         writer.writerow(["empresa","setor","in_novos","out_novos","in_originais","out_originais"])
         for row in result["empresas"]:
             writer.writerow([row[k] for k in ("empresa","setor","in_novos","out_novos","in_originais","out_originais")])
+    with open(outdir/(name+"_rotas_justificadas.csv"),"w",encoding="utf-8-sig",newline="") as f:
+        w=csv.writer(f,delimiter=";")
+        w.writerow(["empresa","setor","tipo_de_classificacao","direcao","carga",
+                    "categoria","justificativa_economica"])
+        for row in result["evidencias"]:
+            w.writerow([row["empresa"],row["setor"],
+                        "nome_ou_marca" if row["classificacao_explicita"] else "inferida_por_historico",
+                        row["direcao"],row["carga"],row["categoria"],row["justificativa"]])
 
 def generate(inputs,output,log=lambda s:None, fix_skills=True):
     outdir=Path(output);outdir.mkdir(parents=True,exist_ok=True)
@@ -616,7 +624,9 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                     for direction,results_list in (("out",outs),("in",ins)):
                         why=permits(c,category,direction)
                         if why:results_list.append(c.name)
-                        if why:evidence.append({"empresa":c.name,"direcao":direction,"carga":id,"categoria":category,"justificativa":why})
+                        if why:evidence.append({"empresa":c.name,"setor":c.role,
+                            "classificacao_explicita":c.explicit_role,"direcao":direction,
+                            "carga":id,"categoria":category,"justificativa":why})
                 bycargo[id]={"nome":title,"origens":len(outs),"destinos":len(ins),
                              "origens_lista":outs,"destinos_lista":ins}
                 # Nao inventar rotas para completar 23/23.
@@ -671,7 +681,21 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 rows.append({"empresa":cid,"setor":c.role,"in_novos":",".join(sorted(selected["in"])),
                              "out_novos":",".join(sorted(selected["out"])),"in_originais":",".join(sorted(c.old_in)),
                              "out_originais":",".join(sorted(c.old_out))})
+            # Sinalizar comportamentos anormais existentes na DEF original.
+            # Um OUT original invalido NAO pode justificar nova expedicao.
+            grade_baixa_rejeitados=[]
+            for company in companies.values():
+                observed=product_types(company.old_out)
+                for cat in ("bobina","cimento","granito","tijolo"):
+                    if cat not in observed:continue
+                    if permits(company,cat,"out") is None:
+                        grade_baixa_rejeitados.append({
+                            "empresa":company.name,"categoria":cat,
+                            "papel_detectado":company.role,
+                            "motivo":"OUT antigo incompativel com o setor; nao replicado"
+                        })
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "rejeicoes_grade_baixa":grade_baixa_rejeitados,
                   "total_empresas":len(companies),"empresas_atendidas":len(work),
                   "arquivos_inout_originais":count,
                   "arquivos_editor_preservados":sum(len(c.editor_files) for c in companies.values()),
