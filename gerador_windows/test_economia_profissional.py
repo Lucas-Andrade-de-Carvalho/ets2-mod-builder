@@ -40,6 +40,8 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertEqual(policy.cargo_categories(["beverages"]),set())
         self.assertEqual(policy.cargo_categories(["potatoes"]),{"batata"})
         self.assertEqual(policy.cargo_categories(["bananas"]),set())
+        self.assertEqual(policy.cargo_categories(["cott_seed"]),set())
+        self.assertEqual(policy.cargo_categories(["marble"]),set())
         self.assertEqual(policy.cargo_categories(["steel_coils"]),{"bobina"})
         self.assertEqual(policy.classify(g.Company("mystery")).certainty,"indeterminada")
         mystery=g.Company("mystery",old_out={"steel_coils"})
