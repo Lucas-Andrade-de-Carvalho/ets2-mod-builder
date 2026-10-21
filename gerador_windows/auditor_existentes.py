@@ -117,6 +117,30 @@ def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
         return None
     return why
 
+def proven_incompatibility(company, category, direction, spec=None):
+    """So exclui automaticamente contradicoes claras, nao mera falta de prova.
+
+    Um setor reconhecido nao demonstra que todas as suas outras cargas
+    sejam invalidas. Fazendas podem ter culturas secundarias; pecuaristas
+    podem plantar; cooperativas armazenam e revendem varias mercadorias.
+    """
+    role=company.role
+    if spec is not None:
+        if role in spec.get("forbidden_roles",()):
+            return "Setor explicitamente proibido no cadastro desta mercadoria"
+        return None
+    if role=="transportadora":
+        return "Transportadora nao e unidade de producao, compra ou revenda comprovada"
+    if role=="bananal" and (direction!="in" or category!="adubo"):
+        return "Bananal nao fornece outras culturas nem recebe genericamente estes produtos"
+    if direction=="out" and (
+        (role in {"automotiva_fabrica","maquinas"} and category=="bobina") or
+        (role=="premoldados" and category=="cimento")
+    ):
+        return "Fabricante identificado nao produz a materia-prima correspondente"
+    return None
+
+
 def digest(value):
     return hashlib.sha256(value).hexdigest()
 
@@ -253,18 +277,26 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                         "confianca":"alta" if explicit_confidence(comp) else "media",
                         "motivo":reason})
                     states[company][direction].add(cargo)
-                elif explicit_confidence(comp):
-                    changed[path]=disable_id(g,changed[path],cargo)
-                    decisions.append({"acao":"REMOVER","empresa":company,"direcao":direction,
-                        "carga":cargo,"arquivo":path,"setor":comp.role,"confianca":"alta",
-                        "motivo":"Empresa identificada como "+comp.role+
-                                 "; carga/direcao incompatível com politica economica"})
                 else:
-                    decisions.append({"acao":"REVISAR","empresa":company,"direcao":direction,
-                        "carga":cargo,"arquivo":path,"setor":comp.role,
-                        "confianca":"baixa",
-                        "motivo":"Empresa sem classificacao conclusiva; nao remover automaticamente"})
-                    states[company][direction].add(cargo)
+                    prohibition=(proven_incompatibility(
+                        comp,cat,direction,extras.get(cargo))
+                        if explicit_confidence(comp) else None)
+                    if prohibition:
+                        changed[path]=disable_id(g,changed[path],cargo)
+                        decisions.append({"acao":"REMOVER","empresa":company,
+                            "direcao":direction,"carga":cargo,"arquivo":path,
+                            "setor":comp.role,"confianca":"alta","motivo":prohibition})
+                    else:
+                        decisions.append({"acao":"REVISAR","empresa":company,
+                            "direcao":direction,"carga":cargo,"arquivo":path,
+                            "setor":comp.role,
+                            "confianca":"media" if explicit_confidence(comp) else "baixa",
+                            "motivo":("Atividade conhecida, mas sem prova suficiente "
+                                     "para manter ou remover automaticamente"
+                                     if explicit_confidence(comp) else
+                                     "Empresa sem classificacao conclusiva; "
+                                     "nao remover automaticamente")})
+                        states[company][direction].add(cargo)
                 count+=1
         # Nao repetir a mesma carga 2x no mesmo IN/OUT.
         for (company,direction,cargo),paths in seen.items():
@@ -366,9 +398,37 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         updated=sum(contents.get(p)!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
+        pending_by_company=defaultdict(list)
+        for item in manual:
+            pending_by_company[item["empresa"]].append(item)
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
         summary={"versao":"3.0.0" if professional else "2.5.0",
             "economia_profissional":professional,
+            "alteracoes_sao_simulacao":mode=="auditar",
+            "nenhum_scs_gerado":mode=="auditar",
+            "diagnostico_pendencias":{
+                "total_decisoes_revisar":len(manual),
+                "empresas_com_revisoes":len(pending_by_company),
+                "por_motivo":dict(sorted(
+                    (m,sum(x["motivo"]==m for x in manual))
+                    for m in {x["motivo"] for x in manual})),
+                "por_atividade":dict(sorted(
+                    (role,sum(x["setor"]==role for x in manual))
+                    for role in {x["setor"] for x in manual})),
+                "empresas_nao_classificadas_com_revisao":len({
+                    d["empresa"] for d in manual if d["setor"]=="desconhecida"}),
+            },
+            "politica_cargas_adicionais":{
+                cid:{"categoria":spec["categoria"],
+                     "aliases":spec["aliases"],
+                     "out_roles":spec["out_roles"],
+                     "in_roles":spec["in_roles"],
+                     "out_evidence":spec["out_evidence"],
+                     "in_evidence":spec["in_evidence"],
+                     "out_companies":spec["out_companies"],
+                     "in_companies":spec["in_companies"],
+                     "forbidden_roles":spec["forbidden_roles"]}
+                for cid,spec in extras.items()},
             "total_cargas_catalogo":len(manifest),
             "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
             "validacao_carga_carroceria":trailer_record,
@@ -384,6 +444,10 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "arquivos_adicionados":added,"arquivos_modificados":updated,
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
             "rotas_antes":before,"rotas_depois":after,
+            "nota_rotas_depois":("PROJECAO de como ficaria se corrigisse; "
+                                "nenhuma permissao alterada no arquivo original"
+                                if mode=="auditar" else
+                                "Resultado exportado para novo SCS auditado"),
             "rotas_completas_depois":sum(x["pares_distintos"]>0 for x in after.values()),
             "decisoes":decisions,
             "status":"REVISÃO_MANUAL_NECESSÁRIA" if manual or forgotten_companies or any(
@@ -391,6 +455,24 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 (territory and territory["empresas_sem_identificacao"]) else
                 "AUDITORIA_ESTRUTURAL_CONCLUÍDA",
             "aviso":"Nao homologado em ETS2; classificacao sem nome/evidencia conclusivos requer revisao humana."}
+        # Indica quais empresas realmente precisam ser classificadas primeiro.
+        with (out/("PENDENCIAS_CLASSIFICACAO_"+name.upper()+".csv")).open(
+                "w",newline="",encoding="utf-8-sig") as fp:
+            writer=csv.writer(fp,delimiter=";")
+            writer.writerow(["empresa","setor_atual","revisoes","cargas_ativas_in",
+                             "cargas_ativas_out","instancias_editor",
+                             "prefab_confirmado","acao_recomendada"])
+            for cid,pending in sorted(pending_by_company.items(),
+                                      key=lambda kv:(-len(kv[1]),kv[0])):
+                comp=baseline.get(cid)
+                ins=sorted({x["carga"] for x in pending
+                            if x["direcao"]=="in"},key=catalogo_cargas.sort_key)
+                outs=sorted({x["carga"] for x in pending
+                             if x["direcao"]=="out"},key=catalogo_cargas.sort_key)
+                writer.writerow([cid,comp.role if comp else "NAO_PRESENTE_NA_DEF",
+                    len(pending),",".join(ins),",".join(outs),
+                    len(comp.editor_files) if comp else 0,"NAO",
+                    "Confirmar atividade e cargas na DEF original antes de aprovar"])
         outbase=out/("AUDITORIA_"+name.upper())
         outbase.with_suffix(".json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),
                                                  encoding="utf-8")
