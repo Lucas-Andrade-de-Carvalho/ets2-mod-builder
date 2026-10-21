@@ -412,6 +412,25 @@ class Regression(unittest.TestCase):
                     self.assertTrue(g.eldorado_permit(c,"adubo","in"))
                     self.assertIsNone(g.eldorado_permit(c,"adubo","out"))
 
+    def test_eldorado_english_company_names_and_banana_supermarket(self):
+        mapping={
+            "big_sawmill":"madeireira",
+            "green_feedmill":"fabrica_racao",
+            "food_processing":"alimentos",
+            "construction_site":"obras",
+            "steel_mill":"siderurgica",
+            "supermarket_banana":"supermercado",
+            "potato_farm":"fazenda_batata",
+            "orange_farm":"fazenda_laranja",
+            "banana_plantation":"bananal",
+        }
+        for name,role in mapping.items():
+            with self.subTest(company=name):
+                c=g.Company(name)
+                g.classify_company(c)
+                g.eldorado_classify(c)
+                self.assertEqual(c.role,role)
+
     def test_eldorado_only_regeneration_preserves_minas_and_rbr_files(self):
         # Saida inicial representa as Companies ja aprovadas anteriormente.
         folder=self.root/"preserve_old_companies"
