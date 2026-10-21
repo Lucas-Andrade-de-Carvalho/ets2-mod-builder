@@ -887,9 +887,16 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
     records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
+    already_defined=set()
     for cid,spec in extras.items():
         if cid in records:
-            raise ValueError("Carga adicional colide com cargo_data original: "+cid)
+            original_sha=hashlib.sha256(records[cid]["raw"]).hexdigest()
+            if original_sha not in {spec["sha256"],spec.get("sha256_origem")}:
+                raise ValueError("Definicoes conflitantes do cargo original e adicional: "+cid)
+            if set(records[cid]["body"])!=set(spec["body_types"]):
+                raise ValueError("body_types divergentes da fonte importada: "+cid)
+            already_defined.add(cid)
+            continue
         records[cid]={"source":"CATALOGO", "path":spec["cargo_path"],
             "raw":catalogo_cargas.decode_definition(spec), "body":set(spec["body_types"]),
             "valuable":False, "adr":False}
@@ -1111,6 +1118,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                         read_sii(record["raw"])).encode("utf-8")
             # Definicoes importadas copiadas byte a byte, sem sobrescrever originais.
             for cid,spec in extras.items():
+                if cid in already_defined:
+                    continue  # cargo_data ja esta no MOD/DEF original e deve ser preservado
                 cargo_path=spec["cargo_path"]
                 if cargo_path in output_files:
                     raise ValueError("Colisao na definicao da carga: "+cargo_path)
