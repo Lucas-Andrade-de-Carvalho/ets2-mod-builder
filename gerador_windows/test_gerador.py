@@ -150,6 +150,102 @@ class Regression(unittest.TestCase):
         self.assertTrue(any("companys" in p for p in detail["amostra_geral"]))
         self.assertTrue((self.root/"failure_out"/"FALHA_MAPAS_NAO_GERAR.txt").exists())
 
+    def test_eldorado_actual_root_company_layout(self):
+        """Teste baseado nos nomes de arquivos REAIS do diagnostico Eldorado.
+
+        O ZIP vem com ambev/out/bebidas.sii e NAO def/company/.
+        Nao publicamos arquivos do usuario; conteudos sinteticos.
+        """
+        src=self.root/"eldorado.zip"
+        raw={
+            "alc_cle/editor/clementina.sii":"SiiNunit\n{}\n",
+            "alc_cle/in/tanquevazio.sii":old("tanquevazio"),
+            "alc_cle/out/alcool.sii":old("alcool"),
+            "alccana/editor/penapolis.sii":"SiiNunit\n{}\n",
+            "alccana/in/tanquevazio.sii":old("tanquevazio"),
+            "alccana/out/alcool.sii":old("alcool"),
+            "ambev/editor/almirante.sii":"SiiNunit\n{}\n",
+            "ambev/in/sugar.sii":old("sugar"),
+            "ambev/out/bebidas.sii":old("bebidas"),
+            "ambev/out/beverages.sii":old("beverages"),
+            "ancapi/out/cement.sii":old("cement"),
+            "ancapi/out/apples.sii":old("apples"),
+            "trade2/in/cement.sii":old("cement"),
+            "trade2/out/cement.sii":old("cement")
+        }
+        zip_write(src,raw)
+        self.assertEqual(g.canonical_path("ambev/out/bebidas.sii"),
+                         "def/company/ambev/out/bebidas.sii")
+        self.assertEqual(g.canonical_path("alc_cle/editor/clementina.sii"),
+                         "def/company/alc_cle/editor/clementina.sii")
+        self.assertEqual(g.canonical_path("trade2/in/cement.sii"),
+                         "def/company/trade2/in/cement.sii")
+        self.assertIsNone(g.canonical_path("random/docs/readme.txt"))
+        diag=g.describe_archive(src)
+        self.assertEqual(diag["layout_detectado"],"company_direto_na_raiz")
+        self.assertEqual(diag["company_na_raiz"],14)
+        self.assertEqual(diag["caminhos_reconhecidos"],14)
+        self.assertEqual(diag["empresas_raiz_identificadas"],5)
+        companies,count=g.extract_map(src)
+        self.assertEqual(len(companies),5)
+        self.assertEqual(count,11)
+        self.assertEqual(len(companies["ambev"].editor_files),1)
+        self.assertIn("bebidas",companies["ambev"].old_out)
+        self.assertIn("sugar",companies["ambev"].old_in)
+        self.assertEqual(companies["ambev"].role,"cervejaria")
+        result=g.generate(self.inp,self.root/"eldorado_root_result")
+        self.assertEqual(len(result),3)
+        eldorado=next((p for name,p,data in result if name=="Eldorado"),None)
+        self.assertIsNotNone(eldorado)
+        with zipfile.ZipFile(eldorado) as scs:
+            self.assertIsNone(scs.testzip())
+            self.assertIn("def/company/ambev/out/bebidas.sii",scs.namelist())
+            self.assertIn("def/company/ambev/out/carga12.sii",scs.namelist())
+            self.assertIn("def/company/alc_cle/in/tanquevazio.sii",scs.namelist())
+            self.assertEqual(scs.read("def/company/ambev/editor/almirante.sii"),
+                             raw["ambev/editor/almirante.sii"].encode("utf-8"))
+            self.assertIn('cargo: ""',scs.read(
+                "def/company/ambev/out/bebidas.sii").decode("utf-8"))
+
+    def test_eldorado_large_flat_archive_14758_files(self):
+        """Stress test com as contagens do diagnostico (dados sinteticos)."""
+        archive=self.root/"eldorado.zip"
+        inout_total=13892
+        editor_total=866
+        with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_STORED) as z:
+            for i in range(inout_total):
+                cid=f"eld_company_{i//70:03d}"
+                direction="in" if i%2 else "out"
+                unit=f"item_{i:05d}"
+                z.writestr(f"{cid}/{direction}/{unit}.sii",old(unit))
+            for i in range(editor_total):
+                cid=f"eld_company_{i%199:03d}"
+                z.writestr(f"{cid}/editor/city_{i:04d}.sii",
+                           "SiiNunit\n{}\n")
+        diag=g.describe_archive(archive)
+        self.assertEqual(diag["total_arquivos"],14758)
+        self.assertEqual(diag["caminhos_in_out"],13892)
+        self.assertEqual(diag["caminhos_reconhecidos"],14758)
+        self.assertEqual(diag["company_na_raiz"],14758)
+        self.assertEqual(diag["layout_detectado"],"company_direto_na_raiz")
+        companies,count=g.extract_map(archive)
+        self.assertEqual(count,13892)
+        self.assertEqual(len(companies),199)
+        self.assertEqual(sum(len(c.editor_files) for c in companies.values()),866)
+        out=g.generate(self.inp,self.root/"large_out")
+        self.assertEqual(len(out),3)
+        eldorado=next((data for name,p,data in out if name=="Eldorado"))
+        self.assertEqual(eldorado["arquivos_inout_originais"],13892)
+        self.assertEqual(eldorado["arquivos_editor_preservados"],866)
+
+    def test_eldorado_root_collision_cannot_be_silently_overwritten(self):
+        src=self.root/"eldorado.zip"
+        zip_write(src,{
+            "ambev/out/bebidas.sii":old("bebidas"),
+            "def/company/ambev/out/bebidas.sii":old("otherbeer")})
+        with self.assertRaisesRegex(ValueError,"Colisao"):
+            g.extract_map(src)
+
     def test_diagnostic_supports_def_company_and_bare_root(self):
         diag=g.describe_archive(self.root/"minas.zip")
         self.assertGreater(diag["caminhos_in_out"],0)

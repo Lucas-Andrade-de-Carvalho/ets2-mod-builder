@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -123,6 +123,16 @@ def canonical_path(raw):
     if m:return m.group(1).lower()
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
+    # Eldorado: Company ZIP nao contem "def/company"; cada empresa
+    # esta diretamente na raiz, por exemplo:
+    # ambev/out/bebidas.sii, alc_cle/in/tanquevazio.sii,
+    # ale/editor/cerroazul.sii. Converter para o caminho CANONICO
+    # esperado no jogo, sem modificar ou reempacotar a entrada.
+    m=re.fullmatch(r'([a-z0-9_]+)/(in|out|editor)/([a-z0-9_.-]+\.(?:sii|sui))',
+                   path,re.I)
+    if m:
+        name,direction,filename=m.groups()
+        return f"def/company/{name}/{direction}/{filename}".lower()
     # Company permanente avulsa (empresa.sii) nos ZIPs de mapa.
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+\.(?:sii|sui))$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
@@ -194,6 +204,13 @@ def describe_archive(path, limit=50):
     canonical=[n for n in normalized if canonical_path(n)]
     top=collections.Counter(n.split("/")[0] for n in normalized)
     extensions=collections.Counter(Path(n).suffix.lower() for n in normalized)
+    root_company=[n for n in normalized
+        if re.fullmatch(r'[a-z0-9_]+/(?:in|out|editor)/[a-z0-9_.-]+\.(?:sii|sui)',
+                        n,re.I)]
+    prefixed_company=[n for n in normalized if re.search(
+        r'(?:^|/)def/company/[a-z0-9_]+/(?:in|out|editor)/[^/]+\.(?:sii|sui)$',
+        n,re.I)]
+    company_names=sorted({n.split("/")[0].lower() for n in root_company})
     return {
         "arquivo":p.name,"total_arquivos":len(names),
         "tamanho_total_declarado":sum(sizes.values()),
@@ -201,6 +218,13 @@ def describe_archive(path, limit=50):
         "caminhos_reconhecidos":len(canonical),
         "arquivos_parecidos_com_company":len(company_like),
         "caminhos_in_out":len(inout),"arquivos_permanentes_possiveis":len(legacy),
+        "company_na_raiz":len(root_company),
+        "company_com_prefixo_def":len(prefixed_company),
+        "empresas_raiz_identificadas":len(company_names),
+        "amostra_empresas_raiz":company_names[:limit],
+        "layout_detectado":("company_direto_na_raiz" if root_company and
+                           len(root_company)>=len(prefixed_company) else
+                           "def_company" if prefixed_company else "desconhecido"),
         "amostra_company":company_like[:limit],
         "amostra_in_out":inout[:limit],
         "amostra_geral":normalized[:limit],
@@ -220,6 +244,7 @@ def export_diagnostic(path, dest, issue=""):
 class Company:
     name:str
     files:dict=field(default_factory=dict)
+    editor_files:dict=field(default_factory=dict)
     old_in:set=field(default_factory=set)
     old_out:set=field(default_factory=set)
     role:str="desconhecida"
@@ -269,6 +294,9 @@ def extract_map(path):
             old_file_count+=1;c.files[p]=raw
             ct=cargo_tokens(read_sii(raw))
             (c.old_in if dir=="in" else c.old_out).update(ct)
+        elif dir=="editor" and filename.lower().endswith((".sii",".sui")):
+            # Arquivo de instancia/cidade preservado byte a byte.
+            c.editor_files[p]=raw
         elif dir is None and filename.endswith(".sii"):
             if re.search(r'(?m)^\s*(in_cargo|out_cargo)(?:\[\d*\])?\s*:',read_sii(raw)):
                 legacy.append(p)
@@ -563,6 +591,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             output_files={}
             for c in companies.values():
+                for p,raw in c.editor_files.items():
+                    output_files[p]=raw
                 for p,raw in c.files.items():
                     output_files[p]=neutralize(raw,p)
             for cid,dirs in work.items():
@@ -592,6 +622,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 paths=set(z.namelist())
                 if not all(p in paths for c in companies.values() for p in c.files):
                     raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
+                for c in companies.values():
+                    for p,raw in c.editor_files.items():
+                        if p not in paths or z.read(p)!=raw:
+                            raise ValueError("Arquivo editor original nao foi preservado: "+p)
                 for id,info in bycargo.items():
                     for company in info["origens_lista"]:
                         if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
@@ -606,6 +640,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
                   "total_empresas":len(companies),"empresas_atendidas":len(work),
                   "arquivos_inout_originais":count,
+                  "arquivos_editor_preservados":sum(len(c.editor_files) for c in companies.values()),
                   "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
                   "cadeias":bycargo,"evidencias":evidence,
                   "fontes_sha256":provenance+[{"arquivo":Path(path).name,"papel":"MAPA "+name,
@@ -640,7 +675,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.0")
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.1")
     root.geometry("1010x740")
     root.minsize(860,650)
     style=ttk.Style(root)
@@ -649,7 +684,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.0  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
+    ttk.Label(frame,text="v2.1  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
