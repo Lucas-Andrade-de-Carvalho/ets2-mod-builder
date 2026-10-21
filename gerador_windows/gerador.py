@@ -1047,8 +1047,13 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             if require_complete and not coverage["pronto_para_gerar"]:
                 report=write_coverage_report(publish_dir,coverage)
                 gaps=[c["id"]+" ("+c["lacuna"]+")" for c in coverage["cargas"] if not c["rota_completa"]]
+                unknown=coverage.get("empresas_pendentes_com_mercadoria",[])
+                gaps.extend("EMPRESA PENDENTE: "+item["empresa"]+
+                    " (mercadorias: "+",".join(item["familias_originais"])+")"
+                    for item in unknown)
                 (publish_dir/(name+"_COBERTURA_INCOMPLETA.txt")).write_text(
-                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas.\n"+
+                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas; "+
+                    str(len(unknown))+" empresas com mercadorias e atividade indefinida.\n"+
                     "Nao gerar nem instalar uma Company incompleta em cliente.\n"+
                     "\n".join(gaps)+"\nConsulte "+report.name+" e respectivo CSV.\n"+
                     "Nao inventar empresas nem cargas sem evidencia na DEF.\n",
