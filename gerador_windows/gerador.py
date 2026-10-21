@@ -804,7 +804,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             "\n".join(errors)+"\n\nAVISOS\n"+"\n".join(warnings),encoding="utf-8")
         raise ValueError("Diagnostico tecnico bloqueou geracao:\n- "+"\n- ".join(errors[:12]))
     log("Validacao de cargo_data e carroceria de reboque proprio concluida; avisos no relatorio.")
-    # FASE 1: preflight dos 3 mapas. Nenhuma Company e publicada se um mapa falhar.
+    # FASE 1: preflight dos mapas SELECIONADOS. Nada publica se algum falhar.
     checked_maps={}
     map_failures={}
     for name,path in inputs["maps"].items():
@@ -831,7 +831,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                          "Confira FALHA_MAPAS_NAO_GERAR.txt e envie o "+
                          "DIAGNOSTICO_ARQUIVO_*.json do mapa com erro.")
     results=[]
-    # FASE 2: construcao inteira em pasta temporaria, invisivel para cliente.
+    # FASE 2: construir apenas mapas selecionados em staging.
     publish_dir=outdir
     staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
     outdir=Path(staging.name)
@@ -951,7 +951,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         for generated in sorted(outdir.iterdir()):
             if generated.is_file():
                 os.replace(generated,publish_dir/generated.name)
-        log("PUBLICACAO CONCLUIDA: 3 mapas, relatórios e SCS verificados.")
+        log("PUBLICACAO CONCLUIDA: "+str(len(results))+
+            " mapa(s) selecionado(s), relatorios e SCS verificados.")
     finally:
         staging.cleanup()
     return results
@@ -960,7 +961,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.2")
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.3")
     root.geometry("1010x740")
     root.minsize(860,650)
     style=ttk.Style(root)
@@ -969,7 +970,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.2  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
+    ttk.Label(frame,text="v2.3  ·  Eldorado exclusivo  ·  Ingles traduzido  ·  Originais preservados",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
@@ -1005,7 +1006,14 @@ def run_gui():
             value=saved.get(k,"")
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
-    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(8,4))
+    scope_var=tk.StringVar(value="eldorado")
+    scope_row=ttk.LabelFrame(frame,text="Quais Companies deseja atualizar?",padding=8)
+    scope_row.pack(fill="x",pady=(8,4))
+    ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
+                    variable=scope_var,value="eldorado").pack(anchor="w")
+    ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
+                    variable=scope_var,value="todos").pack(anchor="w")
+    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
                     variable=fix_var).pack(anchor="w")
@@ -1032,7 +1040,9 @@ def run_gui():
         except OSError as exc:
             append_log("Aviso: nao consegui salvar os caminhos: "+str(exc))
     def check_paths(include_librelato):
-        required=[k for k,_ in fields if k!="output"]
+        required=(
+            ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
+            else [k for k,_ in fields if k!="output"])
         if not include_librelato:required=["minas","eldorado","rbr"]
         needed=required+["output"]
         missing=[k for k in needed if not widgets[k].get().strip()]
@@ -1045,16 +1055,21 @@ def run_gui():
             c.configure(state="disabled" if value else "normal")
         if value:progress.start(12)
         else:progress.stop()
-    def worker_generate(snapshot,fix):
+    def worker_generate(snapshot,fix,scope):
         try:
             txt=Path(snapshot["txt"]).read_text(encoding="utf-8-sig")
             for n in MANIFEST:
                 if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",txt,re.I):
                     raise ValueError("TXT incompleto: falta carga"+str(n))
+            if scope=="eldorado":
+                # MG e RBR nao sao lidos, regenerados nem sobrescritos.
+                maps={"Eldorado":snapshot["eldorado"]}
+            else:
+                maps={"Minas_Gerais":snapshot["minas"],
+                      "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
             inp={"mod":snapshot["mod"],"def1":snapshot["def1"],
-                 "def2":snapshot["def2"],
-                 "maps":{"Minas_Gerais":snapshot["minas"],
-                         "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}}
+                 "def2":snapshot["def2"],"maps":maps}
+            work_queue.put(("log","Escopo escolhido: "+", ".join(maps)))
             items=generate(inp,snapshot["output"],
                            log=lambda msg:work_queue.put(("log",msg)),fix_skills=fix)
             work_queue.put(("success","Gerados "+str(len(items))+
@@ -1080,7 +1095,7 @@ def run_gui():
             change_busy(True)
             status.set("Analisando arquivos; aguarde...")
             fun=worker_generate if action=="generate" else worker_diagnostic
-            args=(snapshot,fix_var.get()) if action=="generate" else (snapshot,)
+            args=(snapshot,fix_var.get(),scope_var.get()) if action=="generate" else (snapshot,)
             threading.Thread(target=fun,args=args,daemon=True).start()
         except Exception as exc:
             messagebox.showerror("Campos incompletos",str(exc))
@@ -1104,7 +1119,7 @@ def run_gui():
     btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR OS 3 MAPAS",
                         command=lambda:run("diagnostic"),style="Main.TButton")
     btn_diag.pack(side="left",padx=(0,8))
-    btn_generate=ttk.Button(actions,text="2. VALIDAR E GERAR 3 COMPANIES",
+    btn_generate=ttk.Button(actions,text="2. GERAR COMPANY(S) SELECIONADA(S)",
                             command=lambda:run("generate"),style="Main.TButton")
     btn_generate.pack(side="left",padx=6)
     def open_folder():
@@ -1120,18 +1135,23 @@ def run_gui():
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--cli",action="store_true")
+    parser.add_argument("--only-eldorado",action="store_true",
+                        help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
     for x in ("mod","def1","def2","txt","minas","eldorado","rbr","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
-    if any(getattr(args,x) is None for x in ("mod","def1","def2","txt","minas","eldorado","rbr","output")):
-        parser.error("Em modo --cli, informe os 8 caminhos.")
+    required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
+        "mod","def1","def2","txt","minas","eldorado","rbr","output")
+    if any(getattr(args,x) is None for x in required):
+        parser.error("Em modo --cli, informe: "+", ".join(required))
     original=Path(args.txt).read_text(encoding="utf-8-sig")
     for n in MANIFEST:
         if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",original,re.I):
             parser.error(f"TXT incompleto: falta carga{n}")
-    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":
-         {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr}}
+    maps=({"Eldorado":args.eldorado} if args.only_eldorado else
+          {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
+    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps}
     generate(inp,args.output,print)
 
 if __name__=="__main__":
