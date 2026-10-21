@@ -371,6 +371,134 @@ class Regression(unittest.TestCase):
         self.assertTrue((self.root/"grade_baixa_qa"/
                          "Minas_Gerais_rotas_justificadas.csv").is_file())
 
+    def test_eldorado_english_cargo_translation_without_false_equivalence(self):
+        english={
+            "potatoes":"batata","potatoes_b":"batata","orange":"laranja",
+            "bananas":"banana","banana_a":"banana","fertilizer":"adubo",
+            "soybeans":"soja","corn":"milho","sorghum":"sorgo",
+            "rice":"arroz","wheat":"trigo","animal_feed":"racao",
+            "beer":"cerveja","beverages":"bebidas_gerais",
+            "bottle_water":"bebidas_gerais","cement":"cimento",
+            "bricks":"tijolo","granite":"granito","steel_coils":"bobina",
+        }
+        for token,expected in english.items():
+            with self.subTest(token=token):
+                self.assertIn(expected,g.eldorado_translate({token}))
+        self.assertNotIn("batata",g.eldorado_translate({"bananas"}))
+        self.assertNotIn("laranja",g.eldorado_translate({"bananas"}))
+        self.assertNotIn("cerveja",g.eldorado_translate({"beverages"}))
+        self.assertNotIn("batata",g.eldorado_translate({"fruits"}))
+        self.assertNotIn("laranja",g.eldorado_translate({"fruits"}))
+
+    def test_eldorado_transporters_not_goods_factories_and_banana_not_potato(self):
+        tests=[
+            ("brasilog",{"potatoes","oranges"},set(),"transportadora"),
+            ("rasador",{"beer","beverages"},set(),"transportadora"),
+            ("cmm_transportes",{"potatoes"},set(),"transportadora"),
+            ("avant_transportes",{"potatoes"},set(),"transportadora"),
+            ("ttrlog",{"fertilizer"},set(),"transportadora"),
+            ("ttr_log",{"potatoes"},set(),"transportadora"),
+            ("eldorado_bananas",{"bananas"},{"potatoes","fertilizer"},"bananal"),
+        ]
+        for name,outs,ins,expected in tests:
+            with self.subTest(company=name):
+                c=g.Company(name,old_out=outs,old_in=ins)
+                g.classify_company(c)
+                g.eldorado_classify(c)
+                self.assertEqual(c.role,expected)
+                for commodity in ("batata","laranja","cerveja","milho","soja"):
+                    self.assertIsNone(g.eldorado_permit(c,commodity,"out"))
+                    self.assertIsNone(g.eldorado_permit(c,commodity,"in"))
+                if expected=="bananal":
+                    self.assertTrue(g.eldorado_permit(c,"adubo","in"))
+                    self.assertIsNone(g.eldorado_permit(c,"adubo","out"))
+
+    def test_eldorado_english_company_names_and_banana_supermarket(self):
+        mapping={
+            "big_sawmill":"madeireira",
+            "green_feedmill":"fabrica_racao",
+            "food_processing":"alimentos",
+            "construction_site":"obras",
+            "steel_mill":"siderurgica",
+            "supermarket_banana":"supermercado",
+            "potato_farm":"fazenda_batata",
+            "orange_farm":"fazenda_laranja",
+            "banana_plantation":"bananal",
+        }
+        for name,role in mapping.items():
+            with self.subTest(company=name):
+                c=g.Company(name)
+                g.classify_company(c)
+                g.eldorado_classify(c)
+                self.assertEqual(c.role,role)
+
+    def test_eldorado_only_regeneration_preserves_minas_and_rbr_files(self):
+        # Saida inicial representa as Companies ja aprovadas anteriormente.
+        folder=self.root/"preserve_old_companies"
+        folder.mkdir()
+        a=folder/"ETS2_MINAS_GERAIS_COMPANY.scs"
+        b=folder/"ETS2_RBR_COMPANY.scs"
+        a.write_bytes(b"MINAS_ANTIGO_SCS_NAO_MODIFICAR")
+        b.write_bytes(b"RBR_ANTIGO_SCS_NAO_MODIFICAR")
+        eldorado_zip=self.root/"eldorado.zip"
+        raw={}
+        for name,direction,token in [
+            ("brasilog","out","potatoes"),
+            ("rasador","out","beverages"),
+            ("avant_transportes","out","orange"),
+            ("eldorado_bananas","out","bananas"),
+            ("eldorado_bananas","in","potatoes"),
+            ("eldorado_bananas","in","fertilizer"),
+            ("fazenda_potato","out","potatoes"),
+            ("fazenda_orange","out","oranges"),
+            ("ceasa","in","potatoes"),
+            ("ceasa","out","potatoes"),
+            ("supermercado_centro","in","potatoes"),
+            ("supermercado_centro","in","orange"),
+            ("ambev","out","beer"),
+            ("supermercado_centro","in","beer"),
+            ("agrish","out","fertilizer"),
+        ]:
+            raw[f"{name}/{direction}/{token}.sii"]=old(token)
+        raw["eldorado_bananas/editor/penapolis.sii"]="SiiNunit\n{}\n"
+        zip_write(eldorado_zip,raw)
+        original_a=a.read_bytes();original_b=b.read_bytes()
+        inp={**self.inp,"maps":{"Eldorado":eldorado_zip}}
+        result=g.generate(inp,folder,fix_skills=False)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0][0],"Eldorado")
+        self.assertEqual(a.read_bytes(),original_a)
+        self.assertEqual(b.read_bytes(),original_b)
+        with zipfile.ZipFile(result[0][1]) as z:
+            names=set(z.namelist())
+            for company in ("brasilog","rasador","avant_transportes"):
+                for n in (7,8,12,3):
+                    self.assertNotIn(f"def/company/{company}/out/carga{n}.sii",names)
+            for n in (7,8,12):
+                self.assertNotIn(f"def/company/eldorado_bananas/in/carga{n}.sii",names)
+            self.assertIn("def/company/eldorado_bananas/in/carga3.sii",names)
+            self.assertIn("def/company/fazenda_potato/out/carga7.sii",names)
+            self.assertIn("def/company/fazenda_orange/out/carga8.sii",names)
+            self.assertIn("def/company/ceasa/in/carga7.sii",names)
+            self.assertIn("def/company/ambev/out/carga12.sii",names)
+            self.assertIn('cargo: ""',z.read("def/company/brasilog/out/potatoes.sii").decode())
+            self.assertIn('cargo: ""',z.read(
+                "def/company/eldorado_bananas/in/potatoes.sii").decode())
+            self.assertIn("def/company/eldorado_bananas/editor/penapolis.sii",names)
+        report=result[0][2]
+        self.assertEqual(report["versao_gerador"],"2.3.0")
+        self.assertEqual(report["total_empresas"],10)
+        self.assertNotIn("eldorado_bananas",report["cadeias"]["carga7"]["destinos_lista"])
+        self.assertNotIn("brasilog",report["cadeias"]["carga7"]["origens_lista"])
+        self.assertIn("potatoes",report["traducoes_ingles_portugues"])
+        self.assertIn("batata",report["traducoes_ingles_portugues"]["potatoes"])
+        reject={(x["empresa"],x["direcao"],x["familia"])
+                for x in report["rejeicoes_eldorado"]}
+        self.assertIn(("brasilog","out","batata"),reject)
+        self.assertIn(("eldorado_bananas","in","batata"),reject)
+        self.assertTrue((folder/"Eldorado_traducoes_cargas_ingles.csv").is_file())
+        self.assertTrue((folder/"Eldorado_permissoes_rejeitadas.csv").is_file())
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])

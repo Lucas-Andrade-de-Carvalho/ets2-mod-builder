@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.2.0'
+VERSION = '2.3.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -314,6 +314,258 @@ def extract_map(path):
     for c in companies.values():classify_company(c)
     return companies,old_file_count
 
+
+# Politica especifica Eldorado: mercadorias inglesas da DEF. Nunca
+# traduzir fruits -> batatas ou bananas -> laranjas.
+ELDORADO_ENGLISH = (
+    ("batata",r"^(?:potato|potatoes|potatos)(?:_[a-z0-9]+)?$"),
+    ("laranja",r"^(?:orange|oranges|citrus|citrus_fruit)(?:_[a-z0-9]+)?$"),
+    ("banana",r"^(?:banana|bananas|plantain|plantains)(?:_[a-z0-9]+)?$"),
+    ("frutas_gerais",r"^(?:fruit|fruits|fresh_fruit|mixed_fruits|vegetables|veggies)(?:_[a-z0-9]+)?$"),
+    ("cerveja",r"^(?:beer|beers|ale|lager|cerveja|cervejas)(?:_[a-z0-9]+)?$"),
+    ("bebidas_gerais",r"^(?:beverage|beverages|drinks|limonades|soda|soft_drinks|"
+                      r"bottle_water|bottled_water|water)(?:_[a-z0-9]+)?$"),
+    ("adubo",r"^(?:fertiliz(?:er|ers)|fertilis(?:er|ers)|fertilizante|"
+             r"compost|urea|npk|ammonium_nitrate)(?:_[a-z0-9]+)?$"),
+    ("milho",r"^(?:corn|maize|milho)(?:_[a-z0-9]+)?$"),
+    ("soja",r"^(?:soybean|soybeans|soya|soy_beans|soja)(?:_[a-z0-9]+)?$"),
+    ("arroz",r"^(?:rice|arroz)(?:_[a-z0-9]+)?$"),
+    ("trigo",r"^(?:wheat|trigo)(?:_[a-z0-9]+)?$"),
+    ("racao",r"^(?:animal_feed|livestock_feed|feed|feedmeal|compound_feed|"
+             r"fodder|forage|racao)(?:_[a-z0-9]+)?$"),
+    ("algodao",r"^(?:cotton|cotton_bales|cott_seed|algodao)(?:_[a-z0-9]+)?$"),
+    ("palete",r"^(?:pallet|pallets|wooden_pallets|palete|paletes)(?:_[a-z0-9]+)?$"),
+    ("madeira",r"^(?:logs|log|timber|lumber|wood|wooden_planks|sawn_wood|madeira)(?:_[a-z0-9]+)?$"),
+    ("cimento",r"^(?:cement|cement_bags|bagged_cement|cimento)(?:_[a-z0-9]+)?$"),
+    ("tijolo",r"^(?:brick|bricks|clay_bricks|tijolos)(?:_[a-z0-9]+)?$"),
+    ("granito",r"^(?:granite|marble|marble_blocks|stone_blocks|granito)(?:_[a-z0-9]+)?$"),
+    ("bobina",r"^(?:steel_coil|steel_coils|steel_roll|coil_steel|bobina|bobinas)(?:_[a-z0-9]+)?$"),
+    ("sorgo",r"^(?:sorghum|sorgo)(?:_[a-z0-9]+)?$")
+)
+
+def eldorado_translate(tokens):
+    """Traduz IDs de carga em ingles preservando a especie de mercadoria."""
+    found=set()
+    for token in tokens:
+        n=normal(token)
+        for cat,pattern in ELDORADO_ENGLISH:
+            if re.fullmatch(pattern,n,re.I):found.add(cat)
+    found |= product_types(tokens)
+    return found
+
+ELDORADO_LOGISTICS = re.compile(
+    r"transport|transpor|transp|logistic|logistica|logist|freight|"
+    r"carrier|haulage|brasilog|braslog|rasador|avant|cmm|ttr[_-]?log|"
+    r"^trame2$|^trade2$|^stokes2$|^posped2$|^ancapi$",re.I)
+ELDORADO_BANANA = re.compile(
+    r"banana|bananal|banana_farm|banana_plant|^eldbanana|^bana_",re.I)
+ELDORADO_WHOLESALE = re.compile(
+    r"atacad|wholesale|ceasa|hortif|frutaria|sacolao|"
+    r"distrib_fruit|fresh_produce|mercado_horti",re.I)
+ELDORADO_POTATO_FARM = re.compile(r"batat|potato",re.I)
+ELDORADO_ORANGE_FARM = re.compile(r"laranj|citrus|orange",re.I)
+ELDORADO_AGRO_SUPPLIER = re.compile(
+    r"agropec|agroinsum|fertil|adubo|insumos|agrocenter|agrish|agroce|agromais",re.I)
+
+def eldorado_classify(c):
+    """Reclassificar por atividade, nunca fabricar por um OUT antigo."""
+    name=normal(c.name)
+    out_types=eldorado_translate(c.old_out)
+    in_types=eldorado_translate(c.old_in)
+    if ELDORADO_LOGISTICS.search(name):
+        c.role="transportadora";c.explicit_role=True;return
+    # Hubs com catalogo enorme e carga de setores desconexos nao sao fabrica.
+    if not c.explicit_role and len(c.old_out)>=45 and len(out_types)>=6:
+        c.role="hub_generico";c.explicit_role=False;return
+    if (ELDORADO_BANANA.search(name) and
+        not ELDORADO_WHOLESALE.search(name) and
+        c.role in {"hortifruti","fazenda","desconhecida"}):
+        c.role="bananal";c.explicit_role=True;return
+    if ("banana" in out_types and "banana" not in in_types and
+        not ({"batata","laranja"} & out_types) and
+        not ELDORADO_WHOLESALE.search(name) and
+        c.role in {"hortifruti","fazenda","desconhecida"}):
+        c.role="bananal";c.explicit_role=False;return
+    if ELDORADO_POTATO_FARM.search(name) and c.role in {"hortifruti","fazenda","desconhecida"}:
+        c.role="fazenda_batata";c.explicit_role=True;return
+    if ELDORADO_ORANGE_FARM.search(name) and c.role in {"hortifruti","fazenda","desconhecida"}:
+        c.role="fazenda_laranja";c.explicit_role=True;return
+    # Interpretacao bilingue dos proprios identificadores de empresa.
+    # Sem nome significativo ou evidencias, NAO chutar fornecedor.
+    role_english=(
+        ("pecuaria",r"cattle_farm|cattle_ranch|livestock|poultry_farm|pig_farm|feedlot"),
+        ("fazenda",r"(?:^|_)(?:farm|farms|farming|farmstead)(?:_|$)|agricultural_farm"),
+        ("cervejaria",r"brewery|brewing|beer_factory"),
+        ("supermercado",r"supermarket|grocery_store|hypermarket|grocery"),
+        ("silo",r"grain_elevator|grain_storage|grain_silo"),
+        ("cooperativa",r"cooperative|farmers_coop"),
+        ("hortifruti",r"produce_market|fresh_produce|fruit_warehouse"),
+        ("cimenteira",r"cement_plant|cement_factory"),
+        ("obras",r"construction_site|building_site|construction_work"),
+        ("materiais",r"building_supplies|hardware_store|building_materials"),
+        ("madeireira",r"sawmill|timber_mill|lumberyard"),
+        ("pedreira",r"quarry|stone_mine|rock_quarry"),
+        ("marmoraria",r"stonecutting|granite_shop|stoneworks"),
+        ("siderurgica",r"steel_mill|steel_factory|steelworks"),
+        ("metalurgica",r"metalworks|sheetmetal|steel_fabrication"),
+        ("textil",r"textile_mill|cotton_mill|spinning_mill"),
+        ("agroinsumos",r"agro_supply|fertilizer_store|fertilizer_plant"),
+        ("fabrica_racao",r"feedmill|feed_factory|animal_feed_factory"),
+        ("reciclagem",r"recycling_yard|scrapyard"),
+        ("alimentos",r"food_processing|cannery")
+    )
+    if c.role in {"desconhecida","hortifruti","atacadista"}:
+        for role,pattern in role_english:
+            if re.search(pattern,name):
+                c.role=role;c.explicit_role=True;return
+    if ELDORADO_AGRO_SUPPLIER.search(name) and c.role in {"agroinsumos","desconhecida"}:
+        c.role="agroinsumos";c.explicit_role=True;return
+    if ELDORADO_WHOLESALE.search(name) and c.role in {"hortifruti","atacadista","desconhecida"}:
+        c.role="hortifruti";c.explicit_role=True;return
+    if c.role=="atacadista" and not ELDORADO_WHOLESALE.search(name):
+        c.role="hub_generico";c.explicit_role=False;return
+    if not c.explicit_role and c.role in {"cervejaria","madeireira","silo","supermercado"}:
+        c.role="desconhecida"
+
+def eldorado_permit(c,category,direction):
+    """Politica de economia real: produtor, revenda com prova, consumidor.
+
+    Evidencia de transporte nao e evidencia de producao. Uma plantacao
+    especializada NAO recebe qualquer produto hortifruti.
+    """
+    role=c.role
+    outgoing=eldorado_translate(c.old_out)
+    incoming=eldorado_translate(c.old_in)
+    observed=outgoing if direction=="out" else incoming
+    both=incoming|outgoing
+    if role in {"transportadora","hub_generico","desconhecida"}:return None
+    if role=="bananal":
+        if category=="adubo" and direction=="in":
+            return "bananal compra fertilizante para cultivo de bananas"
+        return None
+    if category in {"batata","laranja"}:
+        correct=("fazenda_batata" if category=="batata" else "fazenda_laranja")
+        other=("fazenda_laranja" if category=="batata" else "fazenda_batata")
+        if role==other:return None
+        if direction=="out":
+            if role==correct:return "plantacao especializada identificada de "+category
+            if role=="fazenda" and category in outgoing:
+                return "fazenda produz "+category+" documentado no OUT original"
+            if role in {"hortifruti","cooperativa"} and category in both:
+                return "revenda de "+category+" documentada na DEF"
+            return None
+        if role in {"supermercado","hortifruti"}:
+            return "comercio recebe "+category+" para revenda"
+        if role=="cooperativa" and category in both:
+            return "cooperativa recebe a cultura documentada"
+        if role=="alimentos" and category in incoming:
+            return "industria alimenticia recebe esta materia-prima na DEF"
+        return None
+    if category=="cerveja":
+        if direction=="out":
+            if role=="cervejaria" and c.explicit_role:
+                return "cervejaria identificada produz/expede cerveja"
+            if role in {"supermercado","atacadista"} and "cerveja" in outgoing:
+                return "comercio revende cerveja documentada"
+            return None
+        if role=="supermercado":return "supermercado recebe cerveja para revenda"
+        if role=="atacadista" and ({"cerveja","bebidas_gerais"} & both):
+            return "distribuidor documentado de bebidas recebe cerveja"
+        return None
+    if category=="adubo":
+        if direction=="out":
+            if role=="agroinsumos" and (
+                    ELDORADO_AGRO_SUPPLIER.search(normal(c.name)) or "adubo" in outgoing):
+                return "agropecuaria documentada fornece adubo"
+            if role=="cooperativa" and "adubo" in outgoing:
+                return "cooperativa distribui fertilizante documentado"
+            return None
+        if role in {"fazenda","fazenda_batata","fazenda_laranja"}:
+            return "produtor rural compra adubo para plantio"
+        if role in {"agroinsumos","cooperativa"} and "adubo" in incoming:
+            return "distribuidor recebe adubo para comercializacao"
+        return None
+    if category in {"milho","soja","sorgo"}:
+        if direction=="out":
+            if role=="fazenda" and category in outgoing:
+                return "fazenda produz "+category+" documentado"
+            if role in {"silo","cooperativa"} and category in both:
+                return "cooperativa/armazem movimenta "+category+" documentado"
+            return None
+        if role in {"silo","cooperativa","fabrica_racao"} and (
+             category in both or role=="fabrica_racao"):
+            return "recebe "+category+" para armazenamento/industria"
+        if role=="pecuaria" and category=="sorgo" and "racao" in incoming:
+            return "pecuaria recebe sorgo para alimentacao de animais"
+        return None
+    if category=="racao":
+        if direction=="out":
+            if role=="fabrica_racao" and c.explicit_role:
+                return "fabricante de racao identificado"
+            if role=="agroinsumos" and "racao" in both:
+                return "agropecuaria revende racao documentada"
+            return None
+        if role=="pecuaria":return "criacao animal compra racao"
+        if role=="fazenda" and "racao" in incoming:
+            return "fazenda compra racao documentada no IN"
+        if role=="agroinsumos" and "racao" in incoming:
+            return "agropecuaria recebe racao para revenda"
+        return None
+    if category=="algodao":
+        if direction=="out" and role=="fazenda" and "algodao" in outgoing:
+            return "fazenda documenta producao de algodao"
+        if direction=="out" and role=="cooperativa" and "algodao" in both:
+            return "cooperativa vende algodao documentado"
+        if direction=="in" and role=="textil":
+            return "industria textil recebe algodao"
+        if direction=="in" and role=="cooperativa" and "algodao" in both:
+            return "cooperativa recebe algodao documentado"
+        return None
+    if category=="madeira":
+        if direction=="out":
+            if role=="madeireira" and c.explicit_role:
+                return "serraria/madeireira fornece madeira"
+            if role=="materiais" and "madeira" in both:
+                return "loja de materiais revende madeira documentada"
+            return None
+        if role in {"materiais","obras"}:
+            return "construcao compra madeira"
+        return None
+    if category=="palete":
+        if direction=="out" and role=="madeireira" and c.explicit_role:
+            return "madeireira fornece paletes"
+        if direction=="in" and role=="reciclagem" and c.explicit_role:
+            return "reciclagem recebe paletes usados"
+        return None
+    if category=="bobina":return permits(c,category,direction)
+    if category=="cimento":
+        if direction=="out":
+            if role=="cimenteira" and c.explicit_role:
+                return "fabrica de cimento identificada"
+            if role=="materiais" and "cimento" in both:
+                return "loja de material revende cimento documentado"
+            return None
+        if role in {"materiais","obras","premoldados"}:
+            return "revenda/obra/pre-moldado compra cimento"
+        return None
+    if category=="tijolo":
+        if direction=="out" and role=="ceramica" and c.explicit_role:
+            return "ceramica/olaria fabrica tijolos"
+        if direction=="out" and role=="materiais" and "tijolo" in both:
+            return "loja de material revende tijolos documentados"
+        if direction=="in" and role in {"materiais","obras"}:
+            return "obra/revenda compra tijolos"
+        return None
+    if category=="granito":
+        if direction=="out" and role in {"pedreira","marmoraria"} and c.explicit_role:
+            return "extracao/beneficiamento de pedras"
+        if direction=="in" and role in {"marmoraria","materiais"}:
+            return "beneficiamento/revenda recebe pedras"
+        if direction=="in" and role=="obras" and "granito" in incoming:
+            return "obra recebe granito documentado"
+        return None
+    return None
+
 def cargo_inventory(mods):
     """Cargo_data + 2 sistemas distintos de trailer_def do ETS2.
 
@@ -510,6 +762,20 @@ def write_report(outdir,name,result):
         writer.writerow(["empresa","setor","in_novos","out_novos","in_originais","out_originais"])
         for row in result["empresas"]:
             writer.writerow([row[k] for k in ("empresa","setor","in_novos","out_novos","in_originais","out_originais")])
+    if name.lower()=="eldorado":
+        with open(outdir/(name+"_traducoes_cargas_ingles.csv"),"w",
+                  encoding="utf-8-sig",newline="") as f:
+            writer=csv.writer(f,delimiter=";")
+            writer.writerow(["id_original_ingles","familias_traduzidas_pt"])
+            for token,categories in sorted(result["traducoes_ingles_portugues"].items()):
+                writer.writerow([token,", ".join(categories) if categories else "NAO_IDENTIFICADO"])
+        with open(outdir/(name+"_permissoes_rejeitadas.csv"),"w",
+                  encoding="utf-8-sig",newline="") as f:
+            writer=csv.writer(f,delimiter=";")
+            writer.writerow(["empresa","setor","direcao","mercadoria","motivo"])
+            for item in result["rejeicoes_eldorado"]:
+                writer.writerow([item["empresa"],item["setor"],item["direcao"],
+                                 item["familia"],item["motivo"]])
     with open(outdir/(name+"_rotas_justificadas.csv"),"w",encoding="utf-8-sig",newline="") as f:
         w=csv.writer(f,delimiter=";")
         w.writerow(["empresa","setor","tipo_de_classificacao","direcao","carga",
@@ -583,13 +849,16 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             "\n".join(errors)+"\n\nAVISOS\n"+"\n".join(warnings),encoding="utf-8")
         raise ValueError("Diagnostico tecnico bloqueou geracao:\n- "+"\n- ".join(errors[:12]))
     log("Validacao de cargo_data e carroceria de reboque proprio concluida; avisos no relatorio.")
-    # FASE 1: preflight dos 3 mapas. Nenhuma Company e publicada se um mapa falhar.
+    # FASE 1: preflight dos mapas SELECIONADOS. Nada publica se algum falhar.
     checked_maps={}
     map_failures={}
     for name,path in inputs["maps"].items():
         log("Verificando estrutura de "+name+" ...")
         try:
             checked_maps[name]=extract_map(path)
+            if name.lower()=="eldorado":
+                for c in checked_maps[name][0].values():
+                    eldorado_classify(c)
             log(name+": "+str(len(checked_maps[name][0]))+" empresas reconhecidas.")
         except Exception as exc:
             map_failures[name]=str(exc)
@@ -607,7 +876,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                          "Confira FALHA_MAPAS_NAO_GERAR.txt e envie o "+
                          "DIAGNOSTICO_ARQUIVO_*.json do mapa com erro.")
     results=[]
-    # FASE 2: construcao inteira em pasta temporaria, invisivel para cliente.
+    # FASE 2: construir apenas mapas selecionados em staging.
     publish_dir=outdir
     staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
     outdir=Path(staging.name)
@@ -622,7 +891,9 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 outs=[];ins=[]
                 for c in companies.values():
                     for direction,results_list in (("out",outs),("in",ins)):
-                        why=permits(c,category,direction)
+                        why=(eldorado_permit(c,category,direction)
+                             if name.lower()=="eldorado"
+                             else permits(c,category,direction))
                         if why:results_list.append(c.name)
                         if why:evidence.append({"empresa":c.name,"setor":c.role,
                             "classificacao_explicita":c.explicit_role,"direcao":direction,
@@ -688,13 +959,37 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 observed=product_types(company.old_out)
                 for cat in ("bobina","cimento","granito","tijolo"):
                     if cat not in observed:continue
-                    if permits(company,cat,"out") is None:
+                    if (eldorado_permit(company,cat,"out") if name.lower()=="eldorado"
+                        else permits(company,cat,"out")) is None:
                         grade_baixa_rejeitados.append({
                             "empresa":company.name,"categoria":cat,
                             "papel_detectado":company.role,
                             "motivo":"OUT antigo incompativel com o setor; nao replicado"
                         })
+            # Relatorio explica tambem rejeicoes de transportadoras, cultivos
+            # especificos e nomes ingleses; sem reabrir a compatibilidade.
+            eldorado_rejeicoes=[]
+            eldorado_traducoes={}
+            if name.lower()=="eldorado":
+                for company in companies.values():
+                    for direction,old_tokens in (("in",company.old_in),("out",company.old_out)):
+                        for token in sorted(old_tokens):
+                            identified=eldorado_translate({token})
+                            eldorado_traducoes[token]=sorted(identified)
+                        for category in sorted(eldorado_translate(old_tokens)):
+                            if category not in {c for c,t in MANIFEST.values()}:
+                                continue
+                            if not eldorado_permit(company,category,direction):
+                                eldorado_rejeicoes.append({
+                                    "empresa":company.name,"setor":company.role,
+                                    "direcao":direction,"familia":category,
+                                    "motivo":("transportadora/centro generico nao e produtor nem comprador do produto"
+                                      if company.role in {"transportadora","hub_generico"} else
+                                      "incompatibilidade economica ou cultura nao demonstrada")
+                                })
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "rejeicoes_eldorado":eldorado_rejeicoes,
+                  "traducoes_ingles_portugues":eldorado_traducoes,
                   "rejeicoes_grade_baixa":grade_baixa_rejeitados,
                   "total_empresas":len(companies),"empresas_atendidas":len(work),
                   "arquivos_inout_originais":count,
@@ -724,7 +1019,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         for generated in sorted(outdir.iterdir()):
             if generated.is_file():
                 os.replace(generated,publish_dir/generated.name)
-        log("PUBLICACAO CONCLUIDA: 3 mapas, relatórios e SCS verificados.")
+        log("PUBLICACAO CONCLUIDA: "+str(len(results))+
+            " mapa(s) selecionado(s), relatorios e SCS verificados.")
     finally:
         staging.cleanup()
     return results
@@ -733,7 +1029,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.2")
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.3")
     root.geometry("1010x740")
     root.minsize(860,650)
     style=ttk.Style(root)
@@ -742,7 +1038,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.2  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
+    ttk.Label(frame,text="v2.3  ·  Eldorado exclusivo  ·  Ingles traduzido  ·  Originais preservados",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
@@ -778,7 +1074,14 @@ def run_gui():
             value=saved.get(k,"")
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
-    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(8,4))
+    scope_var=tk.StringVar(value="eldorado")
+    scope_row=ttk.LabelFrame(frame,text="Quais Companies deseja atualizar?",padding=8)
+    scope_row.pack(fill="x",pady=(8,4))
+    ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
+                    variable=scope_var,value="eldorado").pack(anchor="w")
+    ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
+                    variable=scope_var,value="todos").pack(anchor="w")
+    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
                     variable=fix_var).pack(anchor="w")
@@ -805,7 +1108,9 @@ def run_gui():
         except OSError as exc:
             append_log("Aviso: nao consegui salvar os caminhos: "+str(exc))
     def check_paths(include_librelato):
-        required=[k for k,_ in fields if k!="output"]
+        required=(
+            ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
+            else [k for k,_ in fields if k!="output"])
         if not include_librelato:required=["minas","eldorado","rbr"]
         needed=required+["output"]
         missing=[k for k in needed if not widgets[k].get().strip()]
@@ -818,16 +1123,21 @@ def run_gui():
             c.configure(state="disabled" if value else "normal")
         if value:progress.start(12)
         else:progress.stop()
-    def worker_generate(snapshot,fix):
+    def worker_generate(snapshot,fix,scope):
         try:
             txt=Path(snapshot["txt"]).read_text(encoding="utf-8-sig")
             for n in MANIFEST:
                 if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",txt,re.I):
                     raise ValueError("TXT incompleto: falta carga"+str(n))
+            if scope=="eldorado":
+                # MG e RBR nao sao lidos, regenerados nem sobrescritos.
+                maps={"Eldorado":snapshot["eldorado"]}
+            else:
+                maps={"Minas_Gerais":snapshot["minas"],
+                      "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
             inp={"mod":snapshot["mod"],"def1":snapshot["def1"],
-                 "def2":snapshot["def2"],
-                 "maps":{"Minas_Gerais":snapshot["minas"],
-                         "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}}
+                 "def2":snapshot["def2"],"maps":maps}
+            work_queue.put(("log","Escopo escolhido: "+", ".join(maps)))
             items=generate(inp,snapshot["output"],
                            log=lambda msg:work_queue.put(("log",msg)),fix_skills=fix)
             work_queue.put(("success","Gerados "+str(len(items))+
@@ -853,7 +1163,7 @@ def run_gui():
             change_busy(True)
             status.set("Analisando arquivos; aguarde...")
             fun=worker_generate if action=="generate" else worker_diagnostic
-            args=(snapshot,fix_var.get()) if action=="generate" else (snapshot,)
+            args=(snapshot,fix_var.get(),scope_var.get()) if action=="generate" else (snapshot,)
             threading.Thread(target=fun,args=args,daemon=True).start()
         except Exception as exc:
             messagebox.showerror("Campos incompletos",str(exc))
@@ -877,7 +1187,7 @@ def run_gui():
     btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR OS 3 MAPAS",
                         command=lambda:run("diagnostic"),style="Main.TButton")
     btn_diag.pack(side="left",padx=(0,8))
-    btn_generate=ttk.Button(actions,text="2. VALIDAR E GERAR 3 COMPANIES",
+    btn_generate=ttk.Button(actions,text="2. GERAR COMPANY(S) SELECIONADA(S)",
                             command=lambda:run("generate"),style="Main.TButton")
     btn_generate.pack(side="left",padx=6)
     def open_folder():
@@ -893,18 +1203,23 @@ def run_gui():
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--cli",action="store_true")
+    parser.add_argument("--only-eldorado",action="store_true",
+                        help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
     for x in ("mod","def1","def2","txt","minas","eldorado","rbr","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
-    if any(getattr(args,x) is None for x in ("mod","def1","def2","txt","minas","eldorado","rbr","output")):
-        parser.error("Em modo --cli, informe os 8 caminhos.")
+    required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
+        "mod","def1","def2","txt","minas","eldorado","rbr","output")
+    if any(getattr(args,x) is None for x in required):
+        parser.error("Em modo --cli, informe: "+", ".join(required))
     original=Path(args.txt).read_text(encoding="utf-8-sig")
     for n in MANIFEST:
         if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",original,re.I):
             parser.error(f"TXT incompleto: falta carga{n}")
-    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":
-         {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr}}
+    maps=({"Eldorado":args.eldorado} if args.only_eldorado else
+          {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
+    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps}
     generate(inp,args.output,print)
 
 if __name__=="__main__":
