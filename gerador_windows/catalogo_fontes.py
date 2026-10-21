@@ -36,6 +36,18 @@ def txt_inventory(path=None):
         result[cid] = title
     return result
 
+def known_economic_category(title):
+    """Correspondencias EXATAS para novas mercadorias sem cadastro manual.
+
+    Outros nomes permanecem pendentes; nunca deduzir que oleo de coco,
+    leite de coco ou derivados sejam o fruto in natura.
+    """
+    label = re.sub(r"\s+", " ", str(title).strip().lower())
+    if re.fullmatch(r"coco(?: (?:verde|seco|fresco|in natura))?", label):
+        return "coco"
+    return "nao_classificada"
+
+
 def from_originals(base_manifest, cargo_records, txt_path=None, *, require_txt_for_new=True):
     """Retorna manifesto + novas mercadorias fisicamente comprovadas em cargo_data.
 
@@ -65,7 +77,7 @@ def from_originals(base_manifest, cargo_records, txt_path=None, *, require_txt_f
         spec={
             "id":cid,
             "nome":text_labels.get(cid, cid+" (descricao pendente)"),
-            "categoria":"nao_classificada",
+            "categoria":known_economic_category(text_labels.get(cid, "")),
             "body_types":sorted(record["body"]),
             "sha256":hashlib.sha256(record["raw"]).hexdigest(),
             "source":record["source"],
@@ -76,11 +88,13 @@ def from_originals(base_manifest, cargo_records, txt_path=None, *, require_txt_f
     return manifest, extras
 
 def evaluate(company, spec, direction, identity):
-    """Conservador: nao liberar nova mercadoria sem politica validada no projeto."""
-    from politica_economica import Decision
+    """Usar politica economica verificada; nenhuma rota para tipo sem regra."""
+    from politica_economica import Decision, CATEGORIES, decide
+    if spec["categoria"] in CATEGORIES:
+        return decide(company, spec["categoria"], direction, identity)
     return Decision(
         False,
-        "Carga "+spec["id"]+" foi detectada nos arquivos reais, mas a "
-        "logistica IN/OUT precisa de homologacao economica especifica",
+        "Carga "+spec["id"]+" identificada no mod, mas sem regra economica "
+        "validada para associar a empresas",
         "TXT: "+spec["nome"]+"; body_types: "+", ".join(spec["body_types"]),
         "indeterminada")
