@@ -804,7 +804,15 @@ def coverage_audit(companies,cargo_routes,cargo_records,name):
             "total_candidatos_documentais":len(candidates)
         })
     complete=sum(1 for r in cargo_rows if r["rota_completa"])
+    grades={}
+    for row in cargo_rows:
+        group=grades.setdefault(row["carroceria"],{"total":0,"rotas_completas":0,
+                                                  "cargas_faltantes":[]})
+        group["total"]+=1
+        if row["rota_completa"]:group["rotas_completas"]+=1
+        else:group["cargas_faltantes"].append(row["id"])
     return {"mapa":name,"total":len(MANIFEST),
+            "cobertura_por_carroceria":grades,
             "cargas_com_rota":complete,
             "cargas_sem_rota":len(MANIFEST)-complete,
             "pronto_para_gerar":complete==len(MANIFEST),
@@ -987,8 +995,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             coverage=coverage_audit(companies,bycargo,records,name)
             write_coverage_report(outdir,coverage)
-            log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/23 cargas "+
-                "(alta, baixa e outras carrocerias conforme def).")
+            log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/23 cargas.")
+            for grade,stats in sorted(coverage["cobertura_por_carroceria"].items()):
+                log("   "+grade+": "+str(stats["rotas_completas"])+"/"+
+                    str(stats["total"])+" cargas com rota verificada")
             if require_complete and not coverage["pronto_para_gerar"]:
                 report=write_coverage_report(publish_dir,coverage)
                 gaps=[c["id"]+" ("+c["lacuna"]+")" for c in coverage["cargas"] if not c["rota_completa"]]
