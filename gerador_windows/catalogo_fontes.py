@@ -70,7 +70,15 @@ def from_originals(base_manifest, cargo_records, txt_path=None, *, require_txt_f
     if phantom:
         raise ValueError("TXT descreve carga(s) sem cargo_data comprovado nos 3 SCS: "+
                          ", ".join(sorted(phantom,key=sort_key)))
-    manifest = dict(base_manifest)
+    # Os nomes de TODAS as cargas vem do TXT. As categorias historicas
+    # foram verificadas no MANIFEST: nao inferir ramo a partir de nomes
+    # ambiguos como "Racao Mineral Laranja" ou "Cimento e Pallet".
+    manifest = {}
+    for key, (category, fallback_label) in base_manifest.items():
+        cid = cargo_id(key)
+        if txt_path and cid not in text_labels:
+            raise ValueError("TXT nao identifica carga original: " + cid)
+        manifest[key] = (category, text_labels.get(cid, fallback_label))
     extras = {}
     for cid in new_ids:
         record = cargo_records[cid]
