@@ -244,6 +244,7 @@ def export_diagnostic(path, dest, issue=""):
 class Company:
     name:str
     files:dict=field(default_factory=dict)
+    editor_files:dict=field(default_factory=dict)
     old_in:set=field(default_factory=set)
     old_out:set=field(default_factory=set)
     role:str="desconhecida"
@@ -293,6 +294,9 @@ def extract_map(path):
             old_file_count+=1;c.files[p]=raw
             ct=cargo_tokens(read_sii(raw))
             (c.old_in if dir=="in" else c.old_out).update(ct)
+        elif dir=="editor" and filename.lower().endswith((".sii",".sui")):
+            # Arquivo de instancia/cidade preservado byte a byte.
+            c.editor_files[p]=raw
         elif dir is None and filename.endswith(".sii"):
             if re.search(r'(?m)^\s*(in_cargo|out_cargo)(?:\[\d*\])?\s*:',read_sii(raw)):
                 legacy.append(p)
@@ -587,6 +591,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             output_files={}
             for c in companies.values():
+                for p,raw in c.editor_files.items():
+                    output_files[p]=raw
                 for p,raw in c.files.items():
                     output_files[p]=neutralize(raw,p)
             for cid,dirs in work.items():
@@ -616,6 +622,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 paths=set(z.namelist())
                 if not all(p in paths for c in companies.values() for p in c.files):
                     raise ValueError("Arquivo original IN/OUT ficou sem cobertura: "+str(dest))
+                for c in companies.values():
+                    for p,raw in c.editor_files.items():
+                        if p not in paths or z.read(p)!=raw:
+                            raise ValueError("Arquivo editor original nao foi preservado: "+p)
                 for id,info in bycargo.items():
                     for company in info["origens_lista"]:
                         if f"def/company/{company}/out/{id}.sii" not in paths:raise ValueError("Permissao OUT ausente")
@@ -630,6 +640,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
                   "total_empresas":len(companies),"empresas_atendidas":len(work),
                   "arquivos_inout_originais":count,
+                  "arquivos_editor_preservados":sum(len(c.editor_files) for c in companies.values()),
                   "arquivos_inout_gerados":sum(len(x["in"])+len(x["out"]) for x in work.values()),
                   "cadeias":bycargo,"evidencias":evidence,
                   "fontes_sha256":provenance+[{"arquivo":Path(path).name,"papel":"MAPA "+name,
