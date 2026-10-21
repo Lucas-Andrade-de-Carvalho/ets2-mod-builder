@@ -215,3 +215,36 @@ Com Python 3.10+:
     python gerador.py --cli --mod "Librelato.scs" --def1 "Def Company 1.scs" --def2 "Def Company 2.scs" --txt "cargas.txt" --minas "minas.zip" --eldorado "eldorado.zip" --rbr "rbr.zip" --output "saida"
 
 Documentacao: https://modding.scssoft.com/wiki/Documentation/Engine/Units/cargo_data e https://modding.scssoft.com/wiki/Documentation/Engine/Units/cargo_def e https://modding.scssoft.com/wiki/Documentation/Engine/Units/trailer_def .
+
+
+## V3.0 — Gerenciamento de Cargas dinamico
+
+As 23 cargas originais permanecem protegidas. Um catalogo JSON separado permite adicionar novas mercadorias sem editar Python.
+
+### Como adicionar nova carga
+
+1. Abra o EXE e clique em **GERENCIAMENTO DE CARGAS**.
+2. Clique em **Adicionar nova carga**. Informe ID (exemplo: acucar_ensacado), nome, descricao e categoria economica.
+3. Clique em **Importar arquivo SII / SUI original**. A definicao deve conter SiiNunit, cargo_data : cargo.acucar_ensacado e body_types[] reais. Fragmentos SUI com includes ou sem unidade completa nao podem ser exportados isoladamente.
+4. Informe setores fornecedores (OUT), compradores (IN), aliases PT/EN e restricoes. Quando nao houver setor identificado, e possivel cadastrar IDs EXATOS de empresas com justificativa e revisao manual.
+5. Configure **Exigencia documental** se o setor so puder movimentar a mercadoria quando ela ja tiver uma evidencia na DEF original. Atacadistas/distribuidores genericos sempre exigem essa evidencia para o OUT.
+6. Clique em **SALVAR CARGA VALIDADA**. O sistema bloqueia IDs invalidos, colisoes e definicoes SII incompletas.
+7. Rode Gerar ou Auditar/Corrigir como antes. Analise JSON/CSV, pendencias, carrocerias e cadeias antes de instalar no ETS2.
+8. Para editar, selecione a carga e clique **Editar selecionada**; para excluir uma mercadoria nova clique **Remover adicional**. Nada disso altera os SCS originais nem as 23 cargas de base.
+
+### Onde fica e como verificar
+
+- No Windows o JSON e salvo em %APPDATA%/ETS2_Company_Logistics/catalogo_cargas_v3.json, com SHA-256 do arquivo importado e escrita atomica.
+- No CLI, opcionalmente indique --catalogo CAMINHO_PARA_JSON.
+- A carga recebe arquivo gerado em def/cargo/<id>.sii. O original importado e conservado byte a byte.
+- O reboque precisa ter body_type compativel verificavel; caso contrario a exportacao e bloqueada.
+- A classificacao economica exige setor comprovado na DEF ou ID de empresa selecionado com justificativa. Transportadora generica nunca recebe atribuicao automatica.
+- A auditoria nao sobrescreve SCS de entrada; referencias de cargas desconhecidas permanecem e exigem revisao.
+- Arquivos editor permitem identificar candidatas a cidade/unidade, mas NAO provam que prefab funcional existe.
+- A analise de SII, estrutura ZIP e relatorios nao certifica dependencias externas, disponibilidade no mercado nem comportamento no ETS2.
+
+### Testes
+
+Execute: python -m unittest discover -s gerador_windows -p test_*.py -v
+
+O GitHub Actions Compilar Gerador Windows compila e testa o EXE, disponivel como artefato ZIP na execucao. A homologacao no ETS2 com DEFs reais continua necessaria.
