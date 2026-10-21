@@ -19,7 +19,7 @@ import traceback
 import unicodedata
 import zipfile
 import politica_economica as professional_policy
-import catalogo_cargas
+import catalogo_fontes as catalogo_cargas
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -874,10 +874,6 @@ def write_report(outdir,name,result):
                         row["direcao"],row["carga"],row["categoria"],row["justificativa"]])
 
 def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=None, professional=False):
-    extras=catalogo_cargas.load(inputs.get("catalogo"), reserved={
-        catalogo_cargas.cargo_id(k) for k in MANIFEST})
-    manifest=catalogo_cargas.manifest(MANIFEST,extras)
-    professional=professional or bool(extras)
     outdir=Path(output);outdir.mkdir(parents=True,exist_ok=True)
     log("Lendo arquivos originais do Librelato...")
     sources=[]
@@ -887,19 +883,9 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
     records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
-    already_defined=set()
-    for cid,spec in extras.items():
-        if cid in records:
-            original_sha=hashlib.sha256(records[cid]["raw"]).hexdigest()
-            if original_sha not in {spec["sha256"],spec.get("sha256_origem")}:
-                raise ValueError("Definicoes conflitantes do cargo original e adicional: "+cid)
-            if set(records[cid]["body"])!=set(spec["body_types"]):
-                raise ValueError("body_types divergentes da fonte importada: "+cid)
-            already_defined.add(cid)
-            continue
-        records[cid]={"source":"CATALOGO", "path":spec["cargo_path"],
-            "raw":catalogo_cargas.decode_definition(spec), "body":set(spec["body_types"]),
-            "valuable":False, "adr":False}
+    manifest,extras=catalogo_cargas.from_originals(MANIFEST,records,inputs.get("txt"))
+    professional=professional or bool(extras)
+    log("Cargas encontradas nos arquivos do reboque: "+str(len(manifest)))
     errors=[];warnings=cargo_manifest_warnings(sources,records)
     provenance=[{"arquivo":Path(p).name,"papel":label,"sha256":hash_source(p),
                  "definicoes":len(arc)}
@@ -1116,14 +1102,6 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                     output_files[record["path"]]=re.sub(
                         r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',
                         read_sii(record["raw"])).encode("utf-8")
-            # Definicoes importadas copiadas byte a byte, sem sobrescrever originais.
-            for cid,spec in extras.items():
-                if cid in already_defined:
-                    continue  # cargo_data ja esta no MOD/DEF original e deve ser preservado
-                cargo_path=spec["cargo_path"]
-                if cargo_path in output_files:
-                    raise ValueError("Colisao na definicao da carga: "+cargo_path)
-                output_files[cargo_path]=catalogo_cargas.decode_definition(spec)
             dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
             with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
                 for p,raw in sorted(output_files.items()):
@@ -1305,7 +1283,7 @@ def run_gui():
        ("mod","Mod principal Librelato (.scs)"),
        ("def1","DEF Company 1 original (.scs)"),
        ("def2","DEF Company 2 original (.scs)"),
-       ("txt","TXT com as 23 cargas"),
+       ("txt","TXT atualizado com a identificacao das cargas"),
        ("minas","Mapa Minas Gerais (.zip)"),
        ("eldorado","Mapa Eldorado (.zip)"),
        ("rbr","Mapa RBR (.zip)"),
@@ -1348,9 +1326,6 @@ def run_gui():
                     variable=audit_mode,value="corrigir").pack(side="left",padx=(0,14))
     ttk.Radiobutton(audit_row,text="Apenas auditar, sem gerar SCS",
                     variable=audit_mode,value="auditar").pack(side="left")
-    from gerenciamento_gui import abrir_gerenciamento
-    ttk.Button(content,text="GERENCIAMENTO DE CARGAS — cadastrar, importar, editar e remover",
-               command=lambda:abrir_gerenciamento(root,MANIFEST)).pack(fill="x",pady=(8,5))
     options_row=ttk.Frame(content);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
@@ -1411,7 +1386,7 @@ def run_gui():
                       "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
             inp={"mod":snapshot["mod"],"def1":snapshot["def1"],
                  "def2":snapshot["def2"],"maps":maps,
-                 "catalogo":str(catalogo_cargas.default_path())}
+                 "txt":snapshot["txt"]}
             work_queue.put(("log","Escopo escolhido: "+", ".join(maps)))
             items=generate(inp,snapshot["output"],
                            log=lambda msg:work_queue.put(("log",msg)),
@@ -1437,7 +1412,7 @@ def run_gui():
                           mode=mode,log=lambda msg:work_queue.put(("log",msg)),
                           professional=True,
                           source_files={**{k:snapshot[k] for k in ("mod","def1","def2")},
-                                        "catalogo":str(catalogo_cargas.default_path())})
+                                        "txt":snapshot["txt"]})
             total_pending=sum(x["pendencias_revisao"] for x in results)
             work_queue.put(("success",
                 str(len(results))+" Company(s) examinada(s). "+
@@ -1537,7 +1512,6 @@ def main():
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
     parser.add_argument("--audit-existing",action="store_true",
                         help="Auditar/corrigir Company SCS existente sem regenerar do zero")
-    parser.add_argument("--catalogo",help="Caminho opcional do catalogo JSON de novas cargas")
     parser.add_argument("--audit-only",action="store_true",
                         help="Gerar somente relatorio de auditoria, sem .scs corrigido")
     for x in ("mod","def1","def2","txt","minas","eldorado","rbr",
@@ -1563,7 +1537,7 @@ def main():
                               log=print,professional=True,
                               source_files={**{k:getattr(args,k) for k in
                                             ("mod","def1","def2")},
-                                            "catalogo":args.catalogo})
+                                            "txt":args.txt})
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
@@ -1576,7 +1550,7 @@ def main():
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
     inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps,
-         "catalogo":args.catalogo}
+         "txt":args.txt}
     generate(inp,args.output,print,professional=True)
 
 if __name__=="__main__":
