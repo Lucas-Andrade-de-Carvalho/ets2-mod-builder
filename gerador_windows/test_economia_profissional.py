@@ -42,6 +42,26 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertTrue(policy.decide(receiver,"palete","in").allowed)
         self.assertFalse(policy.decide(receiver,"palete","out").allowed)
 
+    def test_company_permanent_name_is_used_only_when_unambiguous(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            archive=Path(td)/"reais.zip"
+            zip_write(archive,{
+                "def/company/qxj.sii": (
+                    b'SiiNunit\n{\n company_permanent : company.permanent.qxj {\n'
+                    b' name: "Supermercado Bairro"\n }\n}\n'),
+                "def/company/qxj/in/beer.sii":old("beer"),
+                "def/company/abz.sii":b'name: "@@city.company_name@@"\n',
+                "def/company/abz/out/grains.sii":old("corn"),
+                "def/company/mx1.sii":b'name: "Transportadora e Supermercado"\n',
+                "def/company/mx1/in/beer.sii":old("beer"),
+            })
+            companies,_=g.extract_map(archive)
+            self.assertEqual(companies["qxj"].display_name,"Supermercado Bairro")
+            self.assertEqual(policy.classify(companies["qxj"]).role,"supermercado")
+            self.assertEqual(policy.classify(companies["abz"]).role,"desconhecida")
+            self.assertEqual(policy.classify(companies["mx1"]).role,"desconhecida")
+
     def test_purchase_perspective_and_english_terms(self):
         cases=[
             ("fiat","bobina","out",False),
