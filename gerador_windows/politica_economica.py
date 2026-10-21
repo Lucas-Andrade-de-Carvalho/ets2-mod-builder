@@ -95,6 +95,17 @@ def classify(company):
     for role,pattern in ROLES:
         if re.search(pattern,identifier,re.I):
             return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
+    # Nome publicamente exibido vem de company_permanent.name, NAO do
+    # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
+    # quando houver correspondencia inequívoca com UM setor.
+    public_name=getattr(company,"display_name","")
+    if public_name and "@@" not in public_name:
+        normalized=norm(public_name)
+        candidates={role for role,pattern in ROLES if re.search(pattern,normalized,re.I)}
+        if len(candidates)==1:
+            found=next(iter(candidates))
+            return Identity(found,"alta",
+                            "atividade pelo name da company_permanent: "+public_name)
     # A DEF pode conter registros confiaveis de movimento de mercadorias;
     # porem OUT nao e demonstracao da INDUSTRIA. Os nao reconhecidos ficam
     # em revisao em vez de criar fornecedor ficticio.
