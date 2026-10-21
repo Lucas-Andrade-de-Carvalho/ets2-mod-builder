@@ -1,3 +1,9 @@
+## V2.1 — ZIP Eldorado reconhecido
+
+O diagnostico original confirmou 14.758 arquivos SII, incluindo 13.892 entradas IN/OUT com pastas de empresas diretamente na raiz (ex.: ambev/out/bebidas.sii, alc_cle/editor/clementina.sii). O leitor agora converte automaticamente para def/company/<empresa>/<in|out|editor>/<arquivo>.sii e preserva os editores byte a byte. Nao altere o ZIP original. Testes de volume usando dados sinteticos reproduzem as contagens do mapa. Nenhum arquivo privado do mapa foi publicado neste repositorio. O mercado dentro do ETS2 ainda exige validacao real com reboque proprio, perfil e carroceria.
+
+---
+
 # ETS2 Company Logistics Ultimate v2.0 — Gerador offline para Windows
 
 ## O que muda nesta versão
