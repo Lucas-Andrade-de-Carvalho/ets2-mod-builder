@@ -444,8 +444,9 @@ def eldorado_permit(c,category,direction):
         return None
     if category=="adubo":
         if direction=="out":
-            if role=="agroinsumos" and (c.explicit_role or "adubo" in outgoing):
-                return "agropecuaria fornece adubo"
+            if role=="agroinsumos" and (
+                    ELDORADO_AGRO_SUPPLIER.search(normal(c.name)) or "adubo" in outgoing):
+                return "agropecuaria documentada fornece adubo"
             if role=="cooperativa" and "adubo" in outgoing:
                 return "cooperativa distribui fertilizante documentado"
             return None
@@ -731,6 +732,20 @@ def write_report(outdir,name,result):
         writer.writerow(["empresa","setor","in_novos","out_novos","in_originais","out_originais"])
         for row in result["empresas"]:
             writer.writerow([row[k] for k in ("empresa","setor","in_novos","out_novos","in_originais","out_originais")])
+    if name.lower()=="eldorado":
+        with open(outdir/(name+"_traducoes_cargas_ingles.csv"),"w",
+                  encoding="utf-8-sig",newline="") as f:
+            writer=csv.writer(f,delimiter=";")
+            writer.writerow(["id_original_ingles","familias_traduzidas_pt"])
+            for token,categories in sorted(result["traducoes_ingles_portugues"].items()):
+                writer.writerow([token,", ".join(categories) if categories else "NAO_IDENTIFICADO"])
+        with open(outdir/(name+"_permissoes_rejeitadas.csv"),"w",
+                  encoding="utf-8-sig",newline="") as f:
+            writer=csv.writer(f,delimiter=";")
+            writer.writerow(["empresa","setor","direcao","mercadoria","motivo"])
+            for item in result["rejeicoes_eldorado"]:
+                writer.writerow([item["empresa"],item["setor"],item["direcao"],
+                                 item["familia"],item["motivo"]])
     with open(outdir/(name+"_rotas_justificadas.csv"),"w",encoding="utf-8-sig",newline="") as f:
         w=csv.writer(f,delimiter=";")
         w.writerow(["empresa","setor","tipo_de_classificacao","direcao","carga",
@@ -921,7 +936,30 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                             "papel_detectado":company.role,
                             "motivo":"OUT antigo incompativel com o setor; nao replicado"
                         })
+            # Relatorio explica tambem rejeicoes de transportadoras, cultivos
+            # especificos e nomes ingleses; sem reabrir a compatibilidade.
+            eldorado_rejeicoes=[]
+            eldorado_traducoes={}
+            if name.lower()=="eldorado":
+                for company in companies.values():
+                    for direction,old_tokens in (("in",company.old_in),("out",company.old_out)):
+                        for token in sorted(old_tokens):
+                            identified=eldorado_translate({token})
+                            eldorado_traducoes[token]=sorted(identified)
+                        for category in sorted(eldorado_translate(old_tokens)):
+                            if category not in {c for c,t in MANIFEST.values()}:
+                                continue
+                            if not eldorado_permit(company,category,direction):
+                                eldorado_rejeicoes.append({
+                                    "empresa":company.name,"setor":company.role,
+                                    "direcao":direction,"familia":category,
+                                    "motivo":("transportadora/centro generico nao e produtor nem comprador do produto"
+                                      if company.role in {"transportadora","hub_generico"} else
+                                      "incompatibilidade economica ou cultura nao demonstrada")
+                                })
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "rejeicoes_eldorado":eldorado_rejeicoes,
+                  "traducoes_ingles_portugues":eldorado_traducoes,
                   "rejeicoes_grade_baixa":grade_baixa_rejeitados,
                   "total_empresas":len(companies),"empresas_atendidas":len(work),
                   "arquivos_inout_originais":count,
