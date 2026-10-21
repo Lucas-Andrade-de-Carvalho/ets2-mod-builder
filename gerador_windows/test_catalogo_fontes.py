@@ -31,7 +31,7 @@ class SourceCargoTests(unittest.TestCase):
     def test_new_cargo_comes_from_real_definition_not_catalog(self):
         manifest,extras=fontes.from_originals(g.MANIFEST,self.records,self.txt)
         self.assertEqual(len(manifest),24)
-        self.assertEqual(manifest["carga24"],("nao_classificada","Coco"))
+        self.assertEqual(manifest["carga24"],("coco","Coco"))
         self.assertEqual(extras["carga24"]["body_types"],["alta"])
         self.assertEqual(self.records["carga24"]["raw"],self.raw)
     def test_cargo24_without_txt_fails_closed(self):
@@ -41,6 +41,25 @@ class SourceCargoTests(unittest.TestCase):
         rec=dict(self.records);rec.pop("carga24")
         with self.assertRaisesRegex(ValueError,"cargo_data"):
             fontes.from_originals(g.MANIFEST,rec,self.txt)
+    def test_coco_is_not_invented_from_oil_or_processed_derivative(self):
+        self.assertEqual(fontes.known_economic_category("Coco"),"coco")
+        self.assertEqual(fontes.known_economic_category("Coco verde"),"coco")
+        self.assertEqual(fontes.known_economic_category("Oleo de coco"),"nao_classificada")
+        self.assertEqual(fontes.known_economic_category("Leite de coco"),"nao_classificada")
+
+    def test_coco_policy_requires_documentary_production(self):
+        import politica_economica as policy
+        spec={"id":"carga24","nome":"Coco","categoria":"coco",
+              "body_types":["alta"]}
+        farm=g.Company("fazenda_coco",old_out={"coconuts"})
+        farm_without_proof=g.Company("fazenda_coco")
+        store=g.Company("supermercado_centro")
+        self.assertTrue(fontes.evaluate(farm,spec,"out",policy.classify(farm)).allowed)
+        self.assertFalse(fontes.evaluate(farm_without_proof,spec,"out",
+                                         policy.classify(farm_without_proof)).allowed)
+        self.assertTrue(fontes.evaluate(store,spec,"in",policy.classify(store)).allowed)
+        self.assertFalse(fontes.evaluate(store,spec,"out",policy.classify(store)).allowed)
+
     def test_24_25_and_others_scanned_without_code_changes(self):
         r=dict(self.records)
         raw=b'cargo_data : cargo.carga25 {\n body_types[]: baixa\n}\n'
