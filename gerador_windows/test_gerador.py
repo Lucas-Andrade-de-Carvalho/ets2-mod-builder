@@ -541,6 +541,61 @@ class Regression(unittest.TestCase):
         self.assertTrue(all("carroceria" in x and "lacuna" in x
                             for x in report["cargas"]))
 
+    def test_eldorado_all_23_realistic_cargo_chains_can_pass_strict_gate(self):
+        """Ramos economicos correspondem ao uso da mercadoria, IN e OUT separados."""
+        cargo_records={
+            "fazenda_ouro":{"in":["fertilizer"],"out":["corn","soybeans","cotton"]},
+            "silo_armazen":{"in":["corn","soybeans"],"out":["corn","soybeans","sorghum"]},
+            "agropecuaria_centro":{"out":["fertilizer"],"in":["animal_feed"]},
+            "serraria_ouro":{"out":["timber","wooden_pallets"]},
+            "textil_ouro":{"in":["cotton"]},
+            "votoran":{"out":["cement"]},
+            "material_construcao":{"in":["cement","bricks","timber"],"out":["cement"]},
+            "obra_construcao":{"in":["cement","bricks","granite","timber"]},
+            "batata_fazenda":{"out":["potatoes"]},
+            "laranja_fazenda":{"out":["oranges"]},
+            "supermercado_centro":{"in":["potatoes","oranges","beer"]},
+            "gerdau":{"out":["steel_coils"]},
+            "fiat":{"in":["steel_coils"]},
+            "ambev":{"out":["beer"]},
+            "ceramica_ouro":{"out":["bricks"]},
+            "pedreira_ouro":{"out":["granite"]},
+            "marmoraria_ouro":{"in":["granite"]},
+            "sucatao_ouro":{"in":["wooden_pallets"]},
+            "racao_fabrica":{"out":["animal_feed"],"in":["sorghum","corn","soybeans"]},
+            "pecuaria_gado":{"in":["animal_feed"]},
+        }
+        files={}
+        for company,dirs in cargo_records.items():
+            for direction,cargos in dirs.items():
+                for original in cargos:
+                    files[f"{company}/{direction}/{original}.sii"]=old(original)
+        src=self.root/"eldorado.zip";zip_write(src,files)
+        inp={**self.inp,"maps":{"Eldorado":src}}
+        result=g.generate(inp,self.root/"strict_success")
+        self.assertEqual(len(result),1)
+        name,path,audit=result[0]
+        coverage=audit["cobertura_23_cargas"]
+        self.assertEqual(coverage["total"],23)
+        self.assertEqual(coverage["cargas_com_rota"],23)
+        self.assertEqual(coverage["cargas_sem_rota"],0)
+        self.assertTrue(coverage["pronto_para_gerar"])
+        self.assertTrue(all(x["pares_distintos_possiveis"]>0
+                            for x in coverage["cargas"]))
+        with zipfile.ZipFile(path) as z:
+            self.assertIsNone(z.testzip())
+            names=set(z.namelist())
+            for n in g.MANIFEST:
+                self.assertTrue(any(x.endswith(f"/out/carga{n}.sii") for x in names),
+                                f"OUT carga{n} faltando")
+                self.assertTrue(any(x.endswith(f"/in/carga{n}.sii") for x in names),
+                                f"IN carga{n} faltando")
+            self.assertIn("def/company/sucatao_ouro/in/carga16.sii",names)
+            self.assertIn("def/company/fiat/in/carga9.sii",names)
+            self.assertIn("def/company/ambev/out/carga12.sii",names)
+        self.assertTrue((self.root/"strict_success"/
+                         "Eldorado_COBERTURA_23_CARGAS.csv").is_file())
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
