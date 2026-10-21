@@ -274,15 +274,17 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                             "direcao":direction,"carga":cargo,"arquivo":path,
                             "setor":comp.role,"confianca":"alta","motivo":prohibition})
                     else:
-                        decisions.append({"acao":"REVISAR","empresa":company,
-                            "direcao":direction,"carga":cargo,"arquivo":path,
-                            "setor":comp.role,
-                            "confianca":"media" if explicit_confidence(comp) else "baixa",
-                            "motivo":("Atividade conhecida, mas sem prova suficiente "
-                                     "para manter ou remover automaticamente"
+                        decisions.append({
+                            "acao":("REVISAR" if explicit_confidence(comp)
+                                    else "PRESERVAR_SEM_EVIDENCIA"),
+                            "empresa":company,"direcao":direction,"carga":cargo,
+                            "arquivo":path,"setor":comp.role,
+                            "confianca":"media" if explicit_confidence(comp) else "indeterminada",
+                            "motivo":("Atividade conhecida mas a mercadoria exige "
+                                     "confirmacao documental antes de ser aprovada"
                                      if explicit_confidence(comp) else
-                                     "Empresa sem classificacao conclusiva; "
-                                     "nao remover automaticamente")})
+                                     "Permissao herdada preservada sem alterar; "
+                                     "empresa ainda nao classificada")})
                         states[company][direction].add(cargo)
                 count+=1
         # Nao repetir a mesma carga 2x no mesmo IN/OUT.
@@ -374,10 +376,18 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                                              "faltando_out":missing_out})
         updated=sum(contents.get(p)!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
+        # Nao transformar a ausencia de classificacao em centenas de alertas.
+        # Preservar cada permissao herdada, com rastro individual, e produzir
+        # uma fila de classificacao agrupada por empresa.
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
+        preserved=[d for d in decisions if d["acao"]=="PRESERVAR_SEM_EVIDENCIA"]
         pending_by_company=defaultdict(list)
-        for item in manual:
+        for item in manual+preserved:
             pending_by_company[item["empresa"]].append(item)
+        classification_pending={d["empresa"] for d in preserved}
+        routes_without_pair=[
+            cargo for cargo,row in after.items() if row["pares_distintos"]==0]
+        additional_without_policy=sorted(extras,key=catalogo_cargas.sort_key)
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
         summary={"versao":"3.0.0" if professional else "2.5.0",
             "economia_profissional":professional,
@@ -385,15 +395,21 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "nenhum_scs_gerado":mode=="auditar",
             "diagnostico_pendencias":{
                 "total_decisoes_revisar":len(manual),
+                "permissoes_herdadas_preservadas_sem_evidencia":len(preserved),
+                "empresas_com_classificacao_pendente":len(classification_pending),
+                "empresas_com_revisoes_acionaveis":len({d["empresa"] for d in manual}),
                 "empresas_com_revisoes":len(pending_by_company),
+                "criterio":"PRESERVAR_SEM_EVIDENCIA nao e erro; "
+                           "permissoes ficam intactas ate comprovacao documental.",
+                "cargas_sem_rota":routes_without_pair,
+                "cargas_novas_sem_politica_economica":additional_without_policy,
                 "por_motivo":dict(sorted(
                     (m,sum(x["motivo"]==m for x in manual))
                     for m in {x["motivo"] for x in manual})),
                 "por_atividade":dict(sorted(
                     (role,sum(x["setor"]==role for x in manual))
                     for role in {x["setor"] for x in manual})),
-                "empresas_nao_classificadas_com_revisao":len({
-                    d["empresa"] for d in manual if d["setor"]=="desconhecida"}),
+                "empresas_nao_classificadas_com_revisao":len(classification_pending),
             },
             "politica_cargas_adicionais":{
                 cid:{"categoria":spec["categoria"],"nome":spec["nome"],
@@ -414,6 +430,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "permissoes_examinadas":count,"arquivos_original":len(contents),
             "arquivos_adicionados":added,"arquivos_modificados":updated,
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
+            "permissoes_sem_evidencia_preservadas":len(preserved),
+            "empresas_classificacao_pendente":len(classification_pending),
+            "cargas_sem_rota_validada":routes_without_pair,
             "rotas_antes":before,"rotas_depois":after,
             "nota_rotas_depois":("PROJECAO de como ficaria se corrigisse; "
                                 "nenhuma permissao alterada no arquivo original"
@@ -421,16 +440,34 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                                 "Resultado exportado para novo SCS auditado"),
             "rotas_completas_depois":sum(x["pares_distintos"]>0 for x in after.values()),
             "decisoes":decisions,
-            "status":"REVISÃO_MANUAL_NECESSÁRIA" if manual or forgotten_companies or any(
-                x["pares_distintos"]==0 for x in after.values()) or
-                (territory and territory["empresas_sem_identificacao"]) else
-                "AUDITORIA_ESTRUTURAL_CONCLUÍDA",
-            "aviso":"Nao homologado em ETS2; classificacao sem nome/evidencia conclusivos requer revisao humana."}
+            "status":("PENDENTE_VALIDACAO_ECONOMICA"
+                      if manual or preserved or forgotten_companies or
+                         routes_without_pair or additional_without_policy or
+                         (territory and territory["empresas_sem_identificacao"])
+                      else "AUDITORIA_ESTRUTURAL_CONCLUÍDA"),
+            "aviso":("Arquivo tecnicamente auditado, NAO homologado para cliente "
+                     "ou ETS2 enquanto restarem empresas sem classificacao, "
+                     "permissoes sem evidencia e cargas sem rotas.")}
+        # Dois niveis de diagnostico: aviso acionavel vs situacao herdada
+        # somente informativa. O conjunto completo continua em AUDITORIA*.csv.
+        with (out/("RESUMO_VALIDACAO_"+name.upper()+".txt")).open(
+                "w",encoding="utf-8") as fp:
+            fp.write("Mapa: "+name+"\n")
+            fp.write("Revisoes pontuais: "+str(len(manual))+"\n")
+            fp.write("Permissoes herdadas preservadas sem evidencia: "+
+                     str(len(preserved))+"\n")
+            fp.write("Empresas necessitando identificacao de atividade: "+
+                     str(len(classification_pending))+"\n")
+            fp.write("Cargas sem rota com empresas distintas: "+
+                     ", ".join(routes_without_pair)+"\n")
+            fp.write("Cargas novas aguardando politica economica: "+
+                     ", ".join(additional_without_policy)+"\n")
+            fp.write("Aviso: sem verificacao em mapa/ETS2, nao e entrega homologada.\n")
         # Indica quais empresas realmente precisam ser classificadas primeiro.
         with (out/("PENDENCIAS_CLASSIFICACAO_"+name.upper()+".csv")).open(
                 "w",newline="",encoding="utf-8-sig") as fp:
             writer=csv.writer(fp,delimiter=";")
-            writer.writerow(["empresa","setor_atual","revisoes","cargas_ativas_in",
+            writer.writerow(["empresa","setor_atual","permissoes_a_conferir","cargas_ativas_in",
                              "cargas_ativas_out","instancias_editor",
                              "prefab_confirmado","acao_recomendada"])
             for cid,pending in sorted(pending_by_company.items(),
@@ -553,9 +590,12 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
             log(name+": Company auditada salva: "+output.name+
                 " | "+str(len(removals))+" exclusoes, "+str(added)+
-                " adicoes, "+str(len(manual))+" pendencias")
+                " adicoes; "+str(len(manual))+" revisoes pontuais, "+
+                str(len(classification_pending))+" empresas sem classificacao")
         else:
-            log(name+": auditoria sem editar SCS | "+str(len(manual))+" pendencias")
+            log(name+": auditoria sem editar SCS | "+str(len(manual))+
+                " revisoes pontuais; "+str(len(classification_pending))+
+                " empresas com atividade pendente")
         outputs.append(summary)
     return outputs
 
