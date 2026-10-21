@@ -195,6 +195,10 @@ def evaluate(company, spec, direction, identity):
     required = spec[direction + "_evidence"]
     tokens = {norm(t) for t in (company.old_out if direction == "out" else company.old_in)}
     known = {norm(spec["id"])} | {norm(t) for t in spec["aliases"]}
+    # Um atacadista generico precisa demonstrar movimentacao especifica;
+    # "distribuidor" por nome nunca vira fornecedor universal.
+    if direction == "out" and role in {"distribuidor", "atacadista"} and not explicit:
+        required = "documental"
     if required == "documental" and not (tokens & known):
         return Decision(False, "falta IN/OUT documental especifico da mercadoria",
                         "cadastro exige evidencia na DEF do mapa", "alta")
