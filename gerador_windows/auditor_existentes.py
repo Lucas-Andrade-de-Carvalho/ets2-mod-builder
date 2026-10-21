@@ -114,8 +114,8 @@ def can_add(g,c,cat,direction,map_name,professional=False):
 def digest(value):
     return hashlib.sha256(value).hexdigest()
 
-def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
-        professional=False, source_files=None):
+def _run_unpublished(g, map_entries, out_path, mode="corrigir",
+                     log=lambda s: None,professional=False,source_files=None):
     """map_entries: {Eldorado:{existing:...,map_def:...}, Minas_Gerais:{...}}.
 
     Usa o arquivo do mapa COMO EVIDENCIA, e a Company EXISTENTE como base.
@@ -453,3 +453,33 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
             log(name+": auditoria sem editar SCS | "+str(len(manual))+" pendencias")
         outputs.append(summary)
     return outputs
+
+
+def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
+        professional=False, source_files=None):
+    """Publica resultados SOMENTE depois que todos os mapas terminarem.
+
+    Preserva arquivos existentes caso a auditoria do segundo ou terceiro
+    mapa falhe; nunca deixa resultado parcial parecendo entrega concluida.
+    """
+    published=Path(out_path)
+    published.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="auditor_staging_",dir=published) as tmp:
+        stage=Path(tmp)
+        try:
+            result=_run_unpublished(
+                g,map_entries,stage,mode=mode,log=log,
+                professional=professional,source_files=source_files)
+        except Exception as exc:
+            (published/"AUDITORIA_INCOMPLETA.txt").write_text(
+                "Processamento dos mapas interrompido antes da publicacao. "
+                "Nenhum SCS novo desta execucao foi entregue.\n"+
+                type(exc).__name__+": "+str(exc)+"\n",
+                encoding="utf-8")
+            raise
+        for item in sorted(stage.iterdir()):
+            if item.is_file():
+                os.replace(item,published/item.name)
+        log("Auditoria de "+str(len(result))+
+            " mapa(s) finalizada e publicada em conjunto.")
+        return result
