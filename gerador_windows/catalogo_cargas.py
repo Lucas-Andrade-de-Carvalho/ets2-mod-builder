@@ -116,11 +116,20 @@ def import_definition(path, cargo):
     p = Path(path)
     if p.suffix.lower() not in (".sii", ".sui"):
         raise ValueError("Selecione arquivo .sii ou .sui")
-    raw = p.read_bytes()
+    original = p.read_bytes()
+    raw = original
+    # Arquivos SUI de cargo_data frequentemente sao fragmentos incluidos por
+    # master SII. Envolver a unidade completa permite gerar arquivo autonomo.
+    # Nao transformar imports/dependencias ocultas.
+    if p.suffix.lower() == ".sui" and not re.search(
+            rb"(?im)^s*SiiNunits*$", original):
+        raw = b"SiiNunit\n{\n" + original + b"\n}\n"
     bodies = parse_sii(raw, cargo)
     return {"sii_base64": base64.b64encode(raw).decode("ascii"),
             "sha256": hashlib.sha256(raw).hexdigest(), "body_types": bodies,
-            "arquivo_origem": p.name}
+            "sha256_origem": hashlib.sha256(original).hexdigest(),
+            "arquivo_origem": p.name,
+            "convertido_de_sui": original != raw}
 
 
 def load(path=None, reserved=()):
