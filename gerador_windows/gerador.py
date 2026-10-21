@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -675,7 +675,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.0")
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.1")
     root.geometry("1010x740")
     root.minsize(860,650)
     style=ttk.Style(root)
@@ -684,7 +684,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.0  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
+    ttk.Label(frame,text="v2.1  ·  Funciona offline  ·  Originais preservados  ·  Auditoria por mapa",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
