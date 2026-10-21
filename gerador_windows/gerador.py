@@ -1111,10 +1111,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                         read_sii(record["raw"])).encode("utf-8")
             # Definicoes importadas copiadas byte a byte, sem sobrescrever originais.
             for cid,spec in extras.items():
-                path=spec["cargo_path"]
-                if path in output_files:
-                    raise ValueError("Colisao na definicao da carga: "+path)
-                output_files[path]=catalogo_cargas.decode_definition(spec)
+                cargo_path=spec["cargo_path"]
+                if cargo_path in output_files:
+                    raise ValueError("Colisao na definicao da carga: "+cargo_path)
+                output_files[cargo_path]=catalogo_cargas.decode_definition(spec)
             dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
             with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
                 for p,raw in sorted(output_files.items()):
