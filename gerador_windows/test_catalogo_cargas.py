@@ -55,8 +55,9 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(catalog.manifest(g.MANIFEST,catalog.load(self.file))),24)
         self.assertEqual(len(g.MANIFEST),23)  # sem tocar nos originais
     def test_reject_wrong_id_and_tampering(self):
-        bad=dict(self.spec);bad["id"]="carga24"
-        with self.assertRaisesRegex(ValueError,"ID"):catalog.validate(bad)
+        bad=dict(self.spec);bad["id"]="carga12"
+        with self.assertRaisesRegex(ValueError,"ID"):catalog.validate(bad, reserved={
+            catalog.cargo_id(k) for k in g.MANIFEST})
         bad=dict(self.spec);bad["id"]="acucar_errado"
         with self.assertRaisesRegex(ValueError,"cargo_data"):catalog.validate(bad)
         bad=dict(self.spec);bad["sha256"]="0"*64
