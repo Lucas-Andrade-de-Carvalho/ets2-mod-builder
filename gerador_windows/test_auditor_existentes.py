@@ -63,7 +63,9 @@ class AuditorSCSRegression(unittest.TestCase):
         r=result[0]
         self.assertTrue(r["permissoes_removidas"]>=4)
         self.assertTrue(r["arquivos_adicionados"]>=2)
-        self.assertTrue(r["pendencias_revisao"]>=2)
+        self.assertTrue(r["pendencias_revisao"]>=1)
+        self.assertGreaterEqual(r["permissoes_sem_evidencia_preservadas"],1)
+        self.assertGreaterEqual(r["empresas_classificacao_pendente"],1)
         self.assertEqual(self.existing.read_bytes(),old_bytes)
         output=self.root/"audit_output"/r["arquivo_corrigido"]
         self.assertTrue(output.exists())
@@ -162,6 +164,30 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(mina.read_bytes(),b"MG_KEEP")
         self.assertEqual(rbr.read_bytes(),b"RBR_KEEP")
         self.assertEqual(len(list(out.glob("*AUDITADA_V25_*.scs"))),1)
+
+    def test_unclassified_company_is_preserved_without_duplicated_error_alerts(self):
+        """Regressao dos 2.207 avisos: herdados desconhecidos nao sao erros."""
+        out=self.root/"sem_alarme_falso"
+        result=self.invoke(mode="corrigir",out=out)[0]
+        unknown=[x for x in result["decisoes"]
+                 if x["empresa"]=="desconhecida007" and x["carga"]=="carga8"]
+        self.assertEqual(len(unknown),1)
+        self.assertEqual(unknown[0]["acao"],"PRESERVAR_SEM_EVIDENCIA")
+        self.assertNotIn(unknown[0],[
+            x for x in result["decisoes"] if x["acao"]=="REVISAR"])
+        self.assertGreaterEqual(result["permissoes_sem_evidencia_preservadas"],1)
+        self.assertEqual(result["diagnostico_pendencias"][
+            "permissoes_herdadas_preservadas_sem_evidencia"],
+            result["permissoes_sem_evidencia_preservadas"])
+        self.assertTrue((out/"RESUMO_VALIDACAO_ELDORADO.txt").exists())
+        self.assertTrue((out/"PENDENCIAS_CLASSIFICACAO_ELDORADO.csv").exists())
+        with zipfile.ZipFile(out/result["arquivo_corrigido"]) as zipf:
+            self.assertEqual(
+                zipf.read("def/company/desconhecida007/in/carga8.sii"),
+                self.payload["def/company/desconhecida007/in/carga8.sii"])
+        second=self.invoke(mode="corrigir",out=self.root/"sem_alarme_falso_2")[0]
+        self.assertEqual(second["permissoes_sem_evidencia_preservadas"],
+                         result["permissoes_sem_evidencia_preservadas"])
 
     def test_targeted_neutralization_never_clears_unrelated_cargo(self):
         blob=(b'SiiNunit\n{\n cargo: "cargo.carga7"\n'
