@@ -34,6 +34,27 @@ def main(exe_path):
         assert len(generated)==3, f"Esperado 3 SCS; encontrados {len(generated)}"
         assert len(list(out.glob("*_auditoria.json")))==3
         print("EXE Windows executou e gerou tres mods sinteticos:",*[x.name for x in generated])
+        # Executar tambem a funcao cliente: atualizar apenas Eldorado.
+        # Prova que nao precisamos carregar os arquivos MG/RBR nesse modo.
+        only=case.root/"eldorado_only_exe"
+        only.mkdir()
+        mg=only/"ETS2_MINAS_GERAIS_COMPANY.scs"
+        rbr=only/"ETS2_RBR_COMPANY.scs"
+        mg.write_bytes(b"MINAS_CLIENTE_NAO_MODIFICAR")
+        rbr.write_bytes(b"RBR_CLIENTE_NAO_MODIFICAR")
+        command=[str(Path(exe_path).resolve()),"--cli","--only-eldorado",
+                 "--mod",str(p["mod"]),"--def1",str(p["def1"]),
+                 "--def2",str(p["def2"]),
+                 "--txt",str(case.root/"cargas.txt"),
+                 "--eldorado",str(p["maps"]["Eldorado"]),
+                 "--output",str(only)]
+        rr=subprocess.run(command,timeout=120,check=False)
+        if rr.returncode:raise RuntimeError(f"Eldorado-only EXE falhou: {rr.returncode}")
+        assert (only/"ETS2_ELDORADO_COMPANY.scs").is_file()
+        assert mg.read_bytes()==b"MINAS_CLIENTE_NAO_MODIFICAR"
+        assert rbr.read_bytes()==b"RBR_CLIENTE_NAO_MODIFICAR"
+        assert len(list(only.glob("*_auditoria.json")))==1
+        print("EXE Windows atualizou apenas Eldorado preservando MG e RBR")
     finally:
         case.tearDown()
 
