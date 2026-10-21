@@ -73,8 +73,8 @@ def validate(item, reserved=()):
         raise ValueError("Registro de carga invalido")
     spec = dict(item)
     cid = str(spec.get("id", "")).lower().strip()
-    if not ID_RE.fullmatch(cid) or re.fullmatch(r"carga\d+", cid):
-        raise ValueError("ID deve ter 2-64 caracteres [a-z0-9_], nao usar cargaN original")
+    if not ID_RE.fullmatch(cid):
+        raise ValueError("ID deve ter 2-64 caracteres [a-z0-9_]")
     if cid in reserved:
         raise ValueError("ID colide com cargo original: " + cid)
     spec["id"] = cid
