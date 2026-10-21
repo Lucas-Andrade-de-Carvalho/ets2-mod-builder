@@ -39,14 +39,16 @@ def inventory_archive(g, path):
         files=[a for a in z.infolist() if not a.is_dir()]
         if len(files)>100000 or sum(a.file_size for a in files)>1_600_000_000:
             z.close();raise ValueError("Company excede os limites seguros de processamento")
-        members=((a.filename,z.read(a)) for a in files if a.file_size<9_000_000)
+        if any(a.file_size>=9_000_000 for a in files):
+            z.close();raise ValueError("Arquivo interno acima de 9 MB; processamento exige revisao")
+        members=((a.filename,z.read(a)) for a in files)
     result={}
     try:
         for original,raw in members:
             clean=g.clean_path(original)
             if not clean:raise ValueError("Caminho irregular: "+original)
             canonical=g.canonical_path(clean)
-            path=(canonical or clean).lower()
+            path=canonical or clean
             if path in result and result[path]!=raw:
                 raise ValueError("Colisao de arquivo SCS: "+path)
             result[path]=raw
@@ -126,7 +128,6 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
         changed=dict(contents)
         decisions=[]
         states=defaultdict(lambda:{"in":set(),"out":set()})
-        orig_states=defaultdict(lambda:{"in":set(),"out":set()})
         seen=defaultdict(list)
         company_files=set()
         untouched_other=0
@@ -150,13 +151,12 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                         "carga":cargo,"arquivo":path,"setor":"EMPRESA_NAO_ENCONTRADA",
                         "confianca":"indeterminada",
                         "motivo":"ID nao aparece na DEF original do mapa; mantido para revisao"})
-                    states[(company,direction)][direction].add(cargo)
+                    states[company][direction].add(cargo)
                 continue
             comp=baseline[company]
             for cargo in ids:
                 cid=int(cargo[5:])
                 cat=g.MANIFEST[cid][0]
-                orig_states[company][direction].add(cargo)
                 seen[(company,direction,cargo)].append(path)
                 reason=safe_reason(g,comp,cat,direction,name)
                 if reason:
@@ -189,15 +189,18 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                 decisions.append({"acao":"REMOVER_DUPLICADO","empresa":company,
                     "direcao":direction,"carga":cargo,"arquivo":path,"setor":baseline[company].role,
                     "confianca":"alta","motivo":"Cargo ja existe no mesmo IN/OUT em "+keep})
+        # Indexar uma vez os cargos ainda ativos apos remocoes/duplicados.
+        current=defaultdict(lambda:{"in":set(),"out":set()})
+        for p,raw in changed.items():
+            m=g.RE_COMPANY_PATH.search(p)
+            if not m or m.group(2) not in {"in","out"} or not p.endswith(SII_EXT):continue
+            current[m.group(1)][m.group(2)].update(file_active_ids(g,raw))
         # Completar lacunas confiaveis de empresas EXISTENTES do mapa.
         for company,comp in sorted(baseline.items()):
             for n,(cat,title) in g.MANIFEST.items():
                 cargo="carga"+str(n)
                 for direction in ("in","out"):
-                    present=(cargo in states[company][direction] and any(
-                        cargo in file_active_ids(g,raw)
-                        for p,raw in changed.items()
-                        if p.startswith("def/company/"+company+"/"+direction+"/")))
+                    present=(cargo in current[company][direction])
                     if present:continue
                     why=can_add(g,comp,cat,direction,name)
                     if why:
@@ -214,6 +217,7 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                             "carga":cargo,"arquivo":new_path,"setor":comp.role,
                             "confianca":"alta","motivo":"Empresa compativel validada pela DEF: "+why})
                         states[company][direction].add(cargo)
+                        current[company][direction].add(cargo)
         # Reconstruir estado pelo SCS FINAL, nao confiar nas decisoes.
         final_active=defaultdict(lambda:{"in":set(),"out":set()})
         original_active=defaultdict(lambda:{"in":set(),"out":set()})
@@ -243,7 +247,7 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
             "def_original":Path(entry["map_def"]).name,
             "sha256_def":g.hash_source(entry["map_def"]),
             "empresas_na_def":len(baseline),"empresas_no_scs":len(company_files),
-            "permissoes_examindas":count,"arquivos_original":len(contents),
+            "permissoes_examinadas":count,"arquivos_original":len(contents),
             "arquivos_adicionados":added,"arquivos_modificados":updated,
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
             "rotas_antes":before,"rotas_depois":after,
