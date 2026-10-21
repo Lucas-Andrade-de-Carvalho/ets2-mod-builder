@@ -1413,13 +1413,22 @@ def run_gui():
                           professional=True,
                           source_files={**{k:snapshot[k] for k in ("mod","def1","def2")},
                                         "txt":snapshot["txt"]})
-            total_pending=sum(x["pendencias_revisao"] for x in results)
-            work_queue.put(("success",
-                str(len(results))+" Company(s) examinada(s). "+
-                str(total_pending)+" ocorrencias requerem revisao. "+
-                ("Corrigida(s) em arquivos NOVOS; originais preservados. " if mode=="corrigir" else
-                 "Nenhum SCS gerado. ")+
-                "Confira AUDITORIA_*.json e .csv ANTES de entregar ao cliente."))
+            review=sum(x["pendencias_revisao"] for x in results)
+            unverified=sum(x.get("permissoes_sem_evidencia_preservadas",0)
+                           for x in results)
+            companies=sum(x.get("empresas_classificacao_pendente",0)
+                          for x in results)
+            route_gaps=sum(len(x.get("cargas_sem_rota_validada",[])) for x in results)
+            msg=(str(len(results))+" Company(s) examinada(s). "+
+                 str(review)+" revisoes pontuais; "+
+                 str(companies)+" empresas com classificacao pendente ("+
+                 str(unverified)+" permissoes antigas preservadas). "+
+                 str(route_gaps)+" cadeias sem rota completa. "+
+                 ("Novos SCS exportados SEM homologacao; originais intactos. "
+                  if mode=="corrigir" else "Nenhum SCS gerado. ")+
+                 "Veja RESUMO_VALIDACAO_*.txt e PENDENCIAS_CLASSIFICACAO_*.csv. "+
+                 "Nao entregar ao cliente sem validar DEF e ETS2.")
+            work_queue.put(("success",msg))
         except Exception as exc:
             work_queue.put(("error",str(exc)))
 
