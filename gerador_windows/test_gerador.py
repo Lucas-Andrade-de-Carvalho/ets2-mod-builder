@@ -207,6 +207,37 @@ class Regression(unittest.TestCase):
             self.assertIn('cargo: ""',scs.read(
                 "def/company/ambev/out/bebidas.sii").decode("utf-8"))
 
+    def test_eldorado_large_flat_archive_14758_files(self):
+        """Stress test com as contagens do diagnostico (dados sinteticos)."""
+        archive=self.root/"eldorado.zip"
+        inout_total=13892
+        editor_total=866
+        with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_STORED) as z:
+            for i in range(inout_total):
+                cid=f"eld_company_{i//70:03d}"
+                direction="in" if i%2 else "out"
+                unit=f"item_{i:05d}"
+                z.writestr(f"{cid}/{direction}/{unit}.sii",old(unit))
+            for i in range(editor_total):
+                cid=f"eld_company_{i%199:03d}"
+                z.writestr(f"{cid}/editor/city_{i:04d}.sii",
+                           "SiiNunit\n{}\n")
+        diag=g.describe_archive(archive)
+        self.assertEqual(diag["total_arquivos"],14758)
+        self.assertEqual(diag["caminhos_in_out"],13892)
+        self.assertEqual(diag["caminhos_reconhecidos"],14758)
+        self.assertEqual(diag["company_na_raiz"],14758)
+        self.assertEqual(diag["layout_detectado"],"company_direto_na_raiz")
+        companies,count=g.extract_map(archive)
+        self.assertEqual(count,13892)
+        self.assertEqual(len(companies),199)
+        self.assertEqual(sum(len(c.editor_files) for c in companies.values()),866)
+        out=g.generate(self.inp,self.root/"large_out")
+        self.assertEqual(len(out),3)
+        eldorado=next((data for name,p,data in out if name=="Eldorado"))
+        self.assertEqual(eldorado["arquivos_inout_originais"],13892)
+        self.assertEqual(eldorado["arquivos_editor_preservados"],866)
+
     def test_eldorado_root_collision_cannot_be_silently_overwritten(self):
         src=self.root/"eldorado.zip"
         zip_write(src,{
