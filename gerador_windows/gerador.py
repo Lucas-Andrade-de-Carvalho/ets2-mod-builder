@@ -19,6 +19,7 @@ import traceback
 import unicodedata
 import zipfile
 import politica_economica as professional_policy
+import catalogo_cargas
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -763,14 +764,15 @@ def grade_label(body_types):
     if "hopper" in names:return "Hopper / graneleiro"
     return "Outras carrocerias: "+", ".join(sorted(names))
 
-def coverage_audit(companies,cargo_routes,cargo_records,name):
+def coverage_audit(companies,cargo_routes,cargo_records,name,manifest=None):
+    manifest=MANIFEST if manifest is None else manifest
     """Cobertura de cada cargo: ao menos um produtor e comprador DIFERENTES.
 
     Nao cria nem inventa permissao; somente documenta o mercado existente.
     """
     cargo_rows=[]
-    for n,(category,title) in MANIFEST.items():
-        cargo=f"carga{n}"
+    for n,(category,title) in manifest.items():
+        cargo=catalogo_cargas.cargo_id(n)
         route=cargo_routes[cargo]
         outs=set(route["origens_lista"])
         ins=set(route["destinos_lista"])
@@ -812,11 +814,11 @@ def coverage_audit(companies,cargo_routes,cargo_records,name):
         group["total"]+=1
         if row["rota_completa"]:group["rotas_completas"]+=1
         else:group["cargas_faltantes"].append(row["id"])
-    return {"mapa":name,"total":len(MANIFEST),
+    return {"mapa":name,"total":len(manifest),
             "cobertura_por_carroceria":grades,
             "cargas_com_rota":complete,
-            "cargas_sem_rota":len(MANIFEST)-complete,
-            "pronto_para_gerar":complete==len(MANIFEST),
+            "cargas_sem_rota":len(manifest)-complete,
+            "pronto_para_gerar":complete==len(manifest),
             "metodologia":"carga valida precisa ter IN e OUT economicamente justificados e empresa origem diferente da empresa destino",
             "cargas":cargo_rows}
 
@@ -824,9 +826,9 @@ def write_coverage_report(directory,audit):
     """Grava diagnostico mesmo quando a geracao SCS e bloqueada."""
     target=Path(directory);target.mkdir(parents=True,exist_ok=True)
     name=audit["mapa"]
-    (target/(name+"_COBERTURA_23_CARGAS.json")).write_text(
+    (target/(name+("_COBERTURA_23_CARGAS" if audit["total"]==23 else "_COBERTURA_CARGAS")+".json")).write_text(
         json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8")
-    with (target/(name+"_COBERTURA_23_CARGAS.csv")).open(
+    with (target/(name+("_COBERTURA_23_CARGAS" if audit["total"]==23 else "_COBERTURA_CARGAS")+".csv")).open(
             "w",encoding="utf-8-sig",newline="") as f:
         w=csv.writer(f,delimiter=";")
         w.writerow(["id","mercadoria","carroceria","body_types","origens",
@@ -838,7 +840,7 @@ def write_coverage_report(directory,audit):
                 c["pares_distintos_possiveis"],"SIM" if c["rota_completa"] else "NAO",
                 c["lacuna"],",".join(c["origens_lista"]),",".join(c["destinos_lista"]),
                 ",".join(x["empresa"] for x in c["candidatos_com_evidencia_para_revisao"])])
-    return target/(name+"_COBERTURA_23_CARGAS.json")
+    return target/(name+("_COBERTURA_23_CARGAS" if audit["total"]==23 else "_COBERTURA_CARGAS")+".json")
 
 def write_report(outdir,name,result):
     with open(outdir/(name+"_auditoria.json"),"w",encoding="utf-8") as f:
@@ -872,6 +874,10 @@ def write_report(outdir,name,result):
                         row["direcao"],row["carga"],row["categoria"],row["justificativa"]])
 
 def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=None, professional=False):
+    extras=catalogo_cargas.load(inputs.get("catalogo"), reserved={
+        catalogo_cargas.cargo_id(k) for k in MANIFEST})
+    manifest=catalogo_cargas.manifest(MANIFEST,extras)
+    professional=professional or bool(extras)
     outdir=Path(output);outdir.mkdir(parents=True,exist_ok=True)
     log("Lendo arquivos originais do Librelato...")
     sources=[]
@@ -881,6 +887,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
         sources.append((label,arc))
         log(f"{label}: {len(arc)} definicoes")
     records,legacy,owned,ownable_defs,totals=cargo_inventory(sources)
+    for cid,spec in extras.items():
+        if cid in records:
+            raise ValueError("Carga adicional colide com cargo_data original: "+cid)
+        records[cid]={"source":"CATALOGO", "path":spec["cargo_path"],
+            "raw":catalogo_cargas.decode_definition(spec), "body":set(spec["body_types"]),
+            "valuable":False, "adr":False}
     errors=[];warnings=cargo_manifest_warnings(sources,records)
     provenance=[{"arquivo":Path(p).name,"papel":label,"sha256":hash_source(p),
                  "definicoes":len(arc)}
@@ -900,8 +912,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
         warnings.append("Nenhuma trailer_def foi encontrada nos originais fornecidos. "+
                         "O arquivo pode depender das defs base do ETS2 ou de outra fonte; "+
                         "nao significa automaticamente falha para reboque proprio.")
-    for n,(category,description) in MANIFEST.items():
-        id=f"carga{n}"
+    for n,(category,description) in manifest.items():
+        id=catalogo_cargas.cargo_id(n)
         r=records.get(id)
         if not r:
             errors.append(f"{id} ({description}): cargo_data ausente no reboque")
@@ -911,6 +923,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             continue
         # Validacao primaria para Mercado de Cargas com reboque proprio.
         # Nao usar um trailer_def LEGADO como requisito obrigatorio.
+        if not owned and id in extras:
+            errors.append(id+": nao foram encontradas carrocerias reais para validar carga nova")
         if owned and not (r["body"]&owned):
             errors.append(f"{id}: nenhum body_type compativel com as carrocerias "+
                           f"do reboque proprio: carga={sorted(r['body'])}, "+
@@ -981,13 +995,16 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             companies,count=checked_maps[name]
             local_warnings=list(warnings)
             work={};evidence=[];bycargo={}
-            for n,(category,title) in MANIFEST.items():
-                id=f"carga{n}"
+            for n,(category,title) in manifest.items():
+                id=catalogo_cargas.cargo_id(n)
                 outs=[];ins=[]
                 for c in companies.values():
                     for direction,results_list in (("out",outs),("in",ins)):
                         if professional:
-                            evaluation=professional_policy.decide(c,category,direction)
+                            evaluation=(catalogo_cargas.evaluate(
+                                c,extras[id],direction,professional_policy.classify(c))
+                                if id in extras else
+                                professional_policy.decide(c,category,direction))
                             why=evaluation.reason if evaluation.allowed else None
                         else:
                             why=(eldorado_permit(c,category,direction)
@@ -1003,9 +1020,15 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 if not outs or not ins: local_warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
                 for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
-            coverage=coverage_audit(companies,bycargo,records,name)
-            sector_audit=(professional_policy.coverage(companies,MANIFEST)
-                          if professional else None)
+            coverage=coverage_audit(companies,bycargo,records,name,manifest)
+            def decision_at(c,cat,direction,cargo):
+                if cargo in extras:
+                    return catalogo_cargas.evaluate(
+                        c,extras[cargo],direction,professional_policy.classify(c))
+                return professional_policy.decide(c,cat,direction)
+            sector_audit=(professional_policy.coverage(
+                companies,manifest,decision_fn=decision_at)
+                if professional else None)
             if sector_audit is not None:
                 # 23/23 por si so NAO prova cobertura de todas as empresas:
                 # identificadores obscuros com mercadorias relevantes exigem
@@ -1040,7 +1063,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                     " empresas e "+str(sector_audit["total_instancias_editor"])+
                     " referencias de unidades/cidades identificadas.")
             write_coverage_report(outdir,coverage)
-            log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/23 cargas.")
+            log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/"+str(len(manifest))+" cargas.")
             for grade,stats in sorted(coverage["cobertura_por_carroceria"].items()):
                 log("   "+grade+": "+str(stats["rotas_completas"])+"/"+
                     str(stats["total"])+" cargas com rota verificada")
@@ -1052,14 +1075,14 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                     " (mercadorias: "+",".join(item["familias_originais"])+")"
                     for item in unknown)
                 (publish_dir/(name+"_COBERTURA_INCOMPLETA.txt")).write_text(
-                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas; "+
+                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/"+str(len(manifest))+" rotas verificadas; "+
                     str(len(unknown))+" empresas com mercadorias e atividade indefinida.\n"+
                     "Nao gerar nem instalar uma Company incompleta em cliente.\n"+
                     "\n".join(gaps)+"\nConsulte "+report.name+" e respectivo CSV.\n"+
                     "Nao inventar empresas nem cargas sem evidencia na DEF.\n",
                     encoding="utf-8")
                 raise ValueError(name+": cobertura insuficiente ("+
-                    str(coverage["cargas_com_rota"])+"/23 cargas; "+
+                    str(coverage["cargas_com_rota"])+"/"+str(len(manifest))+" cargas; "+
                     str(len(coverage.get("empresas_pendentes_com_mercadoria",[])))+
                     " empresas com mercadoria e setor desconhecido). "+
                     "Nao foi gerado SCS. Abra "+report.name+
@@ -1076,8 +1099,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                         output_files[f"def/company/{cid}/{direction}/{id}.sii"]=cargo_sii(id)
             # As cargas precisam permanecer disponiveis: retirar exigencia injustificada
             # de skill somente no mod complementar; originais NUNCA sao editados.
-            for n in MANIFEST:
-                id=f"carga{n}"
+            for n in manifest:
+                id=catalogo_cargas.cargo_id(n)
                 record=records[id]
                 if id=="carga16":
                     # Baixa frequencia, independentemente da opcao de habilidade.
@@ -1086,6 +1109,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                     output_files[record["path"]]=re.sub(
                         r'(?im)^(\s*valuable\s*:\s*)true\b',r'\1false',
                         read_sii(record["raw"])).encode("utf-8")
+            # Definicoes importadas copiadas byte a byte, sem sobrescrever originais.
+            for cid,spec in extras.items():
+                path=spec["cargo_path"]
+                if path in output_files:
+                    raise ValueError("Colisao na definicao da carga: "+path)
+                output_files[path]=catalogo_cargas.decode_definition(spec)
             dest=outdir/("ETS2_"+name.upper().replace(" ","_")+"_COMPANY.scs")
             with zipfile.ZipFile(dest,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
                 for p,raw in sorted(output_files.items()):
@@ -1150,6 +1179,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
                   "auditoria_territorial":sector_audit,
                   "cobertura_23_cargas":coverage,
+                  "cobertura_catalogo":coverage,
+                  "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"],"categoria":spec["categoria"]} for cid,spec in extras.items()},
                   "rejeicoes_eldorado":eldorado_rejeicoes,
                   "traducoes_ingles_portugues":eldorado_traducoes,
                   "rejeicoes_grade_baixa":grade_baixa_rejeitados,
@@ -1184,7 +1215,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                             csvw.writerow([item["empresa"],item["atividade"],
                                 item["instancias_editor"],"ramo nao identificado" if
                                 item["atividade"]=="desconhecida" else
-                                "nenhuma das 23 cargas compativel com este ramo"])
+                                "nenhuma carga do catalogo compativel com este ramo"])
             log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
                 str(data["arquivos_inout_gerados"])+" permissões.")
             results.append((name,str(publish_dir/dest.name),data))
@@ -1225,7 +1256,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v3.0  ·  Cobertura por empresa/cidade · Comprador e fornecedor · 23 cargas",
+    ttk.Label(frame,text="v3.0  ·  Cobertura por empresa/cidade · Comprador e fornecedor · cargas dinamicas",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,6))
@@ -1308,6 +1339,9 @@ def run_gui():
                     variable=audit_mode,value="corrigir").pack(side="left",padx=(0,14))
     ttk.Radiobutton(audit_row,text="Apenas auditar, sem gerar SCS",
                     variable=audit_mode,value="auditar").pack(side="left")
+    from gerenciamento_gui import abrir_gerenciamento
+    ttk.Button(content,text="GERENCIAMENTO DE CARGAS — cadastrar, importar, editar e remover",
+               command=lambda:abrir_gerenciamento(root,MANIFEST)).pack(fill="x",pady=(8,5))
     options_row=ttk.Frame(content);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
@@ -1367,7 +1401,8 @@ def run_gui():
                 maps={"Minas_Gerais":snapshot["minas"],
                       "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
             inp={"mod":snapshot["mod"],"def1":snapshot["def1"],
-                 "def2":snapshot["def2"],"maps":maps}
+                 "def2":snapshot["def2"],"maps":maps,
+                 "catalogo":str(catalogo_cargas.default_path())}
             work_queue.put(("log","Escopo escolhido: "+", ".join(maps)))
             items=generate(inp,snapshot["output"],
                            log=lambda msg:work_queue.put(("log",msg)),
@@ -1392,7 +1427,8 @@ def run_gui():
             results=auditor_existentes.run(sys.modules[__name__],entries,snapshot["output"],
                           mode=mode,log=lambda msg:work_queue.put(("log",msg)),
                           professional=True,
-                          source_files={k:snapshot[k] for k in ("mod","def1","def2")})
+                          source_files={**{k:snapshot[k] for k in ("mod","def1","def2")},
+                                        "catalogo":str(catalogo_cargas.default_path())})
             total_pending=sum(x["pendencias_revisao"] for x in results)
             work_queue.put(("success",
                 str(len(results))+" Company(s) examinada(s). "+
@@ -1492,6 +1528,7 @@ def main():
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
     parser.add_argument("--audit-existing",action="store_true",
                         help="Auditar/corrigir Company SCS existente sem regenerar do zero")
+    parser.add_argument("--catalogo",help="Caminho opcional do catalogo JSON de novas cargas")
     parser.add_argument("--audit-only",action="store_true",
                         help="Gerar somente relatorio de auditoria, sem .scs corrigido")
     for x in ("mod","def1","def2","txt","minas","eldorado","rbr",
@@ -1515,8 +1552,9 @@ def main():
         auditor_existentes.run(sys.modules[__name__],jobs,args.output,
                               mode="auditar" if args.audit_only else "corrigir",
                               log=print,professional=True,
-                              source_files={k:getattr(args,k) for k in
-                                            ("mod","def1","def2")})
+                              source_files={**{k:getattr(args,k) for k in
+                                            ("mod","def1","def2")},
+                                            "catalogo":args.catalogo})
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
@@ -1528,7 +1566,8 @@ def main():
             parser.error(f"TXT incompleto: falta carga{n}")
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
-    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps}
+    inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps,
+         "catalogo":args.catalogo}
     generate(inp,args.output,print,professional=True)
 
 if __name__=="__main__":
