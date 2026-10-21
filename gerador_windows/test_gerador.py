@@ -470,6 +470,14 @@ class Regression(unittest.TestCase):
         self.assertEqual(report["total_empresas"],10)
         self.assertNotIn("eldorado_bananas",report["cadeias"]["carga7"]["destinos_lista"])
         self.assertNotIn("brasilog",report["cadeias"]["carga7"]["origens_lista"])
+        self.assertIn("potatoes",report["traducoes_ingles_portugues"])
+        self.assertIn("batata",report["traducoes_ingles_portugues"]["potatoes"])
+        reject={(x["empresa"],x["direcao"],x["familia"])
+                for x in report["rejeicoes_eldorado"]}
+        self.assertIn(("brasilog","out","batata"),reject)
+        self.assertIn(("eldorado_bananas","in","batata"),reject)
+        self.assertTrue((folder/"Eldorado_traducoes_cargas_ingles.csv").is_file())
+        self.assertTrue((folder/"Eldorado_permissoes_rejeitadas.csv").is_file())
 
     def test_neutralization(self):
         s=old("banana")
