@@ -148,6 +148,17 @@ def decide(company,category,direction,identity=None):
             if role=="cooperativa" and category in {"adubo","racao","algodao","coco"} and category in old_out:
                 return permit("cooperativa revende mercadoria documentada","OUT da mercadoria")
             return forbid("cooperativa/silo sem expedicao documentada dessa mercadoria")
+        # Logistica reversa de paletes usados: industrias, mercados e
+        # armazenagem so expedem quando o produto ESTA na DEF do mapa.
+        # A madeira produzida pela serraria nao prova palete usado;
+        # o caso madeireira fabricante continua separado abaixo.
+        if (category=="palete" and role in {
+                "supermercado","hortifruti","materiais","agroinsumos",
+                "alimentos","silo","cooperativa","fabrica_racao",
+                "cervejaria","cimenteira","automotiva_fabrica","metalurgica"}
+                and category in old_out):
+            return permit("estabelecimento expede paletes usados para retorno "
+                          "ou reciclagem", "OUT de paletes documentado na DEF")
         factory={
             "cervejaria":"cerveja","cimenteira":"cimento","siderurgica":"bobina",
             "ceramica":"tijolo","fabrica_racao":"racao","madeireira":"madeira",
@@ -209,6 +220,9 @@ def decide(company,category,direction,identity=None):
         return permit("marmoraria recebe pedra para beneficiamento")
     if role=="reciclagem" and category=="palete":
         return permit("recicladora recebe paletes usados")
+    if role in {"distribuidor","silo","cooperativa"} and category=="palete" and category in old_in:
+        return permit("unidade recebe paletes para retorno documentado",
+                      "IN especifico de paletes na DEF do mapa")
     return forbid("empresa nao demonstrou necessidade de receber "+category)
 
 def city_references(company):
