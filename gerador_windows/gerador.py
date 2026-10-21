@@ -355,7 +355,7 @@ def eldorado_translate(tokens):
 
 ELDORADO_LOGISTICS = re.compile(
     r"transport|transpor|transp|logistic|logistica|logist|freight|"
-    r"carrier|haulage|brasilog|braslog|rasador|avant|cmm|ttrlog|"
+    r"carrier|haulage|brasilog|braslog|rasador|avant|cmm|ttr[_-]?log|"
     r"^trame2$|^trade2$|^stokes2$|^posped2$|^ancapi$",re.I)
 ELDORADO_BANANA = re.compile(
     r"banana|bananal|banana_farm|banana_plant|^eldbanana|^bana_",re.I)
