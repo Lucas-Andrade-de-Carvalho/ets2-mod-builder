@@ -273,6 +273,25 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
             for d in decisions:
                 writer.writerow([d.get(c,"") for c in
                     ("acao","empresa","setor","direcao","carga","confianca","arquivo","motivo")])
+        # Inventario EXAUSTIVO: cada arquivo original IN e OUT, inclusive
+        # neutralizados/vazios. Nao se limita as 23 permissoes ativas.
+        with (out/("INVENTARIO_COMPLETO_"+name.upper()+".csv")).open(
+                "w",newline="",encoding="utf-8-sig") as fp:
+            writer=csv.writer(fp,delimiter=";")
+            writer.writerow(["empresa","setor","direcao","arquivo_sii","cargas_antes",
+                             "cargas_depois","neutralizado","foi_alterado"])
+            for path,raw in sorted(contents.items()):
+                m=g.RE_COMPANY_PATH.search(path)
+                if not m or m.group(2) not in {"in","out"} or not path.endswith(SII_EXT):
+                    continue
+                comp=m.group(1)
+                before_fields=file_active_ids(g,raw)
+                after_fields=file_active_ids(g,changed[path])
+                role=(baseline[comp].role if comp in baseline else "SEM_DEF")
+                writer.writerow([comp,role,m.group(2),path,
+                                 ",".join(before_fields),",".join(after_fields),
+                                 "SIM" if not before_fields else "NAO",
+                                 "SIM" if raw!=changed[path] else "NAO"])
         with (out/("COBERTURA_"+name.upper()+"_23.csv")).open("w",newline="",
                                                           encoding="utf-8-sig") as fp:
             writer=csv.writer(fp,delimiter=";")
