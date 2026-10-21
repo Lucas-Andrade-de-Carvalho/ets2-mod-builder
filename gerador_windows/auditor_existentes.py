@@ -73,10 +73,11 @@ def disable_id(g, raw, cargo_id):
     return out.encode("utf-8")
 
 def safe_reason(g, c,cat,direction,map_name):
-    why=(g.eldorado_permit(c,cat,direction)
-         if map_name.lower()=="eldorado"
-         else g.permits(c,cat,direction))
-    return why
+    # Regras de seguranca valem nos tres mapas: transportadora nao e fabrica
+    # e plantacao de banana nao e mercado geral de hortifruti.
+    if c.role in {"transportadora","bananal"} or map_name.lower()=="eldorado":
+        return g.eldorado_permit(c,cat,direction)
+    return g.permits(c,cat,direction)
 
 def explicit_confidence(c):
     if not c.explicit_role:return False
@@ -124,8 +125,18 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
         log("Lendo Company EXISTENTE: "+name+" — "+origin.name)
         source=inventory_archive(g,origin)
         baseline,_=g.extract_map(entry["map_def"])
-        if name.lower()=="eldorado":
-            for c in baseline.values():g.eldorado_classify(c)
+        for c in baseline.values():
+            if name.lower()=="eldorado":
+                g.eldorado_classify(c)
+            else:
+                # Em MG/RBR nomes podem representar transportadoras e
+                # fazendas de banana do mesmo modo; priorizar a atividade
+                # real sobre OUT herdado da Company.
+                if g.ELDORADO_LOGISTICS.search(g.normal(c.name)):
+                    c.role="transportadora";c.explicit_role=True
+                elif (g.ELDORADO_BANANA.search(g.normal(c.name)) and
+                      c.role in {"hortifruti","fazenda","desconhecida"}):
+                    c.role="bananal";c.explicit_role=True
         if not source:raise ValueError(name+": Company existente vazia ou ilegivel")
         loaded[name]=(source,baseline,entry)
     outputs=[]
