@@ -1374,9 +1374,9 @@ def run_gui():
         else:progress.stop()
     def worker_generate(snapshot,fix,scope):
         try:
-            txt=Path(snapshot["txt"]).read_text(encoding="utf-8-sig")
+            labels=catalogo_cargas.txt_inventory(snapshot["txt"])
             for n in MANIFEST:
-                if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",txt,re.I):
+                if catalogo_cargas.cargo_id(n) not in labels:
                     raise ValueError("TXT incompleto: falta carga"+str(n))
             if scope=="eldorado":
                 # MG e RBR nao sao lidos, regenerados nem sobrescritos.
@@ -1543,9 +1543,9 @@ def main():
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
     if any(getattr(args,x) is None for x in required):
         parser.error("Em modo --cli, informe: "+", ".join(required))
-    original=Path(args.txt).read_text(encoding="utf-8-sig")
+    labels=catalogo_cargas.txt_inventory(args.txt)
     for n in MANIFEST:
-        if not re.search(r"(?m)^\s*carga"+str(n)+r"\s*[:=\-]",original,re.I):
+        if catalogo_cargas.cargo_id(n) not in labels:
             parser.error(f"TXT incompleto: falta carga{n}")
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
