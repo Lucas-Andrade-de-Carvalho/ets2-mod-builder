@@ -486,7 +486,7 @@ class Regression(unittest.TestCase):
                 "def/company/eldorado_bananas/in/potatoes.sii").decode())
             self.assertIn("def/company/eldorado_bananas/editor/penapolis.sii",names)
         report=result[0][2]
-        self.assertEqual(report["versao_gerador"],"2.3.0")
+        self.assertEqual(report["versao_gerador"],g.VERSION)
         self.assertEqual(report["total_empresas"],10)
         self.assertNotIn("eldorado_bananas",report["cadeias"]["carga7"]["destinos_lista"])
         self.assertNotIn("brasilog",report["cadeias"]["carga7"]["origens_lista"])
