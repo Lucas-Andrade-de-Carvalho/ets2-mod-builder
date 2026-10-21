@@ -49,12 +49,16 @@ def main(exe_path):
                  "--eldorado",str(p["maps"]["Eldorado"]),
                  "--output",str(only)]
         rr=subprocess.run(command,timeout=120,check=False)
-        if rr.returncode:raise RuntimeError(f"Eldorado-only EXE falhou: {rr.returncode}")
-        assert (only/"ETS2_ELDORADO_COMPANY.scs").is_file()
+        # A DEF sintetica nao tem as 23 cadeias completas: o comportamento
+        # correto V2.4 e BLOQUEAR o Eldorado incompleto.
+        if rr.returncode==0:
+            raise RuntimeError("EXE aceitou Company Eldorado com cargas sem rota!")
+        assert not (only/"ETS2_ELDORADO_COMPANY.scs").exists()
+        assert (only/"Eldorado_COBERTURA_23_CARGAS.json").is_file()
+        assert (only/"Eldorado_COBERTURA_INCOMPLETA.txt").is_file()
         assert mg.read_bytes()==b"MINAS_CLIENTE_NAO_MODIFICAR"
         assert rbr.read_bytes()==b"RBR_CLIENTE_NAO_MODIFICAR"
-        assert len(list(only.glob("*_auditoria.json")))==1
-        print("EXE Windows atualizou apenas Eldorado preservando MG e RBR")
+        print("EXE Windows BLOQUEOU corretamente Eldorado incompleto; MG e RBR intactos")
     finally:
         case.tearDown()
 
