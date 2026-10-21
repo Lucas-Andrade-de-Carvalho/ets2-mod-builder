@@ -100,7 +100,7 @@ def explicit_confidence(c):
 def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
     why=safe_reason(g,c,cat,direction,map_name,professional=professional,spec=spec)
     explicit_custom=(spec is not None and
-                     professional_policy.norm(c.name) in spec[direction+"_companies"])
+                     professional_policy.norm(c.name) in spec.get(direction+"_companies", ()))
     if not why or not (explicit_confidence(c) or explicit_custom):return None
     if professional:
         # A politica moderna JA valida as restricoes por ramo, produto
