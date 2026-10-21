@@ -126,7 +126,7 @@ class AuditorSCSRegression(unittest.TestCase):
         with (folder/"EMPRESAS_COMPLETAS_ELDORADO.csv").open(
              encoding="utf-8-sig",newline="") as fp:
             all_rows=list(csv.DictReader(fp,delimiter=";"))
-        self.assertEqual(len(all_rows),len(self.fixture.company_raw) if False else 11)
+        self.assertEqual(len(all_rows),11)
         # A empresa de banana aparece na DEF mesmo sem receber batatas validas.
         self.assertIn("eldorado_bananas",{row["empresa"] for row in all_rows})
 
