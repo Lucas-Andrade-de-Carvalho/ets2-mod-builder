@@ -1390,13 +1390,17 @@ def run_gui():
     btn_folder.grid(row=1,column=1,sticky="ew",padx=3,pady=2)
     # Checagem automatizada da visibilidade na CI Windows (sem clicar em nada).
     if os.environ.get("ETS2_GUI_LAYOUT_SMOKE")=="1":
-        root.update_idletasks()
-        top=root.winfo_rooty()
-        bottom=top+root.winfo_height()
-        for btn in (btn_diag,btn_generate,btn_audit,btn_folder):
-            y=btn.winfo_rooty()
-            if not btn.winfo_ismapped() or y<top or y+btn.winfo_height()>bottom:
-                raise RuntimeError("Botao oculto fora da tela: "+btn.cget("text"))
+        for width,height in ((1024,720),(960,600)):
+            root.geometry(f"{width}x{height}")
+            root.update()
+            top=root.winfo_rooty()
+            bottom=top+root.winfo_height()
+            for btn in (btn_diag,btn_generate,btn_audit,btn_folder):
+                y=btn.winfo_rooty()
+                if not btn.winfo_ismapped() or y<top or y+btn.winfo_height()>bottom:
+                    raise RuntimeError("Botao oculto fora da tela: "+btn.cget("text"))
+            if scroll.bbox("all") is None or not scroll.winfo_ismapped():
+                raise RuntimeError("Formulario rolavel nao apareceu")
         root.destroy()
         return
     root.after(125,pump)
