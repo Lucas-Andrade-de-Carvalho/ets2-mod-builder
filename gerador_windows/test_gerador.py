@@ -364,6 +364,12 @@ class Regression(unittest.TestCase):
         self.assertNotIn("fiat",audit["cadeias"]["carga9"]["origens_lista"])
         self.assertNotIn("mc_equipamentos",audit["cadeias"]["carga9"]["origens_lista"])
         self.assertNotIn("carmoprem",audit["cadeias"]["carga6"]["origens_lista"])
+        rejected={(r["empresa"],r["categoria"]) for r in audit["rejeicoes_grade_baixa"]}
+        self.assertIn(("fiat","bobina"),rejected)
+        self.assertIn(("mc_equipamentos","bobina"),rejected)
+        self.assertIn(("carmoprem","cimento"),rejected)
+        self.assertTrue((self.root/"grade_baixa_qa"/
+                         "Minas_Gerais_rotas_justificadas.csv").is_file())
 
     def test_neutralization(self):
         s=old("banana")
