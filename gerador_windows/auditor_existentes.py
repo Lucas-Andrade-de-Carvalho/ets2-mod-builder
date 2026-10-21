@@ -15,9 +15,10 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 import politica_economica as professional_policy
+import catalogo_cargas
 
 SII_EXT=(".sii",".sui")
-CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.(carga(?:[1-9]|1[0-9]|2[0-3]))"?(?=\s*(?:#.*)?$)')
+CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:#.*)?$)')
 OTHER_FIELD = re.compile(r'(?im)^\s*cargo\s*:\s*"?cargo\.([a-z0-9_]+)"?')
 ROLE_SAFE_PRODUCERS={
     "siderurgica","cervejaria","cimenteira","ceramica","pedreira",
@@ -73,7 +74,10 @@ def disable_id(g, raw, cargo_id):
     if removed[0]<1:raise ValueError("Cargo nao localizado ao neutralizar: "+cargo_id)
     return out.encode("utf-8")
 
-def safe_reason(g, c,cat,direction,map_name,professional=False):
+def safe_reason(g, c,cat,direction,map_name,professional=False,spec=None):
+    if spec is not None:
+        verdict=catalogo_cargas.evaluate(c,spec,direction,professional_policy.classify(c))
+        return verdict.reason if verdict.allowed else None
     if professional:
         verdict=professional_policy.decide(c,cat,direction)
         return verdict.reason if verdict.allowed else None
@@ -93,8 +97,8 @@ def explicit_confidence(c):
                               c.name,re.I))
     return True
 
-def can_add(g,c,cat,direction,map_name,professional=False):
-    why=safe_reason(g,c,cat,direction,map_name,professional=professional)
+def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
+    why=safe_reason(g,c,cat,direction,map_name,professional=professional,spec=spec)
     if not why or not explicit_confidence(c):return None
     if professional:
         # A politica moderna JA valida as restricoes por ramo, produto
@@ -124,6 +128,11 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         raise ValueError("Modo deve ser corrigir ou auditar")
     out=Path(out_path);out.mkdir(parents=True,exist_ok=True)
     if not map_entries:raise ValueError("Selecione ao menos uma Company existente")
+    extras=catalogo_cargas.load(
+        (source_files or {}).get("catalogo"),reserved={
+            catalogo_cargas.cargo_id(k) for k in g.MANIFEST})
+    manifest=catalogo_cargas.manifest(g.MANIFEST,extras)
+    professional=professional or bool(extras)
     trailer_record={}
     if professional:
         if not source_files or any(k not in source_files for k in ("mod","def1","def2")):
@@ -132,12 +141,18 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         for label in ("mod","def1","def2"):
             originals.append((label,g.zip_members(source_files[label])))
         cargo_records,_legacy,owned,_defs,_totals=g.cargo_inventory(originals)
+        for cid,spec in extras.items():
+            if cid in cargo_records:
+                raise ValueError("ID adicional colide com definicao original: "+cid)
+            cargo_records[cid]={"body":set(spec["body_types"])}
         failures=[]
-        for n in g.MANIFEST:
-            cargo="carga"+str(n)
+        for n in manifest:
+            cargo=catalogo_cargas.cargo_id(n)
             record=cargo_records.get(cargo)
             if not record or not record.get("body"):
                 failures.append(cargo+" sem cargo_data/body_types")
+            elif cargo in extras and not owned:
+                failures.append(cargo+" sem carroceria do reboque identificada")
             elif owned and not set(record["body"]).intersection(owned):
                 failures.append(cargo+" sem carroceria compativel")
         if failures:
@@ -210,10 +225,18 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 continue
             comp=baseline[company]
             for cargo in ids:
-                cid=int(cargo[5:])
-                cat=g.MANIFEST[cid][0]
+                index=(next((k for k in manifest if catalogo_cargas.cargo_id(k)==cargo),None))
+                if index is None:
+                    decisions.append({"acao":"REVISAR","empresa":company,
+                        "direcao":direction,"carga":cargo,"arquivo":path,
+                        "setor":comp.role,"confianca":"indeterminada",
+                        "motivo":"Carga sem definicao no catalogo; mantida inalterada"})
+                    states[company][direction].add(cargo)
+                    continue
+                cat=manifest[index][0]
                 seen[(company,direction,cargo)].append(path)
-                reason=safe_reason(g,comp,cat,direction,name,professional=professional)
+                reason=safe_reason(g,comp,cat,direction,name,professional=professional,
+                                   spec=extras.get(cargo))
                 if reason:
                     decisions.append({"acao":"MANTER","empresa":company,"direcao":direction,
                         "carga":cargo,"arquivo":path,"setor":comp.role,
@@ -252,12 +275,13 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             current[m.group(1)][m.group(2)].update(file_active_ids(g,raw))
         # Completar lacunas confiaveis de empresas EXISTENTES do mapa.
         for company,comp in sorted(baseline.items()):
-            for n,(cat,title) in g.MANIFEST.items():
-                cargo="carga"+str(n)
+            for n,(cat,title) in manifest.items():
+                cargo=catalogo_cargas.cargo_id(n)
                 for direction in ("in","out"):
                     present=(cargo in current[company][direction])
                     if present:continue
-                    why=can_add(g,comp,cat,direction,name,professional=professional)
+                    why=can_add(g,comp,cat,direction,name,professional=professional,
+                                spec=extras.get(cargo))
                     if why:
                         new_path=f"def/company/{company}/{direction}/audit_{cargo}.sii"
                         if new_path in changed:
@@ -284,8 +308,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     dest[m.group(1)][m.group(2)].add(cargo)
         before={}
         after={}
-        for n,(cat,title) in g.MANIFEST.items():
-            cargo="carga"+str(n)
+        for n,(cat,title) in manifest.items():
+            cargo=catalogo_cargas.cargo_id(n)
             for state,values in ((original_active,before),(final_active,after)):
                 src=sorted(cid for cid,dirs in state.items() if cargo in dirs["out"])
                 dst=sorted(cid for cid,dirs in state.items() if cargo in dirs["in"])
@@ -293,8 +317,14 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     "origens":len(src),"destinos":len(dst),
                     "origens_lista":src,"destinos_lista":dst,
                     "pares_distintos":len(src)*len(dst)-len(set(src)&set(dst))}
-        territory=(professional_policy.coverage(baseline,g.MANIFEST)
-                   if professional else None)
+        def territory_decision(c,cat,direction,cargo):
+            if cargo in extras:
+                return catalogo_cargas.evaluate(
+                    c,extras[cargo],direction,professional_policy.classify(c))
+            return professional_policy.decide(c,cat,direction)
+        territory=(professional_policy.coverage(
+            baseline,manifest,decision_fn=territory_decision)
+            if professional else None)
         forgotten_companies=[]
         forgotten_units=[]
         if territory is not None:
@@ -319,6 +349,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
         summary={"versao":"3.0.0" if professional else "2.5.0",
             "economia_profissional":professional,
+            "total_cargas_catalogo":len(manifest),
+            "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
             "validacao_carga_carroceria":trailer_record,
             "matriz_empresa_cidade":territory,
             "empresas_compativeis_esquecidas":forgotten_companies,
@@ -377,8 +409,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                              "instancias_editor_na_def","arquivos_editor_na_def",
                              "in_atuais","out_atuais","total_permissoes"])
             for company,c in sorted(baseline.items()):
-                ins=sorted(final_active[company]["in"],key=lambda x:int(x[5:]))
-                outs=sorted(final_active[company]["out"],key=lambda x:int(x[5:]))
+                ins=sorted(final_active[company]["in"],key=catalogo_cargas.sort_key)
+                outs=sorted(final_active[company]["out"],key=catalogo_cargas.sort_key)
                 editor_names=sorted(c.editor_files)
                 writer.writerow([
                     company,c.role,
@@ -410,16 +442,22 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                             ",".join(sorted(actual["in"])),",".join(sorted(actual["out"])),
                             ",".join(sorted(set(company["in_esperados"])-actual["in"])),
                             ",".join(sorted(set(company["out_esperados"])-actual["out"])),"NAO"])
-        with (out/("COBERTURA_"+name.upper()+"_23.csv")).open("w",newline="",
+        with (out/("COBERTURA_"+name.upper()+("_23" if len(manifest)==23 else "_CARGAS")+".csv")).open("w",newline="",
                                                           encoding="utf-8-sig") as fp:
             writer=csv.writer(fp,delimiter=";")
             writer.writerow(["carga","origens_antes","destinos_antes","origens_depois",
                              "destinos_depois","pares_distintos_depois"])
-            for cargo in sorted(after,key=lambda c:int(c[5:])):
+            for cargo in sorted(after,key=catalogo_cargas.sort_key):
                 a,b=before[cargo],after[cargo]
                 writer.writerow([cargo,a["origens"],a["destinos"],b["origens"],
                                  b["destinos"],b["pares_distintos"]])
         if mode=="corrigir":
+            for cid,spec in extras.items():
+                path=spec["cargo_path"]
+                blob=catalogo_cargas.decode_definition(spec)
+                if path in changed and changed[path]!=blob:
+                    raise ValueError("Definicao de carga no SCS colide com catalogo: "+path)
+                changed[path]=blob
             output=out/("ETS2_"+name.upper()+"_AUDITADA_V25_"+
                         g.hash_source(entry["existing"])[:8]+".scs")
             if Path(entry["existing"]).resolve()==output.resolve():
