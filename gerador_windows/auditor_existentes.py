@@ -58,7 +58,7 @@ def inventory_archive(g, path):
 
 def file_active_ids(g, raw):
     text=g.read_sii(raw)
-    return [v.lower() for v in CARGO_FIELD.findall(text)]
+    return [m.group(2).lower() for m in CARGO_FIELD.finditer(text)]
 
 def disable_id(g, raw, cargo_id):
     text=g.read_sii(raw)
