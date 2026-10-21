@@ -100,7 +100,7 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertIn(("fiat","out","carga9"),removed)
         self.assertIn("carga7",report["rotas_depois"])
         self.assertLess(report["rotas_completas_depois"],23)
-        self.assertEqual(report["status"],"REVISÃO_MANUAL_NECESSÁRIA")
+        self.assertEqual(report["status"],"PENDENTE_VALIDACAO_ECONOMICA")
 
     def test_analogous_transport_safety_applies_to_minas_and_rbr(self):
         for map_name in ("Minas_Gerais","RBR"):
