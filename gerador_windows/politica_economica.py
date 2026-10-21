@@ -13,6 +13,7 @@ from pathlib import Path
 
 VERSION="3.0"
 ROLES=(
+    ("usina_acucar",r"usina_?acucar|sugar_mill|sugar_plant|engenho_?acucar"),
     ("transportadora",r"transport|transpor|transp|logistic|logistica|logist|freight|carrier|haulage|brasilog|braslog|rasador|avant|cmm_transport|cmm_transp|ttr_?log|^trame2$|^trade2$|^stokes2$|^posped2$"),
     ("bananal",r"bananal|banana_farm|banana_plantation|fazenda_banana|^eldorado_bananas$|^bana_farm"),
     ("fazenda_batata",r"(?:fazenda|faz|farm|plantacao|cultivo).*?(?:batata|potato)|(?:batata|potato).*?(?:fazenda|farm|plantacao)"),
