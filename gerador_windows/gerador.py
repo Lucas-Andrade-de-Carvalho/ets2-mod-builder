@@ -123,6 +123,16 @@ def canonical_path(raw):
     if m:return m.group(1).lower()
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+/(?:in|out|editor)/[^/]+)$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
+    # Eldorado: Company ZIP nao contem "def/company"; cada empresa
+    # esta diretamente na raiz, por exemplo:
+    # ambev/out/bebidas.sii, alc_cle/in/tanquevazio.sii,
+    # ale/editor/cerroazul.sii. Converter para o caminho CANONICO
+    # esperado no jogo, sem modificar ou reempacotar a entrada.
+    m=re.fullmatch(r'([a-z0-9_]+)/(in|out|editor)/([a-z0-9_.-]+\.(?:sii|sui))',
+                   path,re.I)
+    if m:
+        name,direction,filename=m.groups()
+        return f"def/company/{name}/{direction}/{filename}".lower()
     # Company permanente avulsa (empresa.sii) nos ZIPs de mapa.
     m=re.search(r'(?:^|/)(company/[a-z0-9_]+\.(?:sii|sui))$',path,re.I)
     if m:return ("def/"+m.group(1)).lower()
@@ -194,6 +204,13 @@ def describe_archive(path, limit=50):
     canonical=[n for n in normalized if canonical_path(n)]
     top=collections.Counter(n.split("/")[0] for n in normalized)
     extensions=collections.Counter(Path(n).suffix.lower() for n in normalized)
+    root_company=[n for n in normalized
+        if re.fullmatch(r'[a-z0-9_]+/(?:in|out|editor)/[a-z0-9_.-]+\.(?:sii|sui)',
+                        n,re.I)]
+    prefixed_company=[n for n in normalized if re.search(
+        r'(?:^|/)def/company/[a-z0-9_]+/(?:in|out|editor)/[^/]+\.(?:sii|sui)$',
+        n,re.I)]
+    company_names=sorted({n.split("/")[0].lower() for n in root_company})
     return {
         "arquivo":p.name,"total_arquivos":len(names),
         "tamanho_total_declarado":sum(sizes.values()),
@@ -201,6 +218,13 @@ def describe_archive(path, limit=50):
         "caminhos_reconhecidos":len(canonical),
         "arquivos_parecidos_com_company":len(company_like),
         "caminhos_in_out":len(inout),"arquivos_permanentes_possiveis":len(legacy),
+        "company_na_raiz":len(root_company),
+        "company_com_prefixo_def":len(prefixed_company),
+        "empresas_raiz_identificadas":len(company_names),
+        "amostra_empresas_raiz":company_names[:limit],
+        "layout_detectado":("company_direto_na_raiz" if root_company and
+                           len(root_company)>=len(prefixed_company) else
+                           "def_company" if prefixed_company else "desconhecido"),
         "amostra_company":company_like[:limit],
         "amostra_in_out":inout[:limit],
         "amostra_geral":normalized[:limit],
