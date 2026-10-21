@@ -343,6 +343,14 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 if missing_in or missing_out:
                     forgotten_units.append({**row,"faltando_in":missing_in,
                                              "faltando_out":missing_out})
+        if mode=="corrigir":
+            # Registrar tambem definicoes cargo_data novas na contagem auditada.
+            for cargo_name,spec in extras.items():
+                cargo_path=spec["cargo_path"]
+                blob=catalogo_cargas.decode_definition(spec)
+                if cargo_path in changed and changed[cargo_path]!=blob:
+                    raise ValueError("Definicao de carga no SCS colide com catalogo: "+cargo_path)
+                changed[cargo_path]=blob
         updated=sum(contents.get(p)!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
@@ -452,12 +460,6 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 writer.writerow([cargo,a["origens"],a["destinos"],b["origens"],
                                  b["destinos"],b["pares_distintos"]])
         if mode=="corrigir":
-            for cid,spec in extras.items():
-                path=spec["cargo_path"]
-                blob=catalogo_cargas.decode_definition(spec)
-                if path in changed and changed[path]!=blob:
-                    raise ValueError("Definicao de carga no SCS colide com catalogo: "+path)
-                changed[path]=blob
             output=out/("ETS2_"+name.upper()+"_AUDITADA_V25_"+
                         g.hash_source(entry["existing"])[:8]+".scs")
             if Path(entry["existing"]).resolve()==output.resolve():
