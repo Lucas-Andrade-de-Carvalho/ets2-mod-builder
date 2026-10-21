@@ -8,6 +8,40 @@ import politica_economica as policy
 import auditor_existentes as existing
 
 class ProfessionalEconomyTests(unittest.TestCase):
+    def test_real_map_sector_identifiers_with_false_positive_guards(self):
+        cases={
+            "superbh":"supermercado",
+            "superabc":"supermercado",
+            "mercado":"supermercado",
+            "merc_guapo":"supermercado",
+            "supergasbras":"desconhecida",
+            "fazbalegraos":"fazenda",
+            "fazcerragrao":"fazenda",
+            "ms_faz_fern":"fazenda",
+            "faze_paraiso":"fazenda",
+            "go_alfa_tr":"transportadora",
+            "pr_translov":"transportadora",
+            "jampalog":"transportadora",
+            "materialber":"materiais",
+            "construaco":"obras",
+            "madeiras3":"madeireira",
+            "agrotec":"desconhecida",
+            "sequoia":"desconhecida",
+            "midwest":"desconhecida",
+        }
+        for company,expected in cases.items():
+            with self.subTest(company=company):
+                self.assertEqual(policy.classify(g.Company(company)).role,expected)
+
+    def test_pallet_return_requires_original_out_and_recycling_buyer(self):
+        market=g.Company("supermercado_centro",old_out={"pallets"})
+        without=g.Company("supermercado_centro")
+        receiver=g.Company("sucatao_ouro")
+        self.assertTrue(policy.decide(market,"palete","out").allowed)
+        self.assertFalse(policy.decide(without,"palete","out").allowed)
+        self.assertTrue(policy.decide(receiver,"palete","in").allowed)
+        self.assertFalse(policy.decide(receiver,"palete","out").allowed)
+
     def test_purchase_perspective_and_english_terms(self):
         cases=[
             ("fiat","bobina","out",False),
