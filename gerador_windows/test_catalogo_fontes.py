@@ -34,6 +34,37 @@ class SourceCargoTests(unittest.TestCase):
         self.assertEqual(manifest["carga24"],("coco","Coco"))
         self.assertEqual(extras["carga24"]["body_types"],["alta"])
         self.assertEqual(self.records["carga24"]["raw"],self.raw)
+    def test_user_24_cargo_txt_labels_and_categories(self):
+        # A descricao tem prioridade para exibir o nome, sem recategorizar
+        # racao mineral laranja como fruta ou cimento e pallet como palete.
+        text=self.root/"cargas_usuario.txt"
+        names={
+            1:"Carga de Milho",2:"Carga de Soja",3:"Carga adubo",
+            4:"Carga Madeira",5:"Carga Pluma de algodão",6:"Carga de Cimento",
+            7:"Sacos de Batata",8:"Sacos de Laranja",9:"Bobinas 2",
+            10:"Cimento e Pallet",11:"Cimento e Cinta",12:"cerveja",
+            13:"Tijolos",14:"Pedra Granitto 1",15:"Pedra Granitto 2",
+            16:"palete alto",17:"Ração Mineral Laranja",18:"Xerém (Ração)",
+            19:"sacaria ração",20:"sacaria de ração 2",21:"Soja alto",
+            22:"milho alto",23:"Sorgo alto (alimento para gado)",24:"Coco"}
+        text.write_text("\n".join(
+            f"carga{i} = {label}" for i,label in names.items())+"\n",encoding="utf-8")
+        manifest,extra=fontes.from_originals(g.MANIFEST,self.records,text)
+        self.assertEqual(len(manifest),24)
+        self.assertEqual(len(extra),1)
+        self.assertEqual(manifest[17],("racao","Ração Mineral Laranja"))
+        self.assertEqual(manifest[10],("cimento","Cimento e Pallet"))
+        self.assertEqual(manifest[16],("palete","palete alto"))
+        self.assertEqual(manifest[24] if 24 in manifest else manifest["carga24"],
+                         ("coco","Coco"))
+        self.assertEqual(manifest[5][1],"Carga Pluma de algodão")
+
+    def test_txt_missing_original_blocks_audit_silently_wrong_catalog(self):
+        text=self.root/"incomplete.txt"
+        text.write_text("carga24 = Coco\n",encoding="utf-8")
+        with self.assertRaisesRegex(ValueError,"TXT nao identifica carga original"):
+            fontes.from_originals(g.MANIFEST,self.records,text)
+
     def test_cargo24_without_txt_fails_closed(self):
         with self.assertRaisesRegex(ValueError,"TXT"):
             fontes.from_originals(g.MANIFEST,self.records,None)
