@@ -291,10 +291,13 @@ def extract_map(path):
             txt=read_sii(raw)
             if re.search(r'(?m)^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:',txt,re.I):
                 legacy.append(p)
-            # O campo name existe na unidade company_permanent (SCS Wiki).
-            # So confiar em valor legivel: chaves @@localization@@ nao sao nome
-            # da atividade e nao devem virar classificacao economica ficticia.
-            match=re.search(r'(?im)^\s*name\s*:\s*"([^"\r\n]{2,120})"\s*
+            # Nome legivel documentado em company_permanent.
+            # Nunca classificar a partir de tokens @@localization@@.
+            match=re.search(r'(?im)^\s*name\s*:\s*"([^"\n]{2,120})"\s*$',txt)
+            if match and "@@" not in match.group(1):
+                identifier=p.rsplit("/",1)[-1].rsplit(".",1)[0].lower()
+                permanent_names[identifier]=match.group(1).strip()
+            continue
         m=RE_COMPANY_PATH.search(p)
         if not m:continue
         id,dir,filename=m.groups()
