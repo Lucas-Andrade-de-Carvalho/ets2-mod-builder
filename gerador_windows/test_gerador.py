@@ -189,6 +189,7 @@ class Regression(unittest.TestCase):
         companies,count=g.extract_map(src)
         self.assertEqual(len(companies),5)
         self.assertEqual(count,11)
+        self.assertEqual(len(companies["ambev"].editor_files),1)
         self.assertIn("bebidas",companies["ambev"].old_out)
         self.assertIn("sugar",companies["ambev"].old_in)
         self.assertEqual(companies["ambev"].role,"cervejaria")
@@ -201,6 +202,8 @@ class Regression(unittest.TestCase):
             self.assertIn("def/company/ambev/out/bebidas.sii",scs.namelist())
             self.assertIn("def/company/ambev/out/carga12.sii",scs.namelist())
             self.assertIn("def/company/alc_cle/in/tanquevazio.sii",scs.namelist())
+            self.assertEqual(scs.read("def/company/ambev/editor/almirante.sii"),
+                             raw["ambev/editor/almirante.sii"].encode("utf-8"))
             self.assertIn('cargo: ""',scs.read(
                 "def/company/ambev/out/bebidas.sii").decode("utf-8"))
 
