@@ -233,9 +233,9 @@ def coverage(companies,manifest,decision_fn=None):
         ident=classify(c)
         ins=set();outs=set();reasons={}
         for n,(cat,title) in manifest.items():
-            cargo=f"carga{n}"
+            cargo=("carga"+str(n) if isinstance(n,int) else str(n))
             for direction,container in (("in",ins),("out",outs)):
-                d=(decision_fn(c,cat,direction) if decision_fn else
+                d=(decision_fn(c,cat,direction,cargo) if decision_fn else
                    decide(c,cat,direction,ident))
                 reasons[direction+":"+cargo]={"permitido":d.allowed,"motivo":d.reason,
                                               "evidencia":d.evidence,"confianca":d.certainty}
@@ -252,7 +252,7 @@ def coverage(companies,manifest,decision_fn=None):
                 "prefab_confirmado":False})
         expected[c.name]={"in":ins,"out":outs}
     for n,(cat,title) in manifest.items():
-        cargo=f"carga{n}"
+        cargo=("carga"+str(n) if isinstance(n,int) else str(n))
         src=[c for c,dirs in expected.items() if cargo in dirs["out"]]
         dst=[c for c,dirs in expected.items() if cargo in dirs["in"]]
         routes[cargo]={"mercadoria":title,"categoria":cat,
