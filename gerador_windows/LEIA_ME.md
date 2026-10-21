@@ -255,3 +255,36 @@ Execute: python -m unittest discover -s gerador_windows -p test_*.py -v
 
 O GitHub Actions compila o EXE e executa testes sinteticos. Dados reais e
 testes no ETS2 continuam obrigatorios para homologacao.
+
+## Correção da auditoria — revisão de 2.350 ocorrências
+
+Os JSONs reais de Minas Gerais, RBR e Eldorado mostraram 2.207 permissões
+herdadas em empresas cujo ramo econômico não pôde ser concluído, além de
+143 casos cujo ramo foi reconhecido, mas a mercadoria não ficou comprovada.
+
+**Correção estrutural:** o auditor agora usa `PRESERVAR_SEM_EVIDENCIA` para
+cada permissão herdada de empresa não classificada, preservando byte a byte
+o arquivo. Esses registros continuam rastreáveis em `AUDITORIA_*.json`
+e `AUDITORIA_*.csv`, mas não são contabilizados como erros individuais.
+
+- `pendencias_revisao`: somente decisões `REVISAR` que exigem checagem
+  direta; NÃO inclui automaticamente todas as permissões herdadas.
+- `permissoes_sem_evidencia_preservadas`: associações antigas NÃO validadas;
+  não equivalem a associações aprovadas nem comprovadamente erradas.
+- `empresas_classificacao_pendente`: número de empresas distintas
+  envolvidas nessas associações, que precisa de identificação de ramo.
+- `cargas_sem_rota_validada`: mercadorias sem par origem/destino
+  distinto segundo o SCS auditado.
+- `RESUMO_VALIDACAO_*.txt`: totais separados por mapa e aviso de
+  homologação pendente.
+- `PENDENCIAS_CLASSIFICACAO_*.csv`: fila única por empresa, sem 10 a 15
+  mensagens repetidas para cada unidade.
+- Status `PENDENTE_VALIDACAO_ECONOMICA`: SCS de saída é uma revisão técnica
+  e NÃO pode ser apresentado como entrega homologada ao cliente.
+
+**Limite inevitável:** uma DEF que só contém um identificador obscuro
+não fornece evidência suficiente para declarar uma empresa como produtor,
+comprador ou revendedor de todas as mercadorias. Eliminar a incerteza
+exige examinar e confirmar a DEF completa, as companhias e o
+funcionamento real no ETS2. O programa nunca deve ocultar esse bloqueio
+nem distribuir cargas aleatoriamente apenas para zerar pendências.
