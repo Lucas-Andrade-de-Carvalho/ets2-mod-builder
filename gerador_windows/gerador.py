@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -43,10 +43,10 @@ PATTERNS = {
  "adubo":r"adubo|fertiliz|npk|nitrato|ureia|urea",
  "madeira":r"madeir|tronco|toras?|logs?|timber|lumber|mdf|serrag",
  "algodao":r"algodao|pluma|cotton",
- "cimento":r"cimento|cement|argamassa|rejunte|concr|premold",
+ "cimento":r"cimento|cement",
  "batata":r"batata|potato",
  "laranja":r"laranja|orange|citrus",
- "bobina":r"bobina|steel_coil|barraferro|barrasferro|ferro|sider|vergalhao|chapa_aco",
+ "bobina":r"bobinas?|bobin[a-z_]*|steel_coils?|steelcoil|steel_roll|coil_steel|aco_bobina|chapa_aco_bobina",
  "cerveja":r"cerveja|bebidas?|beer|ambev|brahma|skol|heineken|antartica|itaipava|refrigerant",
  "tijolo":r"tijolo|brick|telha|ceramica",
  "granito":r"granito|granitto|marmore|marble|pedra|brita|calcario|minerio",
@@ -56,6 +56,11 @@ PATTERNS = {
 }
 ROLE_KEYWORDS = [
  ("reciclagem",r"recicl|sucata|sucatao|ferrovelho|sucateir|reaproveit"),
+ # Fabricantes de automoveis e equipamentos jamais viram siderurgicas
+ # por acidente so porque a DEF original contem bobinas no OUT.
+ ("automotiva_fabrica",r"^(fiat|fca|gm|volkswagen|vw|renault|hyundai|toyota|ford|bmw|honda)(?:_|$)|montadora|fabrica_auto|fabricarros|autofabrica"),
+ ("maquinas",r"^mc_?equip|^mcequip|equipamentos|maquin[a-z]*_|maquinaria"),
+ ("premoldados",r"carmoprem|premold|pre_mold|concret"),
  ("cervejaria",r"ambev|cervej|brewery|cercrystal|heineken|brahma"),
  ("supermercado",r"super|mercado|atacadao|assai|bahamas|carrefour|compr_bem|compre_bem|extra_"),
  ("silo",r"silo|armazem|armz|cereal|comigo|caramuru|ac(s|z)_armazem"),
@@ -71,14 +76,13 @@ ROLE_KEYWORDS = [
  ("pedreira",r"pedreira|quarry|basalto|extratora"),
  ("marmoraria",r"marmoraria|marmor|granito|granitos"),
  ("siderurgica",r"gerdau|cofer|arcel|sider|usiminas|steel|csn_"),
- ("metalurgica",r"metalurg|calha|cortedobra|aco|ferragem"),
- ("premoldados",r"premold|pre_mold|concret"),
- ("materiais",r"construsol|construm|material|casa_center|casaverde|dep_mat|construja|casa_mat"),
+ ("metalurgica",r"metalurg|calha|cortedobra|(?:^|_)aco(?:_|$)|ferragem|usinagem|estrut_metal"),
+  ("materiais",r"construsol|construm|material|casa_center|casaverde|dep_mat|construja|casa_mat"),
  ("obras",r"construcao|^constr|^cons_|obra|canteiro|batisse"),
  ("hortifruti",r"ceasa|hortif|sacolao|frut|banana|verdura"),
  ("alimentos",r"aliment|arcor|industria_alim|conservas"),
  ("atacadista",r"atacad|distrib|centro_dist|cd_|logistica|transpor"),
- ("automotiva",r"concession|veiculos|carros|auto|bmw|mercedes|scania"),
+ ("automotiva",r"concession|veiculos|carros|revend_auto|autopecas|mercedes|scania"),
  ("posto",r"posto|combustivel|gasolina|petro|refinar")
 ]
 DIRECTIONS = {
@@ -87,10 +91,10 @@ DIRECTIONS = {
  "adubo":({"agroinsumos","atacadista"},{"fazenda","agroinsumos","cooperativa"}),
  "madeira":({"madeireira","materiais"},{"materiais","obras","premoldados","atacadista"}),
  "algodao":({"fazenda","cooperativa"},{"textil","cooperativa","atacadista"}),
- "cimento":({"cimenteira","materiais","premoldados"},{"materiais","obras","premoldados"}),
+ "cimento":({"cimenteira","materiais"},{"materiais","obras","premoldados"}),
  "batata":({"fazenda","hortifruti","cooperativa"},{"hortifruti","supermercado","alimentos","atacadista","cooperativa"}),
  "laranja":({"fazenda","hortifruti","cooperativa"},{"hortifruti","supermercado","alimentos","atacadista","cooperativa"}),
- "bobina":({"siderurgica","metalurgica"},{"metalurgica","premoldados","obras","atacadista","automotiva"}),
+ "bobina":({"siderurgica"},{"metalurgica","automotiva_fabrica","maquinas"}),
  "cerveja":({"cervejaria","atacadista"},{"supermercado","atacadista","alimentos"}),
  "tijolo":({"ceramica","materiais"},{"materiais","obras"}),
  "granito":({"pedreira","marmoraria"},{"marmoraria","materiais","obras"}),
@@ -268,8 +272,6 @@ def classify_company(c):
     elif incoming & {"milho","soja"} and outgoing & {"milho","soja"}:c.role="silo"
     elif "adubo" in incoming and outgoing & {"milho","soja","batata","laranja"}:c.role="fazenda"
     elif "madeira" in outgoing and not incoming & {"cimento","tijolo"}:c.role="madeireira"
-    elif "granito" in outgoing and not incoming & {"granito","cimento"}:c.role="pedreira"
-    elif "bobina" in outgoing and "bobina" not in incoming:c.role="siderurgica"
     elif "cimento" in incoming and "cimento" in outgoing:c.role="materiais"
     elif "cerveja" in incoming and "cerveja" not in outgoing:c.role="supermercado"
 
@@ -366,6 +368,38 @@ def permits(c,category,dir):
     reverse=product_types(c.old_in if dir=="out" else c.old_out)
     allow=DIRECTIONS[category][0 if dir=="out" else 1]
     if role not in allow: return None
+    # Grade Baixa: as mercadorias NAO definem a industria de uma empresa.
+    # Fabrica automotiva, fabricante de maquinario, construcao e premoldados
+    # podem CONSUMIR insumos metalicos, mas nao fabricam bobinas de aco.
+    if category=="bobina":
+        if dir=="out":
+            if role!="siderurgica" or not c.explicit_role:
+                return None
+            return ("siderurgica identificada: expedicao de aco em bobinas"
+                    if "bobina" in observed else
+                    "siderurgica identificada: producao de produtos siderurgicos")
+        if role=="automotiva_fabrica":
+            return "montadora identificada: bobinas de aco como insumo de fabricacao"
+        if role=="metalurgica" and c.explicit_role:
+            return "metalurgica identificada: bobinas de aco como insumo"
+        if role=="maquinas" and "bobina" in observed:
+            return "maquinario: recebimento de bobinas documentado no IN original"
+        return None
+    if category=="cimento":
+        if dir=="out":
+            if role=="cimenteira" and c.explicit_role:
+                return "fabricante de cimento identificado"
+            if role=="materiais" and "cimento" in observed:
+                return "revenda de cimento documentada no OUT original"
+            return None
+        if role=="premoldados":
+            return "fabricacao de pre-moldados: cimento recebido como materia-prima"
+    if category=="granito" and dir=="out":
+        if role=="pedreira" and c.explicit_role:
+            return "pedreira identificada: extracao e expedicao de pedras"
+        if role=="marmoraria" and (c.explicit_role or "granito" in observed):
+            return "marmoraria identificada: venda de pedras beneficiadas"
+        return None
     # Proibir falsa classificacao de recicladora / madeireira, e protecao contra dispersao universal.
     if category=="palete":
         if dir=="out" and role=="madeireira":return "madeireira: origem de paletes"
