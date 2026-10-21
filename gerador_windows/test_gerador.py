@@ -464,7 +464,7 @@ class Regression(unittest.TestCase):
         zip_write(eldorado_zip,raw)
         original_a=a.read_bytes();original_b=b.read_bytes()
         inp={**self.inp,"maps":{"Eldorado":eldorado_zip}}
-        result=g.generate(inp,folder,fix_skills=False)
+        result=g.generate(inp,folder,fix_skills=False,require_complete=False)
         self.assertEqual(len(result),1)
         self.assertEqual(result[0][0],"Eldorado")
         self.assertEqual(a.read_bytes(),original_a)
@@ -498,6 +498,48 @@ class Regression(unittest.TestCase):
         self.assertIn(("eldorado_bananas","in","batata"),reject)
         self.assertTrue((folder/"Eldorado_traducoes_cargas_ingles.csv").is_file())
         self.assertTrue((folder/"Eldorado_permissoes_rejeitadas.csv").is_file())
+
+    def test_23_23_coverage_uses_real_body_types_and_distinct_companies(self):
+        """Nenhuma das 23 cargas pode ser aprovada so por arquivo IN/OUT."""
+        routes={}
+        records={}
+        for n,(category,name) in g.MANIFEST.items():
+            id=f"carga{n}"
+            routes[id]={"origens_lista":["gerdau"],"destinos_lista":["fiat"],
+                        "origens":1,"destinos":1,"nome":name}
+            records[id]={"body":({"baixa"} if n in (9,10,11,13,14,15) else
+                                 {"hopper"} if n==23 else {"alta"})}
+        audited=g.coverage_audit({},routes,records,"Eldorado")
+        self.assertEqual(audited["total"],23)
+        self.assertTrue(audited["pronto_para_gerar"])
+        self.assertEqual(audited["cargas_com_rota"],23)
+        self.assertEqual(audited["cargas"][8]["carroceria"],"Grade Baixa")
+        self.assertEqual(audited["cargas"][22]["carroceria"],"Hopper / graneleiro")
+        routes["carga7"]["origens_lista"]=["fiat"]
+        audited=g.coverage_audit({},routes,records,"Eldorado")
+        self.assertEqual(audited["cargas_com_rota"],22)
+        self.assertEqual(audited["cargas_sem_rota"],1)
+        self.assertEqual(audited["cargas"][6]["lacuna"],
+                         "origem e destino sao a mesma empresa")
+
+    def test_eldorado_23_coverage_blocks_incomplete_scs_with_diagnostic(self):
+        # Varias cargas nao terao produtor nesse mapa sintetico.
+        root=self.root/"strict_eldorado"
+        inp={**self.inp,"maps":{"Eldorado":self.inp["maps"]["Eldorado"]}}
+        with self.assertRaisesRegex(ValueError,"23 cargas"):
+            g.generate(inp,root)
+        self.assertFalse((root/"ETS2_ELDORADO_COMPANY.scs").exists())
+        self.assertTrue((root/"Eldorado_COBERTURA_23_CARGAS.json").is_file())
+        self.assertTrue((root/"Eldorado_COBERTURA_23_CARGAS.csv").is_file())
+        self.assertTrue((root/"Eldorado_COBERTURA_INCOMPLETA.txt").is_file())
+        report=json.loads((root/"Eldorado_COBERTURA_23_CARGAS.json")
+                          .read_text(encoding="utf-8"))
+        self.assertEqual(report["total"],23)
+        self.assertFalse(report["pronto_para_gerar"])
+        self.assertLess(report["cargas_com_rota"],23)
+        self.assertEqual(len(report["cargas"]),23)
+        self.assertTrue(all("carroceria" in x and "lacuna" in x
+                            for x in report["cargas"]))
 
     def test_neutralization(self):
         s=old("banana")
