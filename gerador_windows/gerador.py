@@ -1139,8 +1139,11 @@ def run_gui():
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
     root.title("ETS2 Company Logistics Ultimate — Auditor e Gerador Offline v2.5")
-    root.geometry("1080x880")
-    root.minsize(950,730)
+    screen_width=root.winfo_screenwidth()
+    screen_height=root.winfo_screenheight()
+    # Reserva espaco para barra de tarefas e bordas do Windows.
+    root.geometry(f"{min(1120,screen_width-60)}x{min(780,screen_height-120)}")
+    root.minsize(min(780,screen_width-60),min(510,screen_height-120))
     style=ttk.Style(root)
     if "clam" in style.theme_names():style.theme_use("clam")
     style.configure("Main.TButton",font=("Segoe UI",10,"bold"),padding=(14,10))
@@ -1150,7 +1153,38 @@ def run_gui():
     ttk.Label(frame,text="v2.5  ·  NOVO: auditar e corrigir suas Companies SCS existentes",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
-              font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
+              font=("Segoe UI",9)).pack(anchor="w",pady=(0,6))
+    # Barra de acoes fixada NO TOPO. Nunca fica abaixo de um console grande.
+    actions=ttk.LabelFrame(frame,text="Acoes principais",padding=5)
+    actions.pack(fill="x",pady=(0,7))
+    actions.columnconfigure(0,weight=1)
+    actions.columnconfigure(1,weight=1)
+    # Formulario e log rolaveis: funciona mesmo em telas 1366x768 e 125% DPI.
+    body=ttk.Frame(frame)
+    body.pack(fill="both",expand=True)
+    scrollbar=ttk.Scrollbar(body,orient="vertical")
+    scroll=tk.Canvas(body,highlightthickness=0,yscrollcommand=scrollbar.set,
+                     borderwidth=0)
+    scrollbar.configure(command=scroll.yview)
+    scrollbar.pack(side="right",fill="y")
+    scroll.pack(side="left",fill="both",expand=True)
+    content=ttk.Frame(scroll,padding=(1,1,10,8))
+    form_id=scroll.create_window((0,0),window=content,anchor="nw")
+    def resize_scroll(_event):
+        scroll.configure(scrollregion=scroll.bbox("all"))
+    def resize_form(event):
+        scroll.itemconfigure(form_id,width=event.width)
+    content.bind("<Configure>",resize_scroll)
+    scroll.bind("<Configure>",resize_form)
+    def on_wheel(event):
+        # Rolar formulario; deixa a barra de acoes sempre a vista.
+        if event.delta:
+            scroll.yview_scroll(-1 if event.delta>0 else 1,"units")
+    def on_wheel_linux(event):
+        scroll.yview_scroll(-1 if event.num==4 else 1,"units")
+    scroll.bind_all("<MouseWheel>",on_wheel)
+    scroll.bind_all("<Button-4>",on_wheel_linux)
+    scroll.bind_all("<Button-5>",on_wheel_linux)
     widgets={}
     fields=[
        ("mod","Mod principal Librelato (.scs)"),
@@ -1167,7 +1201,7 @@ def run_gui():
     ]
     controls=[]
     for key,label in fields:
-        row=ttk.Frame(frame);row.pack(fill="x",pady=3)
+        row=ttk.Frame(content);row.pack(fill="x",pady=3)
         ttk.Label(row,text=label,width=32).pack(side="left")
         value=tk.StringVar();widgets[key]=value
         ttk.Entry(row,textvariable=value).pack(side="left",fill="x",expand=True,padx=7)
@@ -1187,31 +1221,30 @@ def run_gui():
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
     scope_var=tk.StringVar(value="eldorado")
-    scope_row=ttk.LabelFrame(frame,text="Quais Companies deseja atualizar?",padding=8)
+    scope_row=ttk.LabelFrame(content,text="Quais Companies deseja atualizar?",padding=8)
     scope_row.pack(fill="x",pady=(8,4))
     ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
                     variable=scope_var,value="eldorado").pack(anchor="w")
     ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
                     variable=scope_var,value="todos").pack(anchor="w")
     audit_mode=tk.StringVar(value="corrigir")
-    audit_row=ttk.Frame(frame);audit_row.pack(fill="x",pady=(3,1))
+    audit_row=ttk.Frame(content);audit_row.pack(fill="x",pady=(3,1))
     ttk.Radiobutton(audit_row,text="Auditar e corrigir SCS EXISTENTE (preserva o original)",
                     variable=audit_mode,value="corrigir").pack(side="left",padx=(0,14))
     ttk.Radiobutton(audit_row,text="Apenas auditar, sem gerar SCS",
                     variable=audit_mode,value="auditar").pack(side="left")
-    options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(4,4))
+    options_row=ttk.Frame(content);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
                     variable=fix_var).pack(anchor="w")
     ttk.Label(options_row,text="As rotas sao inferidas a partir das DEFs; nenhuma cadeia sem origem/destino e inventada.",
               font=("Segoe UI",9)).pack(anchor="w")
-    progress=ttk.Progressbar(frame,mode="indeterminate")
+    progress=ttk.Progressbar(content,mode="indeterminate")
     progress.pack(fill="x",pady=(6,4))
     status=tk.StringVar(value="Pronto. Selecione os arquivos ou gere um diagnostico primeiro.")
-    ttk.Label(frame,textvariable=status,wraplength=900).pack(anchor="w")
-    console=tk.Text(frame,height=12,wrap="word",state="disabled",font=("Consolas",9))
+    ttk.Label(content,textvariable=status,wraplength=900).pack(anchor="w")
+    console=tk.Text(content,height=9,wrap="word",state="disabled",font=("Consolas",9))
     console.pack(fill="both",expand=True,pady=7)
-    actions=ttk.Frame(frame);actions.pack(fill="x",pady=6)
     work_queue=queue.Queue()
     busy=[False]
     def append_log(message):
@@ -1340,20 +1373,32 @@ def run_gui():
         root.after(125,pump)
     btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR OS 3 MAPAS",
                         command=lambda:run("diagnostic"),style="Main.TButton")
-    btn_diag.pack(side="left",padx=(0,8))
+    btn_diag.grid(row=0,column=0,sticky="ew",padx=3,pady=2)
     btn_generate=ttk.Button(actions,text="2. GERAR COMPANY(S) SELECIONADA(S)",
                             command=lambda:run("generate"),style="Main.TButton")
-    btn_generate.pack(side="left",padx=6)
+    btn_generate.grid(row=0,column=1,sticky="ew",padx=3,pady=2)
     btn_audit=ttk.Button(actions,text="3. AUDITAR / CORRIGIR SCS EXISTENTE",
                          command=lambda:run("audit"),style="Main.TButton")
-    btn_audit.pack(side="left",padx=6)
+    btn_audit.grid(row=1,column=0,sticky="ew",padx=3,pady=2)
     def open_folder():
         p=widgets["output"].get()
         if not p or not Path(p).is_dir():
             messagebox.showwarning("Pasta indisponivel","Selecione primeiro uma pasta de saida.")
             return
         if sys.platform=="win32":os.startfile(p)
-    ttk.Button(actions,text="Abrir pasta de saida",command=open_folder).pack(side="right")
+    btn_folder=ttk.Button(actions,text="Abrir pasta de saida",command=open_folder)
+    btn_folder.grid(row=1,column=1,sticky="ew",padx=3,pady=2)
+    # Checagem automatizada da visibilidade na CI Windows (sem clicar em nada).
+    if os.environ.get("ETS2_GUI_LAYOUT_SMOKE")=="1":
+        root.update_idletasks()
+        top=root.winfo_rooty()
+        bottom=top+root.winfo_height()
+        for btn in (btn_diag,btn_generate,btn_audit,btn_folder):
+            y=btn.winfo_rooty()
+            if not btn.winfo_ismapped() or y<top or y+btn.winfo_height()>bottom:
+                raise RuntimeError("Botao oculto fora da tela: "+btn.cget("text"))
+        root.destroy()
+        return
     root.after(125,pump)
     root.mainloop()
 
