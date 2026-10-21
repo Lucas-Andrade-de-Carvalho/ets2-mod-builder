@@ -246,6 +246,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 continue
             comp=baseline[company]
             for cargo in ids:
+                count+=1  # incluir registros reconhecidos, desconhecidos e invalidos
                 index=(next((k for k in manifest if catalogo_cargas.cargo_id(k)==cargo),None))
                 if index is None:
                     decisions.append({"acao":"REVISAR","empresa":company,
@@ -286,7 +287,6 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                                      "Permissao herdada preservada sem alterar; "
                                      "empresa ainda nao classificada")})
                         states[company][direction].add(cargo)
-                count+=1
         # Nao repetir a mesma carga 2x no mesmo IN/OUT.
         for (company,direction,cargo),paths in seen.items():
             active=[path for path in paths if cargo in file_active_ids(g,changed[path])]
@@ -374,7 +374,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 if missing_in or missing_out:
                     forgotten_units.append({**row,"faltando_in":missing_in,
                                              "faltando_out":missing_out})
-        updated=sum(contents.get(p)!=raw for p,raw in changed.items())
+        # Arquivos NOVOS nao sao arquivos MODIFICADOS: separar indicadores.
+        updated=sum(p in contents and contents[p]!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
         # Nao transformar a ausencia de classificacao em centenas de alertas.
         # Preservar cada permissao herdada, com rastro individual, e produzir
