@@ -1007,6 +1007,27 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             sector_audit=(professional_policy.coverage(companies,MANIFEST)
                           if professional else None)
             if sector_audit is not None:
+                # 23/23 por si so NAO prova cobertura de todas as empresas:
+                # identificadores obscuros com mercadorias relevantes exigem
+                # confirmacao antes de anunciar a Company como definitiva.
+                undecided=[]
+                for row in sector_audit["empresas"]:
+                    if row["atividade"]!="desconhecida":
+                        continue
+                    unit=companies[row["empresa"]]
+                    economic=professional_policy.cargo_categories(
+                        unit.old_in|unit.old_out)
+                    if economic:
+                        undecided.append({"empresa":unit.name,
+                                          "familias_originais":sorted(economic),
+                                          "instancias_cidade":row["instancias_editor"]})
+                coverage["empresas_pendentes_com_mercadoria"]=undecided
+                if undecided:
+                    coverage["pronto_para_gerar"]=False
+                    coverage["cobertura_empresa_incompleta"]=True
+                    log(name+": "+str(len(undecided))+
+                        " empresas com ramo desconhecido e mercadoria associada "+
+                        "necessitam revisao; NAO autorizar entrega final.")
                 coverage["auditoria_profissional"]=sector_audit
                 coverage["cobertura_empresa"]={
                     "total":sector_audit["total_empresas"],
@@ -1032,10 +1053,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                     "\n".join(gaps)+"\nConsulte "+report.name+" e respectivo CSV.\n"+
                     "Nao inventar empresas nem cargas sem evidencia na DEF.\n",
                     encoding="utf-8")
-                raise ValueError(name+": somente "+str(coverage["cargas_com_rota"])+
-                    "/23 cargas com origem e destino distintos. Nao foi gerado SCS. "+
-                    "Abra "+report.name+" e "+name+"_COBERTURA_INCOMPLETA.txt "+
-                    "para identificar empresas/setores que precisam revisao.")
+                raise ValueError(name+": cobertura insuficiente ("+
+                    str(coverage["cargas_com_rota"])+"/23 cargas; "+
+                    str(len(coverage.get("empresas_pendentes_com_mercadoria",[])))+
+                    " empresas com mercadoria e setor desconhecido). "+
+                    "Nao foi gerado SCS. Abra "+report.name+
+                    " e "+name+"_COBERTURA_INCOMPLETA.txt para investigar.")
             output_files={}
             for c in companies.values():
                 for p,raw in c.editor_files.items():
@@ -1267,7 +1290,7 @@ def run_gui():
             value=saved.get(k,"")
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
-    scope_var=tk.StringVar(value="eldorado")
+    scope_var=tk.StringVar(value="todos")
     scope_row=ttk.LabelFrame(content,text="Quais Companies deseja atualizar?",padding=8)
     scope_row.pack(fill="x",pady=(8,4))
     ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
