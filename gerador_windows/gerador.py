@@ -1448,8 +1448,18 @@ def run_gui():
             for key in ("minas","eldorado","rbr"):
                 p=export_diagnostic(snapshot[key],out)
                 work_queue.put(("log",key+": diagnostico salvo em "+str(p)))
-            work_queue.put(("success","Diagnosticos dos 3 mapas exportados. "+
-                            "Envie o JSON do Eldorado para investigar a estrutura real."))
+            if all(snapshot.get(k) and Path(snapshot[k]).exists()
+                   for k in ("mod","def1","def2","txt")):
+                from diagnostico_arquivos import inspect
+                path,result=inspect(sys.modules[__name__],snapshot,snapshot["txt"],out)
+                work_queue.put(("log","Librelato: "+str(path)+
+                                " | "+result["resultado"]+
+                                " | "+str(result["total_cargas_catalogo"])+
+                                " cargas, "+str(len(result["erros"]))+" erros tecnicos"))
+            work_queue.put(("success","Diagnosticos exportados. Se os arquivos do "+
+                            "reboque e TXT estiverem selecionados, confira "+
+                            "DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json. "+
+                            "Validacao de rotas/ETS2 continua necessaria."))
         except Exception as exc:
             work_queue.put(("error","Falha no diagnostico: "+str(exc)))
     def run(action):
