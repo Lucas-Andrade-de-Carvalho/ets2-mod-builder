@@ -377,7 +377,9 @@ def eldorado_classify(c):
     # Hubs com catalogo enorme e carga de setores desconexos nao sao fabrica.
     if not c.explicit_role and len(c.old_out)>=45 and len(out_types)>=6:
         c.role="hub_generico";c.explicit_role=False;return
-    if ELDORADO_BANANA.search(name) and not ELDORADO_WHOLESALE.search(name):
+    if (ELDORADO_BANANA.search(name) and
+        not ELDORADO_WHOLESALE.search(name) and
+        c.role in {"hortifruti","fazenda","desconhecida"}):
         c.role="bananal";c.explicit_role=True;return
     if ("banana" in out_types and "banana" not in in_types and
         not ({"batata","laranja"} & out_types) and
@@ -388,6 +390,34 @@ def eldorado_classify(c):
         c.role="fazenda_batata";c.explicit_role=True;return
     if ELDORADO_ORANGE_FARM.search(name) and c.role in {"hortifruti","fazenda","desconhecida"}:
         c.role="fazenda_laranja";c.explicit_role=True;return
+    # Interpretacao bilingue dos proprios identificadores de empresa.
+    # Sem nome significativo ou evidencias, NAO chutar fornecedor.
+    role_english=(
+        ("pecuaria",r"cattle_farm|cattle_ranch|livestock|poultry_farm|pig_farm|feedlot"),
+        ("fazenda",r"(?:^|_)(?:farm|farms|farming|farmstead)(?:_|$)|agricultural_farm"),
+        ("cervejaria",r"brewery|brewing|beer_factory"),
+        ("supermercado",r"supermarket|grocery_store|hypermarket|grocery"),
+        ("silo",r"grain_elevator|grain_storage|grain_silo"),
+        ("cooperativa",r"cooperative|farmers_coop"),
+        ("hortifruti",r"produce_market|fresh_produce|fruit_warehouse"),
+        ("cimenteira",r"cement_plant|cement_factory"),
+        ("obras",r"construction_site|building_site|construction_work"),
+        ("materiais",r"building_supplies|hardware_store|building_materials"),
+        ("madeireira",r"sawmill|timber_mill|lumberyard"),
+        ("pedreira",r"quarry|stone_mine|rock_quarry"),
+        ("marmoraria",r"stonecutting|granite_shop|stoneworks"),
+        ("siderurgica",r"steel_mill|steel_factory|steelworks"),
+        ("metalurgica",r"metalworks|sheetmetal|steel_fabrication"),
+        ("textil",r"textile_mill|cotton_mill|spinning_mill"),
+        ("agroinsumos",r"agro_supply|fertilizer_store|fertilizer_plant"),
+        ("fabrica_racao",r"feedmill|feed_factory|animal_feed_factory"),
+        ("reciclagem",r"recycling_yard|scrapyard"),
+        ("alimentos",r"food_processing|cannery")
+    )
+    if c.role in {"desconhecida","hortifruti","atacadista"}:
+        for role,pattern in role_english:
+            if re.search(pattern,name):
+                c.role=role;c.explicit_role=True;return
     if ELDORADO_AGRO_SUPPLIER.search(name) and c.role in {"agroinsumos","desconhecida"}:
         c.role="agroinsumos";c.explicit_role=True;return
     if ELDORADO_WHOLESALE.search(name) and c.role in {"hortifruti","atacadista","desconhecida"}:
