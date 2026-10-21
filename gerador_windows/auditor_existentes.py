@@ -15,7 +15,7 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 import politica_economica as professional_policy
-import catalogo_cargas
+import catalogo_fontes as catalogo_cargas
 
 SII_EXT=(".sii",".sui")
 CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:#.*)?$)')
@@ -154,11 +154,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         raise ValueError("Modo deve ser corrigir ou auditar")
     out=Path(out_path);out.mkdir(parents=True,exist_ok=True)
     if not map_entries:raise ValueError("Selecione ao menos uma Company existente")
-    extras=catalogo_cargas.load(
-        (source_files or {}).get("catalogo"),reserved={
-            catalogo_cargas.cargo_id(k) for k in g.MANIFEST})
-    manifest=catalogo_cargas.manifest(g.MANIFEST,extras)
-    professional=professional or bool(extras)
+    extras={}
+    manifest=dict(g.MANIFEST)
     trailer_record={}
     if professional:
         if not source_files or any(k not in source_files for k in ("mod","def1","def2")):
@@ -167,18 +164,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         for label in ("mod","def1","def2"):
             originals.append((label,g.zip_members(source_files[label])))
         cargo_records,_legacy,owned,_defs,_totals=g.cargo_inventory(originals)
-        already_defined=set()
-        for cid,spec in extras.items():
-            if cid in cargo_records:
-                raw=cargo_records[cid]["raw"]
-                current_sha=hashlib.sha256(raw).hexdigest()
-                if current_sha not in {spec["sha256"],spec.get("sha256_origem")}:
-                    raise ValueError("Definicoes conflitantes entre MOD e catalogo: "+cid)
-                if set(cargo_records[cid]["body"])!=set(spec["body_types"]):
-                    raise ValueError("Carrocerias da carga diferem do cargo_data original: "+cid)
-                already_defined.add(cid)
-                continue
-            cargo_records[cid]={"body":set(spec["body_types"])}
+        manifest,extras=catalogo_cargas.from_originals(
+            g.MANIFEST,cargo_records,(source_files or {}).get("txt"))
         failures=[]
         for n in manifest:
             cargo=catalogo_cargas.cargo_id(n)
@@ -385,16 +372,6 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 if missing_in or missing_out:
                     forgotten_units.append({**row,"faltando_in":missing_in,
                                              "faltando_out":missing_out})
-        if mode=="corrigir":
-            # Registrar tambem definicoes cargo_data novas na contagem auditada.
-            for cargo_name,spec in extras.items():
-                if cargo_name in already_defined:
-                    continue  # reboque ja fornece definicao real
-                cargo_path=spec["cargo_path"]
-                blob=catalogo_cargas.decode_definition(spec)
-                if cargo_path in changed and changed[cargo_path]!=blob:
-                    raise ValueError("Definicao de carga no SCS colide com catalogo: "+cargo_path)
-                changed[cargo_path]=blob
         updated=sum(contents.get(p)!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
@@ -419,15 +396,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     d["empresa"] for d in manual if d["setor"]=="desconhecida"}),
             },
             "politica_cargas_adicionais":{
-                cid:{"categoria":spec["categoria"],
-                     "aliases":spec["aliases"],
-                     "out_roles":spec["out_roles"],
-                     "in_roles":spec["in_roles"],
-                     "out_evidence":spec["out_evidence"],
-                     "in_evidence":spec["in_evidence"],
-                     "out_companies":spec["out_companies"],
-                     "in_companies":spec["in_companies"],
-                     "forbidden_roles":spec["forbidden_roles"]}
+                cid:{"categoria":spec["categoria"],"nome":spec["nome"],
+                     "body_types":spec["body_types"],
+                     "situacao":"pendente de validacao economica com DEF/TXT originais"}
                 for cid,spec in extras.items()},
             "total_cargas_catalogo":len(manifest),
             "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
