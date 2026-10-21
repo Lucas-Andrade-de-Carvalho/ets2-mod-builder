@@ -1310,9 +1310,10 @@ def run_gui():
             ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
             else ["mod","def1","def2","txt","minas","eldorado","rbr"])
         if include_librelato=="audit":
-            required=(["eldorado","existing_eldorado"] if scope_var.get()=="eldorado" else
-                      ["minas","eldorado","rbr","existing_minas",
-                       "existing_eldorado","existing_rbr"])
+            required=(["mod","def1","def2","eldorado","existing_eldorado"] if
+                      scope_var.get()=="eldorado" else
+                      ["mod","def1","def2","minas","eldorado","rbr",
+                       "existing_minas","existing_eldorado","existing_rbr"])
         elif not include_librelato:required=["minas","eldorado","rbr"]
         needed=required+["output"]
         missing=[k for k in needed if not widgets[k].get().strip()]
@@ -1361,7 +1362,9 @@ def run_gui():
             work_queue.put(("log","AUDITORIA de Companies existentes: "+
                             ", ".join(entries)+" | modo="+mode))
             results=auditor_existentes.run(sys.modules[__name__],entries,snapshot["output"],
-                          mode=mode,log=lambda msg:work_queue.put(("log",msg)))
+                          mode=mode,log=lambda msg:work_queue.put(("log",msg)),
+                          professional=True,
+                          source_files={k:snapshot[k] for k in ("mod","def1","def2")})
             total_pending=sum(x["pendencias_revisao"] for x in results)
             work_queue.put(("success",
                 str(len(results))+" Company(s) examinada(s). "+
@@ -1470,9 +1473,10 @@ def main():
     if not args.cli:run_gui();return
     if args.audit_existing:
         import auditor_existentes
-        needed=(("eldorado","existing_eldorado","output") if args.only_eldorado
-                else ("minas","eldorado","rbr","existing_minas",
-                      "existing_eldorado","existing_rbr","output"))
+        needed=(("mod","def1","def2","eldorado","existing_eldorado","output")
+                if args.only_eldorado
+                else ("mod","def1","def2","minas","eldorado","rbr",
+                      "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in needed if not getattr(args,k)]
         if missing:parser.error("Auditoria exige: "+", ".join(missing))
         jobs=({"Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
@@ -1481,7 +1485,10 @@ def main():
                "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
                "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}})
         auditor_existentes.run(sys.modules[__name__],jobs,args.output,
-                              mode="auditar" if args.audit_only else "corrigir",log=print)
+                              mode="auditar" if args.audit_only else "corrigir",
+                              log=print,professional=True,
+                              source_files={k:getattr(args,k) for k in
+                                            ("mod","def1","def2")})
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
