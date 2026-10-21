@@ -1,6 +1,7 @@
 """Windows binary smoke test: run packaged EXE against a synthetic three-map job."""
 from pathlib import Path
 import subprocess
+import os
 import sys
 
 from test_gerador import Regression
@@ -34,6 +35,17 @@ def main(exe_path):
         assert len(generated)==3, f"Esperado 3 SCS; encontrados {len(generated)}"
         assert len(list(out.glob("*_auditoria.json")))==3
         print("EXE Windows executou e gerou tres mods sinteticos:",*[x.name for x in generated])
+        # Executa a interface REAL de dentro do EXE nos tamanhos de janela
+        # 1024x720 e 960x600. Os botoes devem aparecer acima do formulario.
+        env=os.environ.copy()
+        env["ETS2_GUI_LAYOUT_SMOKE"]="1"
+        gui=subprocess.run([str(Path(exe_path).resolve())],env=env,
+                           timeout=40,check=False)
+        if gui.returncode:
+            raise RuntimeError("Interface com botoes visiveis falhou: "+
+                               str(gui.returncode))
+        print("EXE Windows mostra botoes Diagnosticar/Gerar/Auditar/Abrir Pasta em tamanhos reduzidos")
+
         # Executar tambem a funcao cliente: atualizar apenas Eldorado.
         # Prova que nao precisamos carregar os arquivos MG/RBR nesse modo.
         only=case.root/"eldorado_only_exe"
