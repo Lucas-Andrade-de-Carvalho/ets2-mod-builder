@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.2.0'
+VERSION = '2.3.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -314,6 +314,227 @@ def extract_map(path):
     for c in companies.values():classify_company(c)
     return companies,old_file_count
 
+
+# Politica especifica Eldorado: mercadorias inglesas da DEF. Nunca
+# traduzir fruits -> batatas ou bananas -> laranjas.
+ELDORADO_ENGLISH = (
+    ("batata",r"^(?:potato|potatoes|potatos)(?:_[a-z0-9]+)?$"),
+    ("laranja",r"^(?:orange|oranges|citrus|citrus_fruit)(?:_[a-z0-9]+)?$"),
+    ("banana",r"^(?:banana|bananas|plantain|plantains)(?:_[a-z0-9]+)?$"),
+    ("frutas_gerais",r"^(?:fruit|fruits|fresh_fruit|mixed_fruits|vegetables|veggies)(?:_[a-z0-9]+)?$"),
+    ("cerveja",r"^(?:beer|beers|ale|lager|cerveja|cervejas)(?:_[a-z0-9]+)?$"),
+    ("bebidas_gerais",r"^(?:beverage|beverages|drinks|limonades|soda|soft_drinks|"
+                      r"bottle_water|bottled_water|water)(?:_[a-z0-9]+)?$"),
+    ("adubo",r"^(?:fertiliz(?:er|ers)|fertilis(?:er|ers)|fertilizante|"
+             r"compost|urea|npk|ammonium_nitrate)(?:_[a-z0-9]+)?$"),
+    ("milho",r"^(?:corn|maize|milho)(?:_[a-z0-9]+)?$"),
+    ("soja",r"^(?:soybean|soybeans|soya|soy_beans|soja)(?:_[a-z0-9]+)?$"),
+    ("arroz",r"^(?:rice|arroz)(?:_[a-z0-9]+)?$"),
+    ("trigo",r"^(?:wheat|trigo)(?:_[a-z0-9]+)?$"),
+    ("racao",r"^(?:animal_feed|livestock_feed|feed|feedmeal|compound_feed|"
+             r"fodder|forage|racao)(?:_[a-z0-9]+)?$"),
+    ("algodao",r"^(?:cotton|cotton_bales|cott_seed|algodao)(?:_[a-z0-9]+)?$"),
+    ("palete",r"^(?:pallet|pallets|wooden_pallets|palete|paletes)(?:_[a-z0-9]+)?$"),
+    ("madeira",r"^(?:logs|log|timber|lumber|wood|wooden_planks|sawn_wood|madeira)(?:_[a-z0-9]+)?$"),
+    ("cimento",r"^(?:cement|cement_bags|bagged_cement|cimento)(?:_[a-z0-9]+)?$"),
+    ("tijolo",r"^(?:brick|bricks|clay_bricks|tijolos)(?:_[a-z0-9]+)?$"),
+    ("granito",r"^(?:granite|marble|marble_blocks|stone_blocks|granito)(?:_[a-z0-9]+)?$"),
+    ("bobina",r"^(?:steel_coil|steel_coils|steel_roll|coil_steel|bobina|bobinas)(?:_[a-z0-9]+)?$"),
+    ("sorgo",r"^(?:sorghum|sorgo)(?:_[a-z0-9]+)?$")
+)
+
+def eldorado_translate(tokens):
+    """Traduz IDs de carga em ingles preservando a especie de mercadoria."""
+    found=set()
+    for token in tokens:
+        n=normal(token)
+        for cat,pattern in ELDORADO_ENGLISH:
+            if re.fullmatch(pattern,n,re.I):found.add(cat)
+    found |= product_types(tokens)
+    return found
+
+ELDORADO_LOGISTICS = re.compile(
+    r"transport|transpor|transp|logistic|logistica|logist|freight|"
+    r"carrier|haulage|brasilog|braslog|rasador|avant|cmm|ttrlog|"
+    r"^trame2$|^trade2$|^stokes2$|^posped2$|^ancapi$",re.I)
+ELDORADO_BANANA = re.compile(
+    r"banana|bananal|banana_farm|banana_plant|^eldbanana|^bana_",re.I)
+ELDORADO_WHOLESALE = re.compile(
+    r"atacad|wholesale|ceasa|hortif|frutaria|sacolao|"
+    r"distrib_fruit|fresh_produce|mercado_horti",re.I)
+ELDORADO_POTATO_FARM = re.compile(r"batat|potato",re.I)
+ELDORADO_ORANGE_FARM = re.compile(r"laranj|citrus|orange",re.I)
+ELDORADO_AGRO_SUPPLIER = re.compile(
+    r"agropec|agroinsum|fertil|adubo|insumos|agrocenter|agrish|agroce|agromais",re.I)
+
+def eldorado_classify(c):
+    """Reclassificar por atividade, nunca fabricar por um OUT antigo."""
+    name=normal(c.name)
+    out_types=eldorado_translate(c.old_out)
+    in_types=eldorado_translate(c.old_in)
+    if ELDORADO_LOGISTICS.search(name):
+        c.role="transportadora";c.explicit_role=True;return
+    # Hubs com catalogo enorme e carga de setores desconexos nao sao fabrica.
+    if not c.explicit_role and len(c.old_out)>=45 and len(out_types)>=6:
+        c.role="hub_generico";c.explicit_role=False;return
+    if ELDORADO_BANANA.search(name) and not ELDORADO_WHOLESALE.search(name):
+        c.role="bananal";c.explicit_role=True;return
+    if ("banana" in out_types and "banana" not in in_types and
+        not ({"batata","laranja"} & out_types) and
+        not ELDORADO_WHOLESALE.search(name) and
+        c.role in {"hortifruti","fazenda","desconhecida"}):
+        c.role="bananal";c.explicit_role=False;return
+    if ELDORADO_POTATO_FARM.search(name) and c.role in {"hortifruti","fazenda","desconhecida"}:
+        c.role="fazenda_batata";c.explicit_role=True;return
+    if ELDORADO_ORANGE_FARM.search(name) and c.role in {"hortifruti","fazenda","desconhecida"}:
+        c.role="fazenda_laranja";c.explicit_role=True;return
+    if ELDORADO_AGRO_SUPPLIER.search(name) and c.role in {"agroinsumos","desconhecida"}:
+        c.role="agroinsumos";c.explicit_role=True;return
+    if ELDORADO_WHOLESALE.search(name) and c.role in {"hortifruti","atacadista","desconhecida"}:
+        c.role="hortifruti";c.explicit_role=True;return
+    if c.role=="atacadista" and not ELDORADO_WHOLESALE.search(name):
+        c.role="hub_generico";c.explicit_role=False;return
+    if not c.explicit_role and c.role in {"cervejaria","madeireira","silo","supermercado"}:
+        c.role="desconhecida"
+
+def eldorado_permit(c,category,direction):
+    """Politica de economia real: produtor, revenda com prova, consumidor.
+
+    Evidencia de transporte nao e evidencia de producao. Uma plantacao
+    especializada NAO recebe qualquer produto hortifruti.
+    """
+    role=c.role
+    outgoing=eldorado_translate(c.old_out)
+    incoming=eldorado_translate(c.old_in)
+    observed=outgoing if direction=="out" else incoming
+    both=incoming|outgoing
+    if role in {"transportadora","hub_generico","desconhecida"}:return None
+    if role=="bananal":
+        if category=="adubo" and direction=="in":
+            return "bananal compra fertilizante para cultivo de bananas"
+        return None
+    if category in {"batata","laranja"}:
+        correct=("fazenda_batata" if category=="batata" else "fazenda_laranja")
+        other=("fazenda_laranja" if category=="batata" else "fazenda_batata")
+        if role==other:return None
+        if direction=="out":
+            if role==correct:return "plantacao especializada identificada de "+category
+            if role=="fazenda" and category in outgoing:
+                return "fazenda produz "+category+" documentado no OUT original"
+            if role in {"hortifruti","cooperativa"} and category in both:
+                return "revenda de "+category+" documentada na DEF"
+            return None
+        if role in {"supermercado","hortifruti"}:
+            return "comercio recebe "+category+" para revenda"
+        if role=="cooperativa" and category in both:
+            return "cooperativa recebe a cultura documentada"
+        if role=="alimentos" and category in incoming:
+            return "industria alimenticia recebe esta materia-prima na DEF"
+        return None
+    if category=="cerveja":
+        if direction=="out":
+            if role=="cervejaria" and c.explicit_role:
+                return "cervejaria identificada produz/expede cerveja"
+            if role in {"supermercado","atacadista"} and "cerveja" in outgoing:
+                return "comercio revende cerveja documentada"
+            return None
+        if role=="supermercado":return "supermercado recebe cerveja para revenda"
+        if role=="atacadista" and ({"cerveja","bebidas_gerais"} & both):
+            return "distribuidor documentado de bebidas recebe cerveja"
+        return None
+    if category=="adubo":
+        if direction=="out":
+            if role=="agroinsumos" and (c.explicit_role or "adubo" in outgoing):
+                return "agropecuaria fornece adubo"
+            if role=="cooperativa" and "adubo" in outgoing:
+                return "cooperativa distribui fertilizante documentado"
+            return None
+        if role in {"fazenda","fazenda_batata","fazenda_laranja"}:
+            return "produtor rural compra adubo para plantio"
+        if role in {"agroinsumos","cooperativa"} and "adubo" in incoming:
+            return "distribuidor recebe adubo para comercializacao"
+        return None
+    if category in {"milho","soja","sorgo"}:
+        if direction=="out":
+            if role=="fazenda" and category in outgoing:
+                return "fazenda produz "+category+" documentado"
+            if role in {"silo","cooperativa"} and category in both:
+                return "cooperativa/armazem movimenta "+category+" documentado"
+            return None
+        if role in {"silo","cooperativa","fabrica_racao"} and (
+             category in both or role=="fabrica_racao"):
+            return "recebe "+category+" para armazenamento/industria"
+        if role=="pecuaria" and category=="sorgo" and "racao" in incoming:
+            return "pecuaria recebe sorgo para alimentacao de animais"
+        return None
+    if category=="racao":
+        if direction=="out":
+            if role=="fabrica_racao" and c.explicit_role:
+                return "fabricante de racao identificado"
+            if role=="agroinsumos" and "racao" in both:
+                return "agropecuaria revende racao documentada"
+            return None
+        if role=="pecuaria":return "criacao animal compra racao"
+        if role=="fazenda" and "racao" in incoming:
+            return "fazenda compra racao documentada no IN"
+        if role=="agroinsumos" and "racao" in incoming:
+            return "agropecuaria recebe racao para revenda"
+        return None
+    if category=="algodao":
+        if direction=="out" and role=="fazenda" and "algodao" in outgoing:
+            return "fazenda documenta producao de algodao"
+        if direction=="out" and role=="cooperativa" and "algodao" in both:
+            return "cooperativa vende algodao documentado"
+        if direction=="in" and role=="textil":
+            return "industria textil recebe algodao"
+        if direction=="in" and role=="cooperativa" and "algodao" in both:
+            return "cooperativa recebe algodao documentado"
+        return None
+    if category=="madeira":
+        if direction=="out":
+            if role=="madeireira" and c.explicit_role:
+                return "serraria/madeireira fornece madeira"
+            if role=="materiais" and "madeira" in both:
+                return "loja de materiais revende madeira documentada"
+            return None
+        if role in {"materiais","obras"}:
+            return "construcao compra madeira"
+        return None
+    if category=="palete":
+        if direction=="out" and role=="madeireira" and c.explicit_role:
+            return "madeireira fornece paletes"
+        if direction=="in" and role=="reciclagem" and c.explicit_role:
+            return "reciclagem recebe paletes usados"
+        return None
+    if category=="bobina":return permits(c,category,direction)
+    if category=="cimento":
+        if direction=="out":
+            if role=="cimenteira" and c.explicit_role:
+                return "fabrica de cimento identificada"
+            if role=="materiais" and "cimento" in both:
+                return "loja de material revende cimento documentado"
+            return None
+        if role in {"materiais","obras","premoldados"}:
+            return "revenda/obra/pre-moldado compra cimento"
+        return None
+    if category=="tijolo":
+        if direction=="out" and role=="ceramica" and c.explicit_role:
+            return "ceramica/olaria fabrica tijolos"
+        if direction=="out" and role=="materiais" and "tijolo" in both:
+            return "loja de material revende tijolos documentados"
+        if direction=="in" and role in {"materiais","obras"}:
+            return "obra/revenda compra tijolos"
+        return None
+    if category=="granito":
+        if direction=="out" and role in {"pedreira","marmoraria"} and c.explicit_role:
+            return "extracao/beneficiamento de pedras"
+        if direction=="in" and role in {"marmoraria","materiais"}:
+            return "beneficiamento/revenda recebe pedras"
+        if direction=="in" and role=="obras" and "granito" in incoming:
+            return "obra recebe granito documentado"
+        return None
+    return None
+
 def cargo_inventory(mods):
     """Cargo_data + 2 sistemas distintos de trailer_def do ETS2.
 
@@ -590,6 +811,9 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
         log("Verificando estrutura de "+name+" ...")
         try:
             checked_maps[name]=extract_map(path)
+            if name.lower()=="eldorado":
+                for c in checked_maps[name][0].values():
+                    eldorado_classify(c)
             log(name+": "+str(len(checked_maps[name][0]))+" empresas reconhecidas.")
         except Exception as exc:
             map_failures[name]=str(exc)
@@ -622,7 +846,9 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 outs=[];ins=[]
                 for c in companies.values():
                     for direction,results_list in (("out",outs),("in",ins)):
-                        why=permits(c,category,direction)
+                        why=(eldorado_permit(c,category,direction)
+                             if name.lower()=="eldorado"
+                             else permits(c,category,direction))
                         if why:results_list.append(c.name)
                         if why:evidence.append({"empresa":c.name,"setor":c.role,
                             "classificacao_explicita":c.explicit_role,"direcao":direction,
@@ -688,7 +914,8 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 observed=product_types(company.old_out)
                 for cat in ("bobina","cimento","granito","tijolo"):
                     if cat not in observed:continue
-                    if permits(company,cat,"out") is None:
+                    if (eldorado_permit(company,cat,"out") if name.lower()=="eldorado"
+                        else permits(company,cat,"out")) is None:
                         grade_baixa_rejeitados.append({
                             "empresa":company.name,"categoria":cat,
                             "papel_detectado":company.role,
