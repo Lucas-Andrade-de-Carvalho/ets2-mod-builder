@@ -130,6 +130,19 @@ class AuditorSCSRegression(unittest.TestCase):
         # A empresa de banana aparece na DEF mesmo sem receber batatas validas.
         self.assertIn("eldorado_bananas",{row["empresa"] for row in all_rows})
 
+    def test_multi_map_audit_never_publishes_partial_scs(self):
+        dest=self.root/"atomic_result"
+        missing_def=self.root/"missing_map.zip"
+        original=self.existing.read_bytes()
+        with self.assertRaises(Exception):
+            audit.run(g, {
+               "Minas_Gerais":{"existing":self.existing,"map_def":self.baseline},
+               "Eldorado":{"existing":self.existing,"map_def":missing_def}
+            },dest)
+        self.assertEqual(self.existing.read_bytes(),original)
+        self.assertEqual(list(dest.glob("*.scs")),[])
+        self.assertTrue((dest/"AUDITORIA_INCOMPLETA.txt").is_file())
+
     def test_audit_only_creates_ledger_not_scs(self):
         out=self.root/"dry_run"
         self.invoke(mode="auditar",out=out)
