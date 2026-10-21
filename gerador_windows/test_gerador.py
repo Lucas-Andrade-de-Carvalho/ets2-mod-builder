@@ -289,6 +289,88 @@ class Regression(unittest.TestCase):
             self.assertIn("valuable: true",pallet)
             self.assertNotIn("def/cargo/carga12.sui",beer_names)
 
+    def test_realistic_grade_baixa_classification_is_directional(self):
+        """Fabricante de carro NAO produz bobina; equipamento NAO e siderurgica."""
+        cases=[
+          ("fiat",{"steel_coil"},{"bobina"},"automotiva_fabrica",
+           False,True),
+          ("mc_equipamentos",{"bobina"},{"bobina"},"maquinas",
+           False,True),
+          ("carmoprem",{"cimento"},{"cimento"},"premoldados",
+           False,False),
+          ("metalurgica_calhas",{"bobina"},{"chapa_aco"},"metalurgica",
+           False,True),
+          ("construcao_betim",{"bobina"},{"sucata"},"obras",
+           False,False),
+          ("gerdau",{"bobina"},{"iron_ore"},"siderurgica",
+           True,False),
+          ("cofer",{"bobina"},{"ferro"},"siderurgica",
+           True,False),
+          ("empresa_desconhecida",{"bobina"},{"bobina"},"desconhecida",
+           False,False)
+        ]
+        for name,old_out,old_in,role,can_out,can_in in cases:
+            with self.subTest(empresa=name):
+                c=g.Company(name,old_in=old_in,old_out=old_out)
+                g.classify_company(c)
+                self.assertEqual(c.role,role)
+                self.assertEqual(bool(g.permits(c,"bobina","out")),can_out)
+                self.assertEqual(bool(g.permits(c,"bobina","in")),can_in)
+        factory=g.Company("carmoprem",old_out={"cimento"},
+                          old_in={"cimento"})
+        g.classify_company(factory)
+        self.assertIsNone(g.permits(factory,"cimento","out"),
+                          "Empresa de pre-moldados compra cimento, nao o fabrica")
+        self.assertTrue(g.permits(factory,"cimento","in"))
+        marm=g.Company("marmoraria_botrel",old_out={"granito"})
+        g.classify_company(marm)
+        self.assertEqual(marm.role,"marmoraria")
+        self.assertTrue(g.permits(marm,"granito","out"))
+        self.assertFalse(g.product_types({"barraferro"}) & {"bobina"},
+                         "Barras de ferro nao sao bobinas de aco")
+
+    def test_low_deck_realistic_end_to_end_no_false_origins(self):
+        src=self.root/"minas.zip"
+        with zipfile.ZipFile(src) as z:
+            content={x.filename:z.read(x) for x in z.infolist()}
+        for name,direction,token in [
+            ("fiat","out","bobina"),("fiat","in","bobina"),
+            ("mc_equipamentos","out","bobina"),("mc_equipamentos","in","bobina"),
+            ("carmoprem","out","cimento"),("carmoprem","in","cimento"),
+            ("gerdau","out","steel_coil"),("metalurgica_calhas","in","bobina"),
+            ("construcao_betim","in","bobina"),
+            ("marmoraria_botrel","out","granito"),
+        ]:
+            content[f"def/company/{name}/{direction}/{token}.sii"]=old(token)
+        zip_write(src,content)
+        results=g.generate(self.inp,self.root/"grade_baixa_qa")
+        scs=next(p for name,p,data in results if name=="Minas_Gerais")
+        audit=next(data for name,p,data in results if name=="Minas_Gerais")
+        with zipfile.ZipFile(scs) as z:
+            names=set(z.namelist())
+            for company in ("fiat","mc_equipamentos","construcao_betim"):
+                self.assertNotIn(f"def/company/{company}/out/carga9.sii",names)
+            self.assertNotIn("def/company/carmoprem/out/carga6.sii",names)
+            self.assertNotIn("def/company/carmoprem/out/carga10.sii",names)
+            self.assertIn("def/company/carmoprem/in/carga6.sii",names)
+            self.assertIn("def/company/fiat/in/carga9.sii",names)
+            self.assertIn("def/company/gerdau/out/carga9.sii",names)
+            self.assertIn("def/company/metalurgica_calhas/in/carga9.sii",names)
+            self.assertIn("def/company/marmoraria_botrel/out/carga14.sii",names)
+            for path in ("def/company/fiat/out/bobina.sii",
+                         "def/company/mc_equipamentos/out/bobina.sii",
+                         "def/company/carmoprem/out/cimento.sii"):
+                self.assertIn('cargo: ""',z.read(path).decode())
+        self.assertNotIn("fiat",audit["cadeias"]["carga9"]["origens_lista"])
+        self.assertNotIn("mc_equipamentos",audit["cadeias"]["carga9"]["origens_lista"])
+        self.assertNotIn("carmoprem",audit["cadeias"]["carga6"]["origens_lista"])
+        rejected={(r["empresa"],r["categoria"]) for r in audit["rejeicoes_grade_baixa"]}
+        self.assertIn(("fiat","bobina"),rejected)
+        self.assertIn(("mc_equipamentos","bobina"),rejected)
+        self.assertIn(("carmoprem","cimento"),rejected)
+        self.assertTrue((self.root/"grade_baixa_qa"/
+                         "Minas_Gerais_rotas_justificadas.csv").is_file())
+
     def test_neutralization(self):
         s=old("banana")
         self.assertEqual(g.cargo_tokens(g.neutralize(s.encode(),"x").decode()),[])
