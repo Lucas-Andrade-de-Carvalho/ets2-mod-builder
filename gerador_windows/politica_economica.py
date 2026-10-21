@@ -36,7 +36,7 @@ ROLES=(
     ("fazenda",r"fazenda|^faz_|^farm|_farm|plantacao|farming|agricultural_farm|agric"),
     ("textil",r"textil|tecel|fiacao|cotton_mill|textile|spinning_mill"),
     ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem"),
-    ("materiais",r"materiais|mat_constr|material_constr|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_"),
+    ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_"),
     ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse"),
     ("supermercado",r"supermercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^extra_|compr_bem"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
