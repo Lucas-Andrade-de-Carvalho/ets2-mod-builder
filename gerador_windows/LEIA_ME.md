@@ -288,3 +288,23 @@ comprador ou revendedor de todas as mercadorias. Eliminar a incerteza
 exige examinar e confirmar a DEF completa, as companhias e o
 funcionamento real no ETS2. O programa nunca deve ocultar esse bloqueio
 nem distribuir cargas aleatoriamente apenas para zerar pendências.
+
+
+## Verificacao dos tres SCS originais com TXT (24+ mercadorias)
+
+Ao selecionar MOD principal, DEF1, DEF2, TXT e os mapas e clicar em
+**1. DIAGNOSTICAR OS 3 MAPAS**, o aplicativo gera adicionalmente
+`DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json` na pasta de saida.
+
+O arquivo registra: hashes SHA-256 dos tres SCS, numero de arquivos DEF,
+todos os cargos encontrados, nome exato retirado do TXT, categoria economica,
+body_types, carrocerias identificadas, origem da definicao e possiveis conflitos.
+
+Copias repetidas de uma mercadoria com SHA diferentes mas mesmos body_types
+sao relatadas como avisos: podem ter parametros diferentes, exigindo checagem.
+Body_types divergentes, carga ausente ou TXT incompleto geram resultado
+**BLOQUEADO**. O sistema NAO edita os tres originais.
+
+Esse diagnostico nao verifica sozinho a existencia de prefabs, o mercado
+de fretes ou o comportamento no ETS2. Para completar a auditoria de MG,
+RBR e Eldorado, ainda e necessario fornecer DEFs e Companies de cada mapa.
