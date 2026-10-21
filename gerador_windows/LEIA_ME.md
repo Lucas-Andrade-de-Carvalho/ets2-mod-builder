@@ -1,3 +1,49 @@
+# ETS2 Company Logistics Ultimate V2.5 — Auditor de Companies existentes
+
+## Novo método: você entrega as Companies atuais, não precisa recriar do zero
+
+Agora o programa possui o botão **3. AUDITAR / CORRIGIR SCS EXISTENTE**. Ele aceita o SCS que você já usa no ETS2 para Eldorado, Minas Gerais ou RBR e a DEF original correspondente (para comprovar a atividade de cada empresa). O arquivo original permanece INTACTO. O resultado é outro SCS com sufixo `_AUDITADA_V25_<hash>.scs`, acompanhado de JSON/CSV de cada decisão.
+
+### Como usar
+
+1. Baixe o EXE da última compilação do GitHub Actions, extraia e abra a versão V2.5.
+2. Escolha **Somente Eldorado** ou **Todos os três mapas**, conforme o que quer revisar. Se a versão do Minas está boa, selecione somente o Eldorado.
+3. Selecione o ZIP **DEF do mapa** e o arquivo **Company EXISTENTE (.scs)** que já usa nesse mapa. Para três mapas, informe os seis arquivos.
+4. Escolha a pasta de saída. Selecione **Auditar e corrigir SCS EXISTENTE**, ou, para apenas investigar, **Apenas auditar sem gerar SCS**.
+5. Clique em **3. AUDITAR / CORRIGIR SCS EXISTENTE**. O EXE pode levar tempo conforme o número de arquivos da Company. A janela não trava.
+6. Veja **AUDITORIA_ELDORADO.json** e **AUDITORIA_ELDORADO.csv**. Cada permissão tem empresa, ramo classificado, IN/OUT, carga, arquivo, motivo, confiança e decisão: MANTER, REMOVER, REMOVER_DUPLICADO, ADICIONAR ou REVISAR.
+7. O SCS novo não sobrescreve o anterior. Use o corrigido somente após conferir pendências e testar no ETS2 com cada carroceria. Deixe a antiga desativada para evitar sobreposição.
+
+### Política de correção
+
+- Mantém toda permissão cuja origem ou destino seja compatível com o ramo da empresa, conforme o motor econômico do mapa.
+- Remove só incompatibilidades de empresa com ramo **identificado com confiança**. Por exemplo, Fiat não é origem de bobinas, bananal não recebe batatas e transportadora não fabrica cerveja.
+- Elimina permissões ativas duplicadas para a mesma carga, empresa e direção.
+- Detecta empresas do mapa sem a carga do Librelato e **acrescenta** a permissão quando a DEF original e o setor comprovam a função econômica. Não tenta inventar fornecedores para obter 23/23.
+- Se o ramo não puder ser interpretado com segurança, mantém a configuração existente e marca **REVISAR**. Isso é importante: auditoria conservadora não deve eliminar fretes bons por um falso positivo.
+- Preserva byte a byte o conteúdo dos arquivos internos não alterados (incluindo manifest, editor e cargo_data) e preserva o SCS original separado.
+- Contabiliza antes/depois os 23 tipos de carga, indicando se há ao menos uma empresa OUT e uma IN diferentes; isso ainda não substitui validar disponibilidade e prefabs no ETS2.
+
+### Limite de qualidade
+
+O programa é **offline** e audita o que os arquivos efetivamente demonstram. Uma empresa com ID obscuro e sem evidência econômica na DEF continua requerendo verificação humana. A mesma empresa pode aparecer em muitas cidades; o auditor atua sobre a definição da empresa, enquanto identificar as instâncias de cidade e seus prefabs exige também as definições completas do mapa e teste no jogo.
+
+**Não existe homologação 100% automática a partir apenas do nome da empresa.** Se o JSON apresentar pendências `REVISAR` ou alguma carga sem par OUT/IN, não entregue ao cliente como versão definitiva. Traga o relatório para avaliação individual.
+
+### CLI para automatizar revisões no Windows
+
+Somente Eldorado:
+
+```powershell
+ETS2_Company_Gerador.exe --cli --audit-existing --only-eldorado --existing-eldorado "Eldorado_Antiga.scs" --eldorado "def_company (Eldorado).zip" --output "D:\Auditadas"
+```
+
+Para só inspecionar, sem criar .scs corrigido, inclua `--audit-only`.
+
+A opção tradicional de **gerar Company do zero** permanece no programa. A auditoria de Companies prontas é um fluxo novo e independente.
+
+---
+
 ## Versão V2.4 — 23/23 cargas, Grade Alta e Grade Baixa, com verificação individual
 
 **Regra obrigatória no modo Somente Eldorado:** a Company somente é publicada se cada uma das 23 cargas da lista original tiver (a) uma empresa de origem/OUT com justificativa econômica, (b) uma empresa de destino/IN com justificativa, (c) ao menos um par origem-destino de empresas diferentes e (d) cargo_data e body_types validados com as carrocerias originais. A classificação da carroceria vem de body_types nas DEFs originais; além de Grade Alta e Grade Baixa, há cargas que podem exigir hopper/graneleiro.
