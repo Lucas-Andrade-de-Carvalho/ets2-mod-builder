@@ -157,6 +157,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
     extras={}
     manifest=dict(g.MANIFEST)
     trailer_record={}
+    cargo_model_evidence={}
     if professional:
         if not source_files or any(k not in source_files for k in ("mod","def1","def2")):
             raise ValueError("Auditoria V3 precisa dos arquivos originais do reboque: MOD, DEF1 e DEF2.")
@@ -166,6 +167,19 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         cargo_records,_legacy,owned,_defs,_totals=g.cargo_inventory(originals)
         manifest,extras=catalogo_cargas.from_originals(
             g.MANIFEST,cargo_records,(source_files or {}).get("txt"))
+        archive_paths={p.lower() for _name,archive in originals for p in archive}
+        for cid in extras:
+            files=sorted(p for p in archive_paths
+                         if p.startswith("def/vehicle/cargo/"+cid+"/"))
+            cargo_model_evidence[cid]={
+                "arquivos_em_def_vehicle_cargo":files[:30],
+                "evidencia_modelo_embarcado":bool(files),
+                "validacao_no_ets2":"PENDENTE",
+                "observacao":("ETS2 1.54+ pode exigir cargo_model_match e "
+                              "accessory_cargo_data. Presenca de arquivos nao "
+                              "garante funcionalidade; ausencia pode indicar "
+                              "dependencia de outro mod ou do jogo.")
+            }
         failures=[]
         for n in manifest:
             cargo=catalogo_cargas.cargo_id(n)
@@ -420,6 +434,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "total_cargas_catalogo":len(manifest),
             "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
             "validacao_carga_carroceria":trailer_record,
+            "verificacao_modelos_carga_ets2_154":cargo_model_evidence,
             "matriz_empresa_cidade":territory,
             "empresas_compativeis_esquecidas":forgotten_companies,
             "unidades_cidade_compativeis_esquecidas":forgotten_units,
