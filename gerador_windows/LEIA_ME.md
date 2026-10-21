@@ -1,3 +1,34 @@
+## V2.3 — Mapa Eldorado: logística bilíngue e atualização isolada
+
+**Por que mudou:** um teste real no mercado do Eldorado mostrou fretes absurdos, como batatas expedidas por transportadoras e entregues em plantações de banana. O problema era uma classificação ampla de hortifruti/atacadista e a reutilização pouco criteriosa dos IN/OUT originais.
+
+**Correção restrita ao Eldorado:** use a opção marcada por padrão **Somente ELDORADO — manter Minas Gerais e RBR intactos**. O programa exige apenas o mod original Librelato, suas duas DEFs, o TXT das 23 cargas, o ZIP Eldorado e a pasta de saída. Não lê, recria nem sobrescreve os SCS de Minas e RBR. A opção de gerar todos os três continua disponível mediante escolha explícita.
+
+### Critérios específicos do Eldorado
+
+- Transportadoras e centrais genéricas de carga **não** são produtoras nem destinos finais por terem mercadorias no IN/OUT original. Empresas com enorme catálogo heterogêneo recebem classificação conservadora.
+- Bananais/plantações de banana podem receber insumos agrícolas, como adubo, mas **não recebem batatas ou laranjas** por serem simplesmente fazendas ou empresas de hortifruti.
+- Batatas e laranjas são cadeias distintas: produção na fazenda daquela cultura, revenda/armazenagem por empresas com movimentação documentada e consumo por comércio/indústria compatíveis.
+- Cerveja sai de cervejarias identificadas, ou de revendas que comprovem comercialização de cerveja; transporte de terceiros não vira fabricação.
+- Os IDs ingleses de mercadorias são interpretados por famílias econômicas sem colapsar banana, orange, potatoes e fruits na mesma carga. Ex.: potatoes=batata; orange=laranja; fertilizer=adubo; beer=cerveja; beverages=bebidas diversas (não prova que seja cerveja); bananas=banana (não é carga de batata).
+- Grãos, ração, madeira, paletes, bobinas, cimento, tijolos e granito também têm restrições direcionais por papel econômico. Cargas sem produtor ou destino confiável permanecem sinalizadas, sem inventar cadeia.
+- Dois relatórios novos: **Eldorado_traducoes_cargas_ingles.csv** e **Eldorado_permissoes_rejeitadas.csv**; o JSON Eldorado inclui justificativas, traduções e decisões rejeitadas.
+
+A automação passou por testes sintéticos de classificação e geração, mas NÃO equivale a analisar linha a linha todos os arquivos reais do Eldorado nem confirma o mercado dentro do ETS2. Antes de entregar ao cliente, confira o JSON/CSV do Eldorado e teste cargas usando as carrocerias adequadas e game.log.txt.
+
+### Como substituir somente a Company do Eldorado
+
+1. Baixe o executável mais recente na aba GitHub Actions e abra a V2.3.
+2. Selecione ou confirme os arquivos originais e a DEF do Eldorado. Deixe selecionado **Somente ELDORADO**.
+3. Clique em **GERAR COMPANY(S) SELECIONADA(S)**.
+4. Instale SOMENTE o novo arquivo **ETS2_ELDORADO_COMPANY.scs** no lugar do Eldorado antigo. Desative o SCS anterior desse mapa; mantenha Minas Gerais/RBR como estão.
+5. Confira os relatórios. Se alguma carga ficar sem saída/destino, não preencha artificialmente: reporte a lacuna no JSON.
+6. Dentro do ETS2, confirme as empresas, configurações e as ofertas; um relatório estrutural não prova homologação.
+
+**CLI:** usar a flag --only-eldorado dispensa --minas e --rbr e preserva os arquivos desses mapas na pasta de saída.
+
+---
+
 ## V2.2 — Logistica realista da Grade Baixa
 
 A tela do Mercado de Cargas revelou falsas origens para bobinas e cimento.
