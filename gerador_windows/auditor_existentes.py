@@ -14,6 +14,7 @@ import tempfile
 import zipfile
 from collections import defaultdict
 from pathlib import Path
+import politica_economica as professional_policy
 
 SII_EXT=(".sii",".sui")
 CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.(carga(?:[1-9]|1[0-9]|2[0-3]))"?(?=\s*(?:#.*)?$)')
@@ -72,7 +73,10 @@ def disable_id(g, raw, cargo_id):
     if removed[0]<1:raise ValueError("Cargo nao localizado ao neutralizar: "+cargo_id)
     return out.encode("utf-8")
 
-def safe_reason(g, c,cat,direction,map_name):
+def safe_reason(g, c,cat,direction,map_name,professional=False):
+    if professional:
+        verdict=professional_policy.decide(c,cat,direction)
+        return verdict.reason if verdict.allowed else None
     # Regras de seguranca valem nos tres mapas: transportadora nao e fabrica
     # e plantacao de banana nao e mercado geral de hortifruti.
     if c.role in {"transportadora","bananal"} or map_name.lower()=="eldorado":
@@ -89,9 +93,13 @@ def explicit_confidence(c):
                               c.name,re.I))
     return True
 
-def can_add(g,c,cat,direction,map_name):
-    why=safe_reason(g,c,cat,direction,map_name)
+def can_add(g,c,cat,direction,map_name,professional=False):
+    why=safe_reason(g,c,cat,direction,map_name,professional=professional)
     if not why or not explicit_confidence(c):return None
+    if professional:
+        # A politica moderna JA valida as restricoes por ramo, produto
+        # e evidencia dos IN/OUT originais.
+        return why
     if c.role in {"transportadora","bananal"} and direction=="out":return None
     original=(g.eldorado_translate if map_name.lower()=="eldorado"
               else g.product_types)
@@ -106,7 +114,8 @@ def can_add(g,c,cat,direction,map_name):
 def digest(value):
     return hashlib.sha256(value).hexdigest()
 
-def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
+def _run_unpublished(g, map_entries, out_path, mode="corrigir",
+                     log=lambda s: None,professional=False,source_files=None):
     """map_entries: {Eldorado:{existing:...,map_def:...}, Minas_Gerais:{...}}.
 
     Usa o arquivo do mapa COMO EVIDENCIA, e a Company EXISTENTE como base.
@@ -115,6 +124,29 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
         raise ValueError("Modo deve ser corrigir ou auditar")
     out=Path(out_path);out.mkdir(parents=True,exist_ok=True)
     if not map_entries:raise ValueError("Selecione ao menos uma Company existente")
+    trailer_record={}
+    if professional:
+        if not source_files or any(k not in source_files for k in ("mod","def1","def2")):
+            raise ValueError("Auditoria V3 precisa dos arquivos originais do reboque: MOD, DEF1 e DEF2.")
+        originals=[]
+        for label in ("mod","def1","def2"):
+            originals.append((label,g.zip_members(source_files[label])))
+        cargo_records,_legacy,owned,_defs,_totals=g.cargo_inventory(originals)
+        failures=[]
+        for n in g.MANIFEST:
+            cargo="carga"+str(n)
+            record=cargo_records.get(cargo)
+            if not record or not record.get("body"):
+                failures.append(cargo+" sem cargo_data/body_types")
+            elif owned and not set(record["body"]).intersection(owned):
+                failures.append(cargo+" sem carroceria compativel")
+        if failures:
+            raise ValueError("Auditoria bloqueada: compatibilidade do Librelato nao comprovada: "+
+                             "; ".join(failures))
+        trailer_record={cargo:{"body_types":sorted(info["body"]),
+                                "carrocerias_instaladas":sorted(owned),
+                                "carroceria_compativel":bool(set(info["body"])&owned)}
+                        for cargo,info in cargo_records.items()}
     loaded={}
     for name,entry in map_entries.items():
         if not entry.get("existing") or not entry.get("map_def"):
@@ -126,6 +158,11 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
         source=inventory_archive(g,origin)
         baseline,_=g.extract_map(entry["map_def"])
         for c in baseline.values():
+            if professional:
+                identity=professional_policy.classify(c)
+                c.role=identity.role
+                c.explicit_role=(identity.certainty=="alta")
+                continue
             if name.lower()=="eldorado":
                 g.eldorado_classify(c)
             else:
@@ -176,7 +213,7 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                 cid=int(cargo[5:])
                 cat=g.MANIFEST[cid][0]
                 seen[(company,direction,cargo)].append(path)
-                reason=safe_reason(g,comp,cat,direction,name)
+                reason=safe_reason(g,comp,cat,direction,name,professional=professional)
                 if reason:
                     decisions.append({"acao":"MANTER","empresa":company,"direcao":direction,
                         "carga":cargo,"arquivo":path,"setor":comp.role,
@@ -220,7 +257,7 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                 for direction in ("in","out"):
                     present=(cargo in current[company][direction])
                     if present:continue
-                    why=can_add(g,comp,cat,direction,name)
+                    why=can_add(g,comp,cat,direction,name,professional=professional)
                     if why:
                         new_path=f"def/company/{company}/{direction}/audit_{cargo}.sii"
                         if new_path in changed:
@@ -256,11 +293,37 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                     "origens":len(src),"destinos":len(dst),
                     "origens_lista":src,"destinos_lista":dst,
                     "pares_distintos":len(src)*len(dst)-len(set(src)&set(dst))}
+        territory=(professional_policy.coverage(baseline,g.MANIFEST)
+                   if professional else None)
+        forgotten_companies=[]
+        forgotten_units=[]
+        if territory is not None:
+            for row in territory["empresas"]:
+                actual=final_active[row["empresa"]]
+                missing_in=sorted(set(row["in_esperados"])-actual["in"])
+                missing_out=sorted(set(row["out_esperados"])-actual["out"])
+                if missing_in or missing_out:
+                    forgotten_companies.append({"empresa":row["empresa"],
+                        "setor":row["atividade"],"faltando_in":missing_in,
+                        "faltando_out":missing_out,"unidades_cidade":row["instancias_editor"]})
+            for row in territory["instancias_cidade"]:
+                actual=final_active[row["empresa"]]
+                missing_in=sorted(set(row["in_esperados"])-actual["in"])
+                missing_out=sorted(set(row["out_esperados"])-actual["out"])
+                if missing_in or missing_out:
+                    forgotten_units.append({**row,"faltando_in":missing_in,
+                                             "faltando_out":missing_out})
         updated=sum(contents.get(p)!=raw for p,raw in changed.items())
         added=sum(p not in contents for p in changed)
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
-        summary={"versao":"2.5.0","mapa":name,"modo":mode,"company_entrada":Path(entry["existing"]).name,
+        summary={"versao":"3.0.0" if professional else "2.5.0",
+            "economia_profissional":professional,
+            "validacao_carga_carroceria":trailer_record,
+            "matriz_empresa_cidade":territory,
+            "empresas_compativeis_esquecidas":forgotten_companies,
+            "unidades_cidade_compativeis_esquecidas":forgotten_units,
+            "mapa":name,"modo":mode,"company_entrada":Path(entry["existing"]).name,
             "sha256_entrada":g.hash_source(entry["existing"]),
             "def_original":Path(entry["map_def"]).name,
             "sha256_def":g.hash_source(entry["map_def"]),
@@ -271,8 +334,9 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
             "rotas_antes":before,"rotas_depois":after,
             "rotas_completas_depois":sum(x["pares_distintos"]>0 for x in after.values()),
             "decisoes":decisions,
-            "status":"REVISÃO_MANUAL_NECESSÁRIA" if manual or any(
-                x["pares_distintos"]==0 for x in after.values()) else
+            "status":"REVISÃO_MANUAL_NECESSÁRIA" if manual or forgotten_companies or any(
+                x["pares_distintos"]==0 for x in after.values()) or
+                (territory and territory["empresas_sem_identificacao"]) else
                 "AUDITORIA_ESTRUTURAL_CONCLUÍDA",
             "aviso":"Nao homologado em ETS2; classificacao sem nome/evidencia conclusivos requer revisao humana."}
         outbase=out/("AUDITORIA_"+name.upper())
@@ -321,6 +385,31 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
                     "EXPLICITA" if c.explicit_role else "INFERIDA_OU_DESCONHECIDA",
                     len(editor_names),",".join(x.rsplit("/",1)[-1] for x in editor_names),
                     ",".join(ins),",".join(outs),len(ins)+len(outs)])
+        if territory is not None:
+            with (out/("COBERTURA_EMPRESA_CIDADE_"+name.upper()+".csv")).open(
+                    "w",encoding="utf-8-sig",newline="") as fp:
+                writer=csv.writer(fp,delimiter=";")
+                writer.writerow(["empresa","cidade_editor","setor","in_esperados",
+                    "out_esperados","in_efetivos","out_efetivos",
+                    "in_faltantes","out_faltantes","prefab_confirmado"])
+                for city in territory["instancias_cidade"]:
+                    actual=final_active[city["empresa"]]
+                    needed_in=set(city["in_esperados"]);needed_out=set(city["out_esperados"])
+                    writer.writerow([city["empresa"],city["cidade"],city["atividade"],
+                        ",".join(sorted(needed_in)),",".join(sorted(needed_out)),
+                        ",".join(sorted(actual["in"])),",".join(sorted(actual["out"])),
+                        ",".join(sorted(needed_in-actual["in"])),
+                        ",".join(sorted(needed_out-actual["out"])),"NAO"])
+                # Empresas sem editor nao podem ser apresentadas como cidade confirmada.
+                for company in territory["empresas"]:
+                    if company["instancias_editor"]==0:
+                        actual=final_active[company["empresa"]]
+                        writer.writerow([company["empresa"],"CIDADE_NAO_IDENTIFICADA",
+                            company["atividade"],",".join(company["in_esperados"]),
+                            ",".join(company["out_esperados"]),
+                            ",".join(sorted(actual["in"])),",".join(sorted(actual["out"])),
+                            ",".join(sorted(set(company["in_esperados"])-actual["in"])),
+                            ",".join(sorted(set(company["out_esperados"])-actual["out"])),"NAO"])
         with (out/("COBERTURA_"+name.upper()+"_23.csv")).open("w",newline="",
                                                           encoding="utf-8-sig") as fp:
             writer=csv.writer(fp,delimiter=";")
@@ -364,3 +453,33 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None):
             log(name+": auditoria sem editar SCS | "+str(len(manual))+" pendencias")
         outputs.append(summary)
     return outputs
+
+
+def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
+        professional=False, source_files=None):
+    """Publica resultados SOMENTE depois que todos os mapas terminarem.
+
+    Preserva arquivos existentes caso a auditoria do segundo ou terceiro
+    mapa falhe; nunca deixa resultado parcial parecendo entrega concluida.
+    """
+    published=Path(out_path)
+    published.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="auditor_staging_",dir=published) as tmp:
+        stage=Path(tmp)
+        try:
+            result=_run_unpublished(
+                g,map_entries,stage,mode=mode,log=log,
+                professional=professional,source_files=source_files)
+        except Exception as exc:
+            (published/"AUDITORIA_INCOMPLETA.txt").write_text(
+                "Processamento dos mapas interrompido antes da publicacao. "
+                "Nenhum SCS novo desta execucao foi entregue.\n"+
+                type(exc).__name__+": "+str(exc)+"\n",
+                encoding="utf-8")
+            raise
+        for item in sorted(stage.iterdir()):
+            if item.is_file():
+                os.replace(item,published/item.name)
+        log("Auditoria de "+str(len(result))+
+            " mapa(s) finalizada e publicada em conjunto.")
+        return result

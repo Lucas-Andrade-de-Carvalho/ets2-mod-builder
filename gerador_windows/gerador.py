@@ -18,11 +18,12 @@ import sys
 import traceback
 import unicodedata
 import zipfile
+import politica_economica as professional_policy
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.5.0'
+VERSION = '3.0.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -870,7 +871,7 @@ def write_report(outdir,name,result):
                         "nome_ou_marca" if row["classificacao_explicita"] else "inferida_por_historico",
                         row["direcao"],row["carga"],row["categoria"],row["justificativa"]])
 
-def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=None):
+def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=None, professional=False):
     outdir=Path(output);outdir.mkdir(parents=True,exist_ok=True)
     log("Lendo arquivos originais do Librelato...")
     sources=[]
@@ -941,9 +942,14 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
         log("Verificando estrutura de "+name+" ...")
         try:
             checked_maps[name]=extract_map(path)
-            if name.lower()=="eldorado":
-                for c in checked_maps[name][0].values():
-                    eldorado_classify(c)
+            if professional:
+                for company in checked_maps[name][0].values():
+                    identity=professional_policy.classify(company)
+                    company.role=identity.role
+                    company.explicit_role=(identity.certainty=="alta")
+            elif name.lower()=="eldorado":
+                for company in checked_maps[name][0].values():
+                    eldorado_classify(company)
             log(name+": "+str(len(checked_maps[name][0]))+" empresas reconhecidas.")
         except Exception as exc:
             map_failures[name]=str(exc)
@@ -964,7 +970,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
     # Exigencia comercial: Eldorado SOMENTE nao pode ser aprovado sem 23/23.
     # Demais mapas mantem o comportamento das versoes aprovadas.
     if require_complete is None:
-        require_complete=(list(inputs["maps"])==["Eldorado"])
+        require_complete=(True if professional else list(inputs["maps"])==["Eldorado"])
     # FASE 2: construir apenas mapas selecionados em staging.
     publish_dir=outdir
     staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
@@ -980,9 +986,13 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 outs=[];ins=[]
                 for c in companies.values():
                     for direction,results_list in (("out",outs),("in",ins)):
-                        why=(eldorado_permit(c,category,direction)
-                             if name.lower()=="eldorado"
-                             else permits(c,category,direction))
+                        if professional:
+                            evaluation=professional_policy.decide(c,category,direction)
+                            why=evaluation.reason if evaluation.allowed else None
+                        else:
+                            why=(eldorado_permit(c,category,direction)
+                                 if name.lower()=="eldorado"
+                                 else permits(c,category,direction))
                         if why:results_list.append(c.name)
                         if why:evidence.append({"empresa":c.name,"setor":c.role,
                             "classificacao_explicita":c.explicit_role,"direcao":direction,
@@ -994,6 +1004,41 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             coverage=coverage_audit(companies,bycargo,records,name)
+            sector_audit=(professional_policy.coverage(companies,MANIFEST)
+                          if professional else None)
+            if sector_audit is not None:
+                # 23/23 por si so NAO prova cobertura de todas as empresas:
+                # identificadores obscuros com mercadorias relevantes exigem
+                # confirmacao antes de anunciar a Company como definitiva.
+                undecided=[]
+                for row in sector_audit["empresas"]:
+                    if row["atividade"]!="desconhecida":
+                        continue
+                    unit=companies[row["empresa"]]
+                    economic=professional_policy.cargo_categories(
+                        unit.old_in|unit.old_out)
+                    if economic:
+                        undecided.append({"empresa":unit.name,
+                                          "familias_originais":sorted(economic),
+                                          "instancias_cidade":row["instancias_editor"]})
+                coverage["empresas_pendentes_com_mercadoria"]=undecided
+                if undecided:
+                    coverage["pronto_para_gerar"]=False
+                    coverage["cobertura_empresa_incompleta"]=True
+                    log(name+": "+str(len(undecided))+
+                        " empresas com ramo desconhecido e mercadoria associada "+
+                        "necessitam revisao; NAO autorizar entrega final.")
+                coverage["auditoria_profissional"]=sector_audit
+                coverage["cobertura_empresa"]={
+                    "total":sector_audit["total_empresas"],
+                    "empresas_sem_classificacao":sector_audit["empresas_sem_identificacao"],
+                    "empresas_sem_cargas_compativeis":sector_audit["empresas_sem_cargas_compatíveis"],
+                    "empresas_sem_editor":sector_audit["empresas_sem_editor"],
+                    "instancias_cidade":sector_audit["total_instancias_editor"],
+                    "cidade_nao_confirma_prefab":True}
+                log(name+": "+str(sector_audit["total_empresas"])+
+                    " empresas e "+str(sector_audit["total_instancias_editor"])+
+                    " referencias de unidades/cidades identificadas.")
             write_coverage_report(outdir,coverage)
             log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/23 cargas.")
             for grade,stats in sorted(coverage["cobertura_por_carroceria"].items()):
@@ -1002,16 +1047,23 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             if require_complete and not coverage["pronto_para_gerar"]:
                 report=write_coverage_report(publish_dir,coverage)
                 gaps=[c["id"]+" ("+c["lacuna"]+")" for c in coverage["cargas"] if not c["rota_completa"]]
+                unknown=coverage.get("empresas_pendentes_com_mercadoria",[])
+                gaps.extend("EMPRESA PENDENTE: "+item["empresa"]+
+                    " (mercadorias: "+",".join(item["familias_originais"])+")"
+                    for item in unknown)
                 (publish_dir/(name+"_COBERTURA_INCOMPLETA.txt")).write_text(
-                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas.\n"+
+                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas; "+
+                    str(len(unknown))+" empresas com mercadorias e atividade indefinida.\n"+
                     "Nao gerar nem instalar uma Company incompleta em cliente.\n"+
                     "\n".join(gaps)+"\nConsulte "+report.name+" e respectivo CSV.\n"+
                     "Nao inventar empresas nem cargas sem evidencia na DEF.\n",
                     encoding="utf-8")
-                raise ValueError(name+": somente "+str(coverage["cargas_com_rota"])+
-                    "/23 cargas com origem e destino distintos. Nao foi gerado SCS. "+
-                    "Abra "+report.name+" e "+name+"_COBERTURA_INCOMPLETA.txt "+
-                    "para identificar empresas/setores que precisam revisao.")
+                raise ValueError(name+": cobertura insuficiente ("+
+                    str(coverage["cargas_com_rota"])+"/23 cargas; "+
+                    str(len(coverage.get("empresas_pendentes_com_mercadoria",[])))+
+                    " empresas com mercadoria e setor desconhecido). "+
+                    "Nao foi gerado SCS. Abra "+report.name+
+                    " e "+name+"_COBERTURA_INCOMPLETA.txt para investigar.")
             output_files={}
             for c in companies.values():
                 for p,raw in c.editor_files.items():
@@ -1096,6 +1148,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                                       "incompatibilidade economica ou cultura nao demonstrada")
                                 })
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "auditoria_territorial":sector_audit,
                   "cobertura_23_cargas":coverage,
                   "rejeicoes_eldorado":eldorado_rejeicoes,
                   "traducoes_ingles_portugues":eldorado_traducoes,
@@ -1110,6 +1163,28 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                   "avisos":local_warnings,
                   "validacao":"SCS ZIP, caminhos IN/OUT, body_types; disponibilidade no ETS2 nao testada"}
             write_report(outdir,name,data)
+            if sector_audit is not None:
+                with (outdir/(name+"_EMPRESAS_E_CIDADES.csv")).open(
+                        "w",encoding="utf-8-sig",newline="") as fp:
+                    csvw=csv.writer(fp,delimiter=";")
+                    csvw.writerow(["empresa","cidade_editor","atividade","arquivo_editor",
+                                   "cargas_in","cargas_out","prefab_confirmado"])
+                    for item in sector_audit["instancias_cidade"]:
+                        csvw.writerow([item["empresa"],item["cidade"],item["atividade"],
+                            item["arquivo_editor"],",".join(item["in_esperados"]),
+                            ",".join(item["out_esperados"]),"NAO"])
+                with (outdir/(name+"_EMPRESAS_SEM_CARGA_OU_SETOR.csv")).open(
+                        "w",encoding="utf-8-sig",newline="") as fp:
+                    csvw=csv.writer(fp,delimiter=";")
+                    csvw.writerow(["empresa","setor","instancias_editor",
+                                   "motivo_da_pendencia"])
+                    for item in sector_audit["empresas"]:
+                        if item["atividade"]=="desconhecida" or not (
+                                item["in_esperados"] or item["out_esperados"]):
+                            csvw.writerow([item["empresa"],item["atividade"],
+                                item["instancias_editor"],"ramo nao identificado" if
+                                item["atividade"]=="desconhecida" else
+                                "nenhuma das 23 cargas compativel com este ramo"])
             log(name+": "+str(len(companies))+" empresas, "+str(len(work))+" com cargas e "+
                 str(data["arquivos_inout_gerados"])+" permissões.")
             results.append((name,str(publish_dir/dest.name),data))
@@ -1138,7 +1213,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Auditor e Gerador Offline v2.5")
+    root.title("ETS2 Company Logistics Ultimate — Auditor e Gerador Offline v3.0")
     screen_width=root.winfo_screenwidth()
     screen_height=root.winfo_screenheight()
     # Reserva espaco para barra de tarefas e bordas do Windows.
@@ -1150,7 +1225,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.5  ·  NOVO: auditar e corrigir suas Companies SCS existentes",
+    ttk.Label(frame,text="v3.0  ·  Cobertura por empresa/cidade · Comprador e fornecedor · 23 cargas",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,6))
@@ -1220,7 +1295,7 @@ def run_gui():
             value=saved.get(k,"")
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
-    scope_var=tk.StringVar(value="eldorado")
+    scope_var=tk.StringVar(value="todos")
     scope_row=ttk.LabelFrame(content,text="Quais Companies deseja atualizar?",padding=8)
     scope_row.pack(fill="x",pady=(8,4))
     ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
@@ -1263,9 +1338,10 @@ def run_gui():
             ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
             else ["mod","def1","def2","txt","minas","eldorado","rbr"])
         if include_librelato=="audit":
-            required=(["eldorado","existing_eldorado"] if scope_var.get()=="eldorado" else
-                      ["minas","eldorado","rbr","existing_minas",
-                       "existing_eldorado","existing_rbr"])
+            required=(["mod","def1","def2","eldorado","existing_eldorado"] if
+                      scope_var.get()=="eldorado" else
+                      ["mod","def1","def2","minas","eldorado","rbr",
+                       "existing_minas","existing_eldorado","existing_rbr"])
         elif not include_librelato:required=["minas","eldorado","rbr"]
         needed=required+["output"]
         missing=[k for k in needed if not widgets[k].get().strip()]
@@ -1294,7 +1370,8 @@ def run_gui():
                  "def2":snapshot["def2"],"maps":maps}
             work_queue.put(("log","Escopo escolhido: "+", ".join(maps)))
             items=generate(inp,snapshot["output"],
-                           log=lambda msg:work_queue.put(("log",msg)),fix_skills=fix)
+                           log=lambda msg:work_queue.put(("log",msg)),
+                           fix_skills=fix,professional=True)
             work_queue.put(("success","Gerados "+str(len(items))+
                 " arquivos SCS. Audite os JSON/CSV e valide no ETS2 antes de entregar."))
         except Exception as exc:
@@ -1313,7 +1390,9 @@ def run_gui():
             work_queue.put(("log","AUDITORIA de Companies existentes: "+
                             ", ".join(entries)+" | modo="+mode))
             results=auditor_existentes.run(sys.modules[__name__],entries,snapshot["output"],
-                          mode=mode,log=lambda msg:work_queue.put(("log",msg)))
+                          mode=mode,log=lambda msg:work_queue.put(("log",msg)),
+                          professional=True,
+                          source_files={k:snapshot[k] for k in ("mod","def1","def2")})
             total_pending=sum(x["pendencias_revisao"] for x in results)
             work_queue.put(("success",
                 str(len(results))+" Company(s) examinada(s). "+
@@ -1422,9 +1501,10 @@ def main():
     if not args.cli:run_gui();return
     if args.audit_existing:
         import auditor_existentes
-        needed=(("eldorado","existing_eldorado","output") if args.only_eldorado
-                else ("minas","eldorado","rbr","existing_minas",
-                      "existing_eldorado","existing_rbr","output"))
+        needed=(("mod","def1","def2","eldorado","existing_eldorado","output")
+                if args.only_eldorado
+                else ("mod","def1","def2","minas","eldorado","rbr",
+                      "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in needed if not getattr(args,k)]
         if missing:parser.error("Auditoria exige: "+", ".join(missing))
         jobs=({"Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
@@ -1433,7 +1513,10 @@ def main():
                "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
                "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}})
         auditor_existentes.run(sys.modules[__name__],jobs,args.output,
-                              mode="auditar" if args.audit_only else "corrigir",log=print)
+                              mode="auditar" if args.audit_only else "corrigir",
+                              log=print,professional=True,
+                              source_files={k:getattr(args,k) for k in
+                                            ("mod","def1","def2")})
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
@@ -1446,7 +1529,7 @@ def main():
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
     inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps}
-    generate(inp,args.output,print)
+    generate(inp,args.output,print,professional=True)
 
 if __name__=="__main__":
     try:main()

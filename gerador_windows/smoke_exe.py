@@ -29,12 +29,14 @@ def main(exe_path):
             "\n".join(f"carga{n} = {name}" for n,(_,name) in __import__("gerador").MANIFEST.items()),
             encoding="utf-8")
         r=subprocess.run(cmd,timeout=120,check=False)
-        if r.returncode:
-            raise RuntimeError(f"EXE retornou codigo {r.returncode}")
+        # O mapa simples dos testes nao contem 23 cadeias economicamente
+        # corretas. Modo profissional deve REJEITAR e emitir lacunas.
+        if r.returncode==0:
+            raise RuntimeError("EXE V3 aceitou tres Companies com fretes ficticios")
         generated=list(out.glob("*.scs"))
-        assert len(generated)==3, f"Esperado 3 SCS; encontrados {len(generated)}"
-        assert len(list(out.glob("*_auditoria.json")))==3
-        print("EXE Windows executou e gerou tres mods sinteticos:",*[x.name for x in generated])
+        assert not generated,"EXE nao pode publicar Companies parciais"
+        assert list(out.glob("*_COBERTURA_23_CARGAS.json"))
+        print("EXE Windows rejeitou corretamente mapas sem 23 rotas profissionais")
         # Executa a interface REAL de dentro do EXE nos tamanhos de janela
         # 1024x720 e 960x600. Os botoes devem aparecer acima do formulario.
         env=os.environ.copy()
@@ -80,7 +82,11 @@ def main(exe_path):
             target=fixture.root/"exe_audit_existing"
             command=[str(Path(exe_path).resolve()),"--cli","--audit-existing",
                      "--only-eldorado","--existing-eldorado",str(fixture.existing),
-                     "--eldorado",str(fixture.baseline),"--output",str(target)]
+                     "--eldorado",str(fixture.baseline),
+                     "--mod",str(fixture.fixture.inp["mod"]),
+                     "--def1",str(fixture.fixture.inp["def1"]),
+                     "--def2",str(fixture.fixture.inp["def2"]),
+                     "--output",str(target)]
             returned=subprocess.run(command,timeout=120,check=False)
             if returned.returncode:
                 raise RuntimeError("EXE nao corrigiu Company existente: "+str(returned.returncode))

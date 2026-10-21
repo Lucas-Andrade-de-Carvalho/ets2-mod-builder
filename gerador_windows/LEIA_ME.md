@@ -1,3 +1,44 @@
+# Company Logistics Ultimate V3.0 — motor econômico profissional
+
+## Objetivo: a necessidade do comprador determina o frete
+
+Esta versão preserva o funcionamento offline, os 7 arquivos originais do Librelato e as DEFs Minas Gerais, Eldorado e RBR, e acrescenta um **único motor de decisão econômica** usado tanto na geração quanto na correção de Companies existentes.
+
+Fluxos reais exemplificados:
+
+- **Obra** contrata o motorista para retirar **cimento ou tijolos** em uma loja de materiais de construção; a obra recebe (IN), e a loja fornece (OUT). Uma fábrica de pré-moldados recebe cimento, não vira automaticamente cimenteira.
+- **Fazenda** contrata o motorista para retirar **adubo/ração** em agropecuária; culturas agrícolas compram fertilizante e criação de animais compra ração.
+- **Fazenda que colheu milho/soja/sorgo** fornece à cooperativa/silo ou fábrica de ração, conforme atividade/evidência dos registros.
+- **Produtor de batatas/laranjas** entrega em supermercado, CEASA ou hortifruti, nunca em bananal apenas por ser plantação.
+- **Supermercado** solicita reposição de **cerveja** à Ambev, não a uma transportadora sem papel comprovado de fornecedor.
+- **Siderúrgica** fornece bobinas para indústria automotiva/metalúrgica. A Fiat não passa a fabricar bobinas apenas porque havia OUT assim no mapa.
+- **Madeireira** fornece madeira e paletes, enquanto **recicladora** recebe paletes.
+- **Pedreira/marmoraria** fornece granito para beneficiamento ou construção em contexto compatível.
+
+## O que é verificado
+
+1. **23 cargos e carrocerias originais**: cargo_data e body_types verificados contra carrocerias próprias no MOD, DEF 1 e DEF 2; identifica Grade Alta, Grade Baixa e outras carrocerias presentes.
+2. **Todos os IDs de empresas encontrados na DEF do mapa**: decisões IN/OUT separadas por mercadoria e papel (produtor, comprador, revendedor, armazenador), sem corte arbitrário por número de empresas.
+3. **Unidades/cidades**: lista cada `def/company/<empresa>/editor/<cidade>.sii`; extrai cidade do campo SII ou nome do arquivo. Em ETS2 as permissões IN/OUT são geralmente compartilhadas pela definição da empresa; não implica que o prefab da cidade esteja funcionando. A confirmação de cada prefab exige dados completos do mapa e teste no jogo.
+4. **Bloqueios**: no modo Gerar versão profissional, se faltar alguma cadeia 23/23, ou restar empresa de ramo desconhecido mas com evidência de mercadoria relevante, não publica SCS com aprovação enganosa. Gera JSON, CSV de lacunas e explicações. Não inventa cargas.
+5. **Correção da Company existente**: botão 3 lê a Company atual e o DEF real, exige também MOD+DEF 1+DEF 2 para validar body_types, percorre arquivos IN/OUT, preserva o SCS original, remove incompatibilidades claras e acrescenta permissões justificadas; produz relatório antes/depois das 23 cargas, inventário de todas as empresas e cidades, registro de decisões e pendências.
+6. **Resultados em CSV**: `*_EMPRESAS_E_CIDADES.csv` com as unidades detectadas, `*_EMPRESAS_SEM_CARGA_OU_SETOR.csv` com as possíveis lacunas, `COBERTURA_EMPRESA_CIDADE_*.csv` no fluxo de auditoria, e JSON detalhados.
+7. **Sem perda de originais**: nunca altera nenhum ZIP/SCS de entrada e mantém hashes SHA-256 para rastrear fonte dos resultados.
+
+## Escolher procedimento
+
+- **Já tem Companies e quer apenas corrigir?** Selecione a Company existente de cada mapa, as DEFs dos mapas e os três originais do Librelato. Escolha **Todos os 3 mapas** e depois **3. AUDITAR / CORRIGIR SCS EXISTENTE**. É o caminho mais indicado para preservar as rotas válidas.
+- **Quer criar novas Companies?** Escolha **2. GERAR COMPANY(S) SELECIONADA(S)**, após informar os 7 arquivos originais. A geração exige cadeias economicamente consistentes para todas as 23 cargas, não uma ligação fictícia.
+- **Quer diagnosticar antes sem fazer alteração?** Selecione **Apenas auditar, sem gerar SCS**, e botão 3; ou botão 1 para diagnosticar arquivos de mapa.
+
+## Limites que impedem afirmar perfeição sem teste
+
+A ferramenta não pode deduzir com garantia absoluta o ramo real de empresas com identificadores obscuros nem confirmar se determinado prefab realmente está carregado numa cidade. A política é **não inventar**: empresas não reconhecidas com mercadorias relevantes bloqueiam a publicação de um SCS apresentado como completo, e o auditor marca pendências. Mesmo 23/23 e cobertura IN/OUT por empresas não substituem teste no ETS2, conferência do `game.log.txt`, versões do mapa, ordem de mods e configuração real das carrocerias. Para resolver pendências, revisar o CSV e fornecer os identificadores reais das empresas/cidades.
+
+A V3.0 é uma evolução técnica comprovável por testes automatizados; **não afirmar cobertura total real dos três mapas antes de executar com os arquivos do usuário e validar o jogo**.
+
+---
+
 # ETS2 Company Logistics Ultimate V2.5 — Auditor de Companies existentes
 
 ## Novo método: você entrega as Companies atuais, não precisa recriar do zero
