@@ -513,6 +513,9 @@ class Regression(unittest.TestCase):
         self.assertEqual(audited["total"],23)
         self.assertTrue(audited["pronto_para_gerar"])
         self.assertEqual(audited["cargas_com_rota"],23)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Grade Baixa"]["rotas_completas"],6)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Grade Alta"]["rotas_completas"],16)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Hopper / graneleiro"]["rotas_completas"],1)
         self.assertEqual(audited["cargas"][8]["carroceria"],"Grade Baixa")
         self.assertEqual(audited["cargas"][22]["carroceria"],"Hopper / graneleiro")
         routes["carga7"]["origens_lista"]=["fiat"]
