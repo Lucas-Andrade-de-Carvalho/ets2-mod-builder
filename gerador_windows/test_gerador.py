@@ -397,6 +397,7 @@ class Regression(unittest.TestCase):
             ("cmm_transportes",{"potatoes"},set(),"transportadora"),
             ("avant_transportes",{"potatoes"},set(),"transportadora"),
             ("ttrlog",{"fertilizer"},set(),"transportadora"),
+            ("ttr_log",{"potatoes"},set(),"transportadora"),
             ("eldorado_bananas",{"bananas"},{"potatoes","fertilizer"},"bananal"),
         ]
         for name,outs,ins,expected in tests:
