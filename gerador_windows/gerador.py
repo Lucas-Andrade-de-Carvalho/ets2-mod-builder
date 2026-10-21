@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.3.0'
+VERSION = '2.4.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -754,6 +754,91 @@ def hash_source(path):
             for part in iter(lambda:stream.read(1024*1024),b""):h.update(part)
     return h.hexdigest()
 
+def grade_label(body_types):
+    names={str(x).lower() for x in body_types}
+    # Ler os body_types REAIS no cargo_data, nao presumir as grades pelo numero ID.
+    if "alta" in names:return "Grade Alta"
+    if "baixa" in names:return "Grade Baixa"
+    if "hopper" in names:return "Hopper / graneleiro"
+    return "Outras carrocerias: "+", ".join(sorted(names))
+
+def coverage_audit(companies,cargo_routes,cargo_records,name):
+    """Cobertura de cada cargo: ao menos um produtor e comprador DIFERENTES.
+
+    Nao cria nem inventa permissao; somente documenta o mercado existente.
+    """
+    cargo_rows=[]
+    for n,(category,title) in MANIFEST.items():
+        cargo=f"carga{n}"
+        route=cargo_routes[cargo]
+        outs=set(route["origens_lista"])
+        ins=set(route["destinos_lista"])
+        valid_pairs=len(outs)*len(ins)-len(outs&ins)
+        has_route=bool(outs and ins and valid_pairs)
+        candidates=[]
+        if not has_route:
+            for company in sorted(companies.values(),key=lambda c:c.name):
+                original=eldorado_translate(company.old_in|company.old_out) if name.lower()=="eldorado" else product_types(company.old_in|company.old_out)
+                if category in original:
+                    candidates.append({
+                        "empresa":company.name,"setor":company.role,
+                        "evidencia_def":category,
+                        "in_original":category in (eldorado_translate(company.old_in) if name.lower()=="eldorado" else product_types(company.old_in)),
+                        "out_original":category in (eldorado_translate(company.old_out) if name.lower()=="eldorado" else product_types(company.old_out)),
+                        "nota":"Candidato documental, NAO autorizacao automatica"
+                    })
+        body=cargo_records.get(cargo,{}).get("body",set())
+        cargo_rows.append({
+            "id":cargo,"mercadoria":title,"categoria":category,
+            "carroceria":grade_label(body),"body_types":sorted(body),
+            "origens":len(outs),"destinos":len(ins),
+            "pares_distintos_possiveis":valid_pairs,
+            "rota_completa":has_route,
+            "origens_lista":sorted(outs),"destinos_lista":sorted(ins),
+            "lacuna":("nenhuma" if has_route else
+                      "sem origem e destino" if not outs and not ins else
+                      "sem origem" if not outs else
+                      "sem destino" if not ins else
+                      "origem e destino sao a mesma empresa"),
+            "candidatos_com_evidencia_para_revisao":candidates[:100],
+            "total_candidatos_documentais":len(candidates)
+        })
+    complete=sum(1 for r in cargo_rows if r["rota_completa"])
+    grades={}
+    for row in cargo_rows:
+        group=grades.setdefault(row["carroceria"],{"total":0,"rotas_completas":0,
+                                                  "cargas_faltantes":[]})
+        group["total"]+=1
+        if row["rota_completa"]:group["rotas_completas"]+=1
+        else:group["cargas_faltantes"].append(row["id"])
+    return {"mapa":name,"total":len(MANIFEST),
+            "cobertura_por_carroceria":grades,
+            "cargas_com_rota":complete,
+            "cargas_sem_rota":len(MANIFEST)-complete,
+            "pronto_para_gerar":complete==len(MANIFEST),
+            "metodologia":"carga valida precisa ter IN e OUT economicamente justificados e empresa origem diferente da empresa destino",
+            "cargas":cargo_rows}
+
+def write_coverage_report(directory,audit):
+    """Grava diagnostico mesmo quando a geracao SCS e bloqueada."""
+    target=Path(directory);target.mkdir(parents=True,exist_ok=True)
+    name=audit["mapa"]
+    (target/(name+"_COBERTURA_23_CARGAS.json")).write_text(
+        json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8")
+    with (target/(name+"_COBERTURA_23_CARGAS.csv")).open(
+            "w",encoding="utf-8-sig",newline="") as f:
+        w=csv.writer(f,delimiter=";")
+        w.writerow(["id","mercadoria","carroceria","body_types","origens",
+                    "destinos","pares_distintos","rota_completa","lacuna",
+                    "empresas_de_origem","empresas_de_destino","candidatos_para_revisao"])
+        for c in audit["cargas"]:
+            w.writerow([c["id"],c["mercadoria"],c["carroceria"],
+                ",".join(c["body_types"]),c["origens"],c["destinos"],
+                c["pares_distintos_possiveis"],"SIM" if c["rota_completa"] else "NAO",
+                c["lacuna"],",".join(c["origens_lista"]),",".join(c["destinos_lista"]),
+                ",".join(x["empresa"] for x in c["candidatos_com_evidencia_para_revisao"])])
+    return target/(name+"_COBERTURA_23_CARGAS.json")
+
 def write_report(outdir,name,result):
     with open(outdir/(name+"_auditoria.json"),"w",encoding="utf-8") as f:
         json.dump(result,f,ensure_ascii=False,indent=2)
@@ -785,7 +870,7 @@ def write_report(outdir,name,result):
                         "nome_ou_marca" if row["classificacao_explicita"] else "inferida_por_historico",
                         row["direcao"],row["carga"],row["categoria"],row["justificativa"]])
 
-def generate(inputs,output,log=lambda s:None, fix_skills=True):
+def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=None):
     outdir=Path(output);outdir.mkdir(parents=True,exist_ok=True)
     log("Lendo arquivos originais do Librelato...")
     sources=[]
@@ -876,6 +961,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                          "Confira FALHA_MAPAS_NAO_GERAR.txt e envie o "+
                          "DIAGNOSTICO_ARQUIVO_*.json do mapa com erro.")
     results=[]
+    # Exigencia comercial: Eldorado SOMENTE nao pode ser aprovado sem 23/23.
+    # Demais mapas mantem o comportamento das versoes aprovadas.
+    if require_complete is None:
+        require_complete=(list(inputs["maps"])==["Eldorado"])
     # FASE 2: construir apenas mapas selecionados em staging.
     publish_dir=outdir
     staging=tempfile.TemporaryDirectory(prefix="company_staging_",dir=publish_dir)
@@ -904,6 +993,25 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                 if not outs or not ins: local_warnings.append(f"{name} / {id}: sem cadeia economica completa (OUT={len(outs)}, IN={len(ins)})")
                 for c_id in outs:work.setdefault(c_id,{"in":set(),"out":set()})["out"].add(id)
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
+            coverage=coverage_audit(companies,bycargo,records,name)
+            write_coverage_report(outdir,coverage)
+            log(name+": COBERTURA "+str(coverage["cargas_com_rota"])+"/23 cargas.")
+            for grade,stats in sorted(coverage["cobertura_por_carroceria"].items()):
+                log("   "+grade+": "+str(stats["rotas_completas"])+"/"+
+                    str(stats["total"])+" cargas com rota verificada")
+            if require_complete and not coverage["pronto_para_gerar"]:
+                report=write_coverage_report(publish_dir,coverage)
+                gaps=[c["id"]+" ("+c["lacuna"]+")" for c in coverage["cargas"] if not c["rota_completa"]]
+                (publish_dir/(name+"_COBERTURA_INCOMPLETA.txt")).write_text(
+                    "GERACAO BLOQUEADA: "+str(coverage["cargas_com_rota"])+"/23 rotas verificadas.\n"+
+                    "Nao gerar nem instalar uma Company incompleta em cliente.\n"+
+                    "\n".join(gaps)+"\nConsulte "+report.name+" e respectivo CSV.\n"+
+                    "Nao inventar empresas nem cargas sem evidencia na DEF.\n",
+                    encoding="utf-8")
+                raise ValueError(name+": somente "+str(coverage["cargas_com_rota"])+
+                    "/23 cargas com origem e destino distintos. Nao foi gerado SCS. "+
+                    "Abra "+report.name+" e "+name+"_COBERTURA_INCOMPLETA.txt "+
+                    "para identificar empresas/setores que precisam revisao.")
             output_files={}
             for c in companies.values():
                 for p,raw in c.editor_files.items():
@@ -988,6 +1096,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True):
                                       "incompatibilidade economica ou cultura nao demonstrada")
                                 })
             data={"versao_gerador":VERSION,"mapa":name,"empresas":rows,
+                  "cobertura_23_cargas":coverage,
                   "rejeicoes_eldorado":eldorado_rejeicoes,
                   "traducoes_ingles_portugues":eldorado_traducoes,
                   "rejeicoes_grade_baixa":grade_baixa_rejeitados,
@@ -1029,7 +1138,7 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.3")
+    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.4")
     root.geometry("1010x740")
     root.minsize(860,650)
     style=ttk.Style(root)
@@ -1038,7 +1147,7 @@ def run_gui():
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.3  ·  Eldorado exclusivo  ·  Ingles traduzido  ·  Originais preservados",
+    ttk.Label(frame,text="v2.4  ·  Eldorado exclusivo  ·  Exige cobertura 23/23 na Company",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))

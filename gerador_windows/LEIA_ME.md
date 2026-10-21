@@ -1,3 +1,18 @@
+## Versão V2.4 — 23/23 cargas, Grade Alta e Grade Baixa, com verificação individual
+
+**Regra obrigatória no modo Somente Eldorado:** a Company somente é publicada se cada uma das 23 cargas da lista original tiver (a) uma empresa de origem/OUT com justificativa econômica, (b) uma empresa de destino/IN com justificativa, (c) ao menos um par origem-destino de empresas diferentes e (d) cargo_data e body_types validados com as carrocerias originais. A classificação da carroceria vem de body_types nas DEFs originais; além de Grade Alta e Grade Baixa, há cargas que podem exigir hopper/graneleiro.
+
+O programa **não deve simular aleatoriamente** a falta de uma empresa compatível. Se a DEF do Eldorado não tiver evidências suficientes, ele interrompe a geração SEM criar um SCS novo e grava:
+
+- Eldorado_COBERTURA_23_CARGAS.json (23 mercadorias, origens, destinos, carroceria, evidências, candidatos para revisão)
+- Eldorado_COBERTURA_23_CARGAS.csv (mesmas informações em tabela)
+- Eldorado_COBERTURA_INCOMPLETA.txt (quais cargas faltam e por quê)
+
+Se uma Company Eldorado antiga estiver na pasta de saída, ela **continua antiga**; o gerador não remove arquivos do usuário automaticamente. Nesse caso não use o SCS antigo nem o entregue ao cliente. Compartilhe o JSON e o TXT de lacunas para uma revisão pontual das empresas/atividades reais do mapa e do reboque. A ausência de compatibilidade documental não autoriza inventar rotas.
+
+Quando o relatório indicar **23/23** com todas as categorias e carrocerias, a etapa de análise estrutural estará aprovada. Ainda será preciso verificar ofertas no ETS2 e game.log.txt antes da entrega ao cliente. As Companies de Minas Gerais e RBR não são reprocessadas no modo exclusivo do Eldorado.
+
+---
 ## V2.3 — Mapa Eldorado: logística bilíngue e atualização isolada
 
 **Por que mudou:** um teste real no mercado do Eldorado mostrou fretes absurdos, como batatas expedidas por transportadoras e entregues em plantações de banana. O problema era uma classificação ampla de hortifruti/atacadista e a reutilização pouco criteriosa dos IN/OUT originais.

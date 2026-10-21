@@ -464,7 +464,7 @@ class Regression(unittest.TestCase):
         zip_write(eldorado_zip,raw)
         original_a=a.read_bytes();original_b=b.read_bytes()
         inp={**self.inp,"maps":{"Eldorado":eldorado_zip}}
-        result=g.generate(inp,folder,fix_skills=False)
+        result=g.generate(inp,folder,fix_skills=False,require_complete=False)
         self.assertEqual(len(result),1)
         self.assertEqual(result[0][0],"Eldorado")
         self.assertEqual(a.read_bytes(),original_a)
@@ -486,7 +486,7 @@ class Regression(unittest.TestCase):
                 "def/company/eldorado_bananas/in/potatoes.sii").decode())
             self.assertIn("def/company/eldorado_bananas/editor/penapolis.sii",names)
         report=result[0][2]
-        self.assertEqual(report["versao_gerador"],"2.3.0")
+        self.assertEqual(report["versao_gerador"],g.VERSION)
         self.assertEqual(report["total_empresas"],10)
         self.assertNotIn("eldorado_bananas",report["cadeias"]["carga7"]["destinos_lista"])
         self.assertNotIn("brasilog",report["cadeias"]["carga7"]["origens_lista"])
@@ -498,6 +498,106 @@ class Regression(unittest.TestCase):
         self.assertIn(("eldorado_bananas","in","batata"),reject)
         self.assertTrue((folder/"Eldorado_traducoes_cargas_ingles.csv").is_file())
         self.assertTrue((folder/"Eldorado_permissoes_rejeitadas.csv").is_file())
+
+    def test_23_23_coverage_uses_real_body_types_and_distinct_companies(self):
+        """Nenhuma das 23 cargas pode ser aprovada so por arquivo IN/OUT."""
+        routes={}
+        records={}
+        for n,(category,name) in g.MANIFEST.items():
+            id=f"carga{n}"
+            routes[id]={"origens_lista":["gerdau"],"destinos_lista":["fiat"],
+                        "origens":1,"destinos":1,"nome":name}
+            records[id]={"body":({"baixa"} if n in (9,10,11,13,14,15) else
+                                 {"hopper"} if n==23 else {"alta"})}
+        audited=g.coverage_audit({},routes,records,"Eldorado")
+        self.assertEqual(audited["total"],23)
+        self.assertTrue(audited["pronto_para_gerar"])
+        self.assertEqual(audited["cargas_com_rota"],23)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Grade Baixa"]["rotas_completas"],6)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Grade Alta"]["rotas_completas"],16)
+        self.assertEqual(audited["cobertura_por_carroceria"]["Hopper / graneleiro"]["rotas_completas"],1)
+        self.assertEqual(audited["cargas"][8]["carroceria"],"Grade Baixa")
+        self.assertEqual(audited["cargas"][22]["carroceria"],"Hopper / graneleiro")
+        routes["carga7"]["origens_lista"]=["fiat"]
+        audited=g.coverage_audit({},routes,records,"Eldorado")
+        self.assertEqual(audited["cargas_com_rota"],22)
+        self.assertEqual(audited["cargas_sem_rota"],1)
+        self.assertEqual(audited["cargas"][6]["lacuna"],
+                         "origem e destino sao a mesma empresa")
+
+    def test_eldorado_23_coverage_blocks_incomplete_scs_with_diagnostic(self):
+        # Varias cargas nao terao produtor nesse mapa sintetico.
+        root=self.root/"strict_eldorado"
+        inp={**self.inp,"maps":{"Eldorado":self.inp["maps"]["Eldorado"]}}
+        with self.assertRaisesRegex(ValueError,"23 cargas"):
+            g.generate(inp,root)
+        self.assertFalse((root/"ETS2_ELDORADO_COMPANY.scs").exists())
+        self.assertTrue((root/"Eldorado_COBERTURA_23_CARGAS.json").is_file())
+        self.assertTrue((root/"Eldorado_COBERTURA_23_CARGAS.csv").is_file())
+        self.assertTrue((root/"Eldorado_COBERTURA_INCOMPLETA.txt").is_file())
+        report=json.loads((root/"Eldorado_COBERTURA_23_CARGAS.json")
+                          .read_text(encoding="utf-8"))
+        self.assertEqual(report["total"],23)
+        self.assertFalse(report["pronto_para_gerar"])
+        self.assertLess(report["cargas_com_rota"],23)
+        self.assertEqual(len(report["cargas"]),23)
+        self.assertTrue(all("carroceria" in x and "lacuna" in x
+                            for x in report["cargas"]))
+
+    def test_eldorado_all_23_realistic_cargo_chains_can_pass_strict_gate(self):
+        """Ramos economicos correspondem ao uso da mercadoria, IN e OUT separados."""
+        cargo_records={
+            "fazenda_ouro":{"in":["fertilizer"],"out":["corn","soybeans","cotton"]},
+            "silo_armazen":{"in":["corn","soybeans"],"out":["corn","soybeans","sorghum"]},
+            "agropecuaria_centro":{"out":["fertilizer"],"in":["animal_feed"]},
+            "serraria_ouro":{"out":["timber","wooden_pallets"]},
+            "textil_ouro":{"in":["cotton"]},
+            "votoran":{"out":["cement"]},
+            "material_construcao":{"in":["cement","bricks","timber"],"out":["cement"]},
+            "obra_construcao":{"in":["cement","bricks","granite","timber"]},
+            "batata_fazenda":{"out":["potatoes"]},
+            "laranja_fazenda":{"out":["oranges"]},
+            "supermercado_centro":{"in":["potatoes","oranges","beer"]},
+            "gerdau":{"out":["steel_coils"]},
+            "fiat":{"in":["steel_coils"]},
+            "ambev":{"out":["beer"]},
+            "ceramica_ouro":{"out":["bricks"]},
+            "pedreira_ouro":{"out":["granite"]},
+            "marmoraria_ouro":{"in":["granite"]},
+            "sucatao_ouro":{"in":["wooden_pallets"]},
+            "racao_fabrica":{"out":["animal_feed"],"in":["sorghum","corn","soybeans"]},
+            "pecuaria_gado":{"in":["animal_feed"]},
+        }
+        files={}
+        for company,dirs in cargo_records.items():
+            for direction,cargos in dirs.items():
+                for original in cargos:
+                    files[f"{company}/{direction}/{original}.sii"]=old(original)
+        src=self.root/"eldorado.zip";zip_write(src,files)
+        inp={**self.inp,"maps":{"Eldorado":src}}
+        result=g.generate(inp,self.root/"strict_success")
+        self.assertEqual(len(result),1)
+        name,path,audit=result[0]
+        coverage=audit["cobertura_23_cargas"]
+        self.assertEqual(coverage["total"],23)
+        self.assertEqual(coverage["cargas_com_rota"],23)
+        self.assertEqual(coverage["cargas_sem_rota"],0)
+        self.assertTrue(coverage["pronto_para_gerar"])
+        self.assertTrue(all(x["pares_distintos_possiveis"]>0
+                            for x in coverage["cargas"]))
+        with zipfile.ZipFile(path) as z:
+            self.assertIsNone(z.testzip())
+            names=set(z.namelist())
+            for n in g.MANIFEST:
+                self.assertTrue(any(x.endswith(f"/out/carga{n}.sii") for x in names),
+                                f"OUT carga{n} faltando")
+                self.assertTrue(any(x.endswith(f"/in/carga{n}.sii") for x in names),
+                                f"IN carga{n} faltando")
+            self.assertIn("def/company/sucatao_ouro/in/carga16.sii",names)
+            self.assertIn("def/company/fiat/in/carga9.sii",names)
+            self.assertIn("def/company/ambev/out/carga12.sii",names)
+        self.assertTrue((self.root/"strict_success"/
+                         "Eldorado_COBERTURA_23_CARGAS.csv").is_file())
 
     def test_neutralization(self):
         s=old("banana")
