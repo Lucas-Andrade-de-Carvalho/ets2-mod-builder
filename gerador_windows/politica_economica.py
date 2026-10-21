@@ -14,7 +14,7 @@ from pathlib import Path
 VERSION="3.0"
 ROLES=(
     ("usina_acucar",r"usina_?acucar|sugar_mill|sugar_plant|engenho_?acucar"),
-    ("transportadora",r"transport|transpor|transp|logistic|logistica|logist|freight|carrier|haulage|brasilog|braslog|rasador|avant|cmm_transport|cmm_transp|ttr_?log|^trame2$|^trade2$|^stokes2$|^posped2$"),
+    ("transportadora",r"transport|transpor|transp|logistic|logistica|logist|freight|carrier|haulage|brasilog|braslog|rasador|avant|cmm_transport|cmm_transp|ttr_?log|^trame2$|^trade2$|^stokes2$|^posped2$|(?:^|_)translov|(?:^|_)multlog$|(?:^|_)jampalog$|(?:^|_)tvslog$|^go_alfa_tr$"),
     ("bananal",r"bananal|banana_farm|banana_plantation|fazenda_banana|^eldorado_bananas$|^bana_farm"),
     ("fazenda_batata",r"(?:fazenda|faz|farm|plantacao|cultivo).*?(?:batata|potato)|(?:batata|potato).*?(?:fazenda|farm|plantacao)"),
     ("fazenda_laranja",r"(?:fazenda|faz|farm|plantacao|cultivo).*?(?:laranja|orange|citrus)|(?:laranja|orange|citrus).*?(?:fazenda|farm|plantacao)"),
@@ -28,30 +28,30 @@ ROLES=(
     ("ceramica",r"ceramica|olaria|brickyard|brick_factory|tijolaria"),
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
     ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
-    ("madeireira",r"madeireira|serraria|sawmill|timber_mill|lumberyard|serrac"),
+    ("madeireira",r"madeireira|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
     ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro"),
     ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo"),
     ("silo",r"silo|armazem|armz|grain_elevator|grain_storage|cerealista|caramuru"),
     ("cooperativa",r"cooper|coamo|^coop|camda|comigo"),
     ("pecuaria",r"pecuar|gado|cattle|livestock|poultry_farm|suino|criatorio|feedlot|confinamento"),
-    ("fazenda",r"fazenda|^faz_|^farm|_farm|plantacao|farming|agricultural_farm|agric"),
+    ("fazenda",r"fazenda|^faz_|^faze_|(?:^|_)faz_|^faz(?:bale|boa|brejo|cerra|grao|irmas|pedra|pit|sao|serena|serra|sp|sbene|pg)|^farm|_farm|plantacao|farming|agricultural_farm|agric"),
     ("textil",r"textil|tecel|fiacao|cotton_mill|textile|spinning_mill"),
     ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem"),
-    ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_"),
-    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse"),
-    ("supermercado",r"supermercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^extra_|compr_bem"),
+    ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|^material(?:ber|se1)$|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_"),
+    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$"),
+    ("supermercado",r"supermercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^extra_|compr_bem|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
     ("alimentos",r"industria_alim|food_processing|cannery|conservas|^arcor"),
     ("distribuidor",r"atacad|wholesale|distribuidor|distrib_fruit|distrib_"),
 )
 # Nem "banana" generica, nem "carro" generico, nem "agro" sozinho
 # identificam automaticamente a empresa; todos podiam causar erros.
-CROP_CLASSES={"milho","soja","sorgo","batata","laranja","algodao"}
+CROP_CLASSES={"milho","soja","sorgo","batata","laranja","algodao","coco"}
 GRAIN_CLASSES={"milho","soja","sorgo"}
 BUILDING_CLASSES={"cimento","tijolo","madeira","granito"}
 CATEGORIES={
     "milho","soja","adubo","madeira","algodao","cimento","batata","laranja",
-    "bobina","cerveja","tijolo","granito","palete","racao","sorgo"
+    "bobina","cerveja","tijolo","granito","palete","racao","sorgo","coco"
 }
 # Alias de ID original da DEF (EN/PT); nao transformar bebidas gerais em cerveja.
 ALIASES={
@@ -61,6 +61,7 @@ ALIASES={
     "adubo":r"adubo|fertilizer|fertilizers|fertiliser|fertilisers|fertilizante|fertilizantes|npk|ureia|urea",
     "batata":r"batata|batatas|potato|potatoes",
     "laranja":r"laranja|laranjas|orange|oranges|citrus",
+    "coco":r"coco|cocos|coconut|coconuts",
     "algodao":r"algodao|cotton|cotton_bales|pluma",
     "madeira":r"madeira|wood|wooden_planks|logs|timber|lumber",
     "cimento":r"cimento|cement|cement_bags|bagged_cement",
@@ -144,7 +145,7 @@ def decide(company,category,direction,identity=None):
             if category in GRAIN_CLASSES and category in old:
                 return permit("armazem/cooperativa expede cereal ou grao armazenado",
                               "setor + evidencia do cereal na DEF")
-            if role=="cooperativa" and category in {"adubo","racao","algodao"} and category in old_out:
+            if role=="cooperativa" and category in {"adubo","racao","algodao","coco"} and category in old_out:
                 return permit("cooperativa revende mercadoria documentada","OUT da mercadoria")
             return forbid("cooperativa/silo sem expedicao documentada dessa mercadoria")
         factory={
@@ -164,9 +165,9 @@ def decide(company,category,direction,identity=None):
             if category=="granito" and category not in old:
                 return forbid("loja sem prova de comercializar granito")
             return permit("loja de materiais atende pedido de "+category+" da obra")
-        if role=="hortifruti" and category in {"batata","laranja"}:
+        if role=="hortifruti" and category in {"batata","laranja","coco"}:
             return permit("CEASA/hortifruti comercializa "+category+" ao comprador")
-        if role=="supermercado" and category in {"batata","laranja","cerveja"} and category in old_out:
+        if role=="supermercado" and category in {"batata","laranja","cerveja","coco"} and category in old_out:
             return permit("varejista revende mercadoria documentada","OUT original")
         if role=="distribuidor" and category in old_out:
             return permit("distribuidor especializado movimenta produto documentado","OUT original")
@@ -180,11 +181,11 @@ def decide(company,category,direction,identity=None):
         return forbid("fazenda nao possui necessidade comprovada desta mercadoria")
     if role=="pecuaria" and category in {"racao","sorgo"}:
         return permit("criacao animal compra alimento para o rebanho")
-    if role=="supermercado" and category in {"cerveja","batata","laranja"}:
+    if role=="supermercado" and category in {"cerveja","batata","laranja","coco"}:
         return permit("supermercado repoe estoque para seus clientes")
-    if role=="hortifruti" and category in {"batata","laranja"}:
+    if role=="hortifruti" and category in {"batata","laranja","coco"}:
         return permit("CEASA/hortifruti recebe produto para revenda/distribuicao")
-    if role=="alimentos" and category in {"batata","laranja","milho","soja"} and category in old_in:
+    if role=="alimentos" and category in {"batata","laranja","milho","soja","coco"} and category in old_in:
         return permit("industria alimenticia usa materia-prima documentada","IN original")
     if role=="agroinsumos" and category in {"adubo","racao"}:
         return permit("agropecuaria reabastece mercadoria para revenda")
@@ -192,7 +193,7 @@ def decide(company,category,direction,identity=None):
         return permit("fabrica de racao compra materia-prima para fabricar alimento animal")
     if role in {"silo","cooperativa"} and category in GRAIN_CLASSES and category in old:
         return permit("armazem/cooperativa recebe graos da fazenda","grao documentado na DEF")
-    if role=="cooperativa" and category in {"adubo","algodao","racao"} and category in old:
+    if role=="cooperativa" and category in {"adubo","algodao","racao","coco"} and category in old:
         return permit("cooperativa recebe insumo/produto associado documentado","DEF original")
     if role=="textil" and category=="algodao":
         return permit("industria textil necessita de fibra de algodao")
