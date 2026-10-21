@@ -99,7 +99,9 @@ def explicit_confidence(c):
 
 def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
     why=safe_reason(g,c,cat,direction,map_name,professional=professional,spec=spec)
-    if not why or not explicit_confidence(c):return None
+    explicit_custom=(spec is not None and
+                     professional_policy.norm(c.name) in spec[direction+"_companies"])
+    if not why or not (explicit_confidence(c) or explicit_custom):return None
     if professional:
         # A politica moderna JA valida as restricoes por ramo, produto
         # e evidencia dos IN/OUT originais.
@@ -141,9 +143,17 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         for label in ("mod","def1","def2"):
             originals.append((label,g.zip_members(source_files[label])))
         cargo_records,_legacy,owned,_defs,_totals=g.cargo_inventory(originals)
+        already_defined=set()
         for cid,spec in extras.items():
             if cid in cargo_records:
-                raise ValueError("ID adicional colide com definicao original: "+cid)
+                raw=cargo_records[cid]["raw"]
+                current_sha=hashlib.sha256(raw).hexdigest()
+                if current_sha not in {spec["sha256"],spec.get("sha256_origem")}:
+                    raise ValueError("Definicoes conflitantes entre MOD e catalogo: "+cid)
+                if set(cargo_records[cid]["body"])!=set(spec["body_types"]):
+                    raise ValueError("Carrocerias da carga diferem do cargo_data original: "+cid)
+                already_defined.add(cid)
+                continue
             cargo_records[cid]={"body":set(spec["body_types"])}
         failures=[]
         for n in manifest:
@@ -346,6 +356,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         if mode=="corrigir":
             # Registrar tambem definicoes cargo_data novas na contagem auditada.
             for cargo_name,spec in extras.items():
+                if cargo_name in already_defined:
+                    continue  # reboque ja fornece definicao real
                 cargo_path=spec["cargo_path"]
                 blob=catalogo_cargas.decode_definition(spec)
                 if cargo_path in changed and changed[cargo_path]!=blob:
