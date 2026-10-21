@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = '2.4.0'
+VERSION = '2.5.0'
 
 MANIFEST = {
  1:("milho","Milho"),2:("soja","Soja"),3:("adubo","Adubo"),
@@ -1138,16 +1138,16 @@ def run_gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
     root=tk.Tk()
-    root.title("ETS2 Company Logistics Ultimate — Gerador Offline v2.4")
-    root.geometry("1010x740")
-    root.minsize(860,650)
+    root.title("ETS2 Company Logistics Ultimate — Auditor e Gerador Offline v2.5")
+    root.geometry("1080x880")
+    root.minsize(950,730)
     style=ttk.Style(root)
     if "clam" in style.theme_names():style.theme_use("clam")
     style.configure("Main.TButton",font=("Segoe UI",10,"bold"),padding=(14,10))
     frame=ttk.Frame(root,padding=16)
     frame.pack(fill="both",expand=True)
     ttk.Label(frame,text="ETS2 | Company Logistics — Librelato",font=("Segoe UI",17,"bold")).pack(anchor="w")
-    ttk.Label(frame,text="v2.4  ·  Eldorado exclusivo  ·  Exige cobertura 23/23 na Company",
+    ttk.Label(frame,text="v2.5  ·  NOVO: auditar e corrigir suas Companies SCS existentes",
               font=("Segoe UI",10)).pack(anchor="w",pady=(2,6))
     ttk.Label(frame,text="Leia primeiro: sem validacao dentro do jogo, nao trate um SCS como entrega homologada.",
               font=("Segoe UI",9)).pack(anchor="w",pady=(0,12))
@@ -1160,6 +1160,9 @@ def run_gui():
        ("minas","Mapa Minas Gerais (.zip)"),
        ("eldorado","Mapa Eldorado (.zip)"),
        ("rbr","Mapa RBR (.zip)"),
+       ("existing_eldorado","Company EXISTENTE do Eldorado (.scs)"),
+       ("existing_minas","Company EXISTENTE Minas Gerais (.scs)"),
+       ("existing_rbr","Company EXISTENTE RBR (.scs)"),
        ("output","Pasta de saida")
     ]
     controls=[]
@@ -1190,6 +1193,12 @@ def run_gui():
                     variable=scope_var,value="eldorado").pack(anchor="w")
     ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
                     variable=scope_var,value="todos").pack(anchor="w")
+    audit_mode=tk.StringVar(value="corrigir")
+    audit_row=ttk.Frame(frame);audit_row.pack(fill="x",pady=(3,1))
+    ttk.Radiobutton(audit_row,text="Auditar e corrigir SCS EXISTENTE (preserva o original)",
+                    variable=audit_mode,value="corrigir").pack(side="left",padx=(0,14))
+    ttk.Radiobutton(audit_row,text="Apenas auditar, sem gerar SCS",
+                    variable=audit_mode,value="auditar").pack(side="left")
     options_row=ttk.Frame(frame);options_row.pack(fill="x",pady=(4,4))
     fix_var=tk.BooleanVar(value=False)
     ttk.Checkbutton(options_row,text="Opcional: remover restricao de Carga de Alto Valor dos cargos comuns (apenas no SCS gerado)",
@@ -1219,8 +1228,12 @@ def run_gui():
     def check_paths(include_librelato):
         required=(
             ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
-            else [k for k,_ in fields if k!="output"])
-        if not include_librelato:required=["minas","eldorado","rbr"]
+            else ["mod","def1","def2","txt","minas","eldorado","rbr"])
+        if include_librelato=="audit":
+            required=(["eldorado","existing_eldorado"] if scope_var.get()=="eldorado" else
+                      ["minas","eldorado","rbr","existing_minas",
+                       "existing_eldorado","existing_rbr"])
+        elif not include_librelato:required=["minas","eldorado","rbr"]
         needed=required+["output"]
         missing=[k for k in needed if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
@@ -1228,7 +1241,7 @@ def run_gui():
         if invalid:raise ValueError("Arquivo ou pasta inexistente: "+", ".join(invalid))
     def change_busy(value):
         busy[0]=value
-        for c in controls+[btn_diag,btn_generate]:
+        for c in controls+[btn_diag,btn_generate,btn_audit]:
             c.configure(state="disabled" if value else "normal")
         if value:progress.start(12)
         else:progress.stop()
@@ -1253,6 +1266,31 @@ def run_gui():
                 " arquivos SCS. Audite os JSON/CSV e valide no ETS2 antes de entregar."))
         except Exception as exc:
             work_queue.put(("error",str(exc)))
+    def worker_audit(snapshot,scope,mode):
+        try:
+            import auditor_existentes
+            entries=({"Eldorado":{"existing":snapshot["existing_eldorado"],
+                                   "map_def":snapshot["eldorado"]}} if scope=="eldorado" else
+                     {"Minas_Gerais":{"existing":snapshot["existing_minas"],
+                                     "map_def":snapshot["minas"]},
+                      "Eldorado":{"existing":snapshot["existing_eldorado"],
+                                  "map_def":snapshot["eldorado"]},
+                      "RBR":{"existing":snapshot["existing_rbr"],
+                             "map_def":snapshot["rbr"]}})
+            work_queue.put(("log","AUDITORIA de Companies existentes: "+
+                            ", ".join(entries)+" | modo="+mode))
+            results=auditor_existentes.run(sys.modules[__name__],entries,snapshot["output"],
+                          mode=mode,log=lambda msg:work_queue.put(("log",msg)))
+            total_pending=sum(x["pendencias_revisao"] for x in results)
+            work_queue.put(("success",
+                str(len(results))+" Company(s) examinada(s). "+
+                str(total_pending)+" ocorrencias requerem revisao. "+
+                ("Corrigida(s) em arquivos NOVOS; originais preservados. " if mode=="corrigir" else
+                 "Nenhum SCS gerado. ")+
+                "Confira AUDITORIA_*.json e .csv ANTES de entregar ao cliente."))
+        except Exception as exc:
+            work_queue.put(("error",str(exc)))
+
     def worker_diagnostic(snapshot):
         try:
             out=Path(snapshot["output"])
@@ -1266,13 +1304,20 @@ def run_gui():
     def run(action):
         if busy[0]:return
         try:
-            check_paths(include_librelato=(action=="generate"))
+            check_paths(include_librelato=("audit" if action=="audit" else action=="generate"))
             persist()
             snapshot={k:v.get() for k,v in widgets.items()}
             change_busy(True)
             status.set("Analisando arquivos; aguarde...")
-            fun=worker_generate if action=="generate" else worker_diagnostic
-            args=(snapshot,fix_var.get(),scope_var.get()) if action=="generate" else (snapshot,)
+            if action=="generate":
+                fun=worker_generate
+                args=(snapshot,fix_var.get(),scope_var.get())
+            elif action=="audit":
+                fun=worker_audit
+                args=(snapshot,scope_var.get(),audit_mode.get())
+            else:
+                fun=worker_diagnostic
+                args=(snapshot,)
             threading.Thread(target=fun,args=args,daemon=True).start()
         except Exception as exc:
             messagebox.showerror("Campos incompletos",str(exc))
@@ -1299,6 +1344,9 @@ def run_gui():
     btn_generate=ttk.Button(actions,text="2. GERAR COMPANY(S) SELECIONADA(S)",
                             command=lambda:run("generate"),style="Main.TButton")
     btn_generate.pack(side="left",padx=6)
+    btn_audit=ttk.Button(actions,text="3. AUDITAR / CORRIGIR SCS EXISTENTE",
+                         command=lambda:run("audit"),style="Main.TButton")
+    btn_audit.pack(side="left",padx=6)
     def open_folder():
         p=widgets["output"].get()
         if not p or not Path(p).is_dir():
@@ -1314,10 +1362,30 @@ def main():
     parser.add_argument("--cli",action="store_true")
     parser.add_argument("--only-eldorado",action="store_true",
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
-    for x in ("mod","def1","def2","txt","minas","eldorado","rbr","output"):
+    parser.add_argument("--audit-existing",action="store_true",
+                        help="Auditar/corrigir Company SCS existente sem regenerar do zero")
+    parser.add_argument("--audit-only",action="store_true",
+                        help="Gerar somente relatorio de auditoria, sem .scs corrigido")
+    for x in ("mod","def1","def2","txt","minas","eldorado","rbr",
+              "existing-eldorado","existing-minas","existing-rbr","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
+    if args.audit_existing:
+        import auditor_existentes
+        needed=(("eldorado","existing_eldorado","output") if args.only_eldorado
+                else ("minas","eldorado","rbr","existing_minas",
+                      "existing_eldorado","existing_rbr","output"))
+        missing=[k for k in needed if not getattr(args,k)]
+        if missing:parser.error("Auditoria exige: "+", ".join(missing))
+        jobs=({"Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
+              if args.only_eldorado else
+              {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas},
+               "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
+               "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}})
+        auditor_existentes.run(sys.modules[__name__],jobs,args.output,
+                              mode="auditar" if args.audit_only else "corrigir",log=print)
+        return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
     if any(getattr(args,x) is None for x in required):

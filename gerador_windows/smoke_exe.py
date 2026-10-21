@@ -59,6 +59,31 @@ def main(exe_path):
         assert mg.read_bytes()==b"MINAS_CLIENTE_NAO_MODIFICAR"
         assert rbr.read_bytes()==b"RBR_CLIENTE_NAO_MODIFICAR"
         print("EXE Windows BLOQUEOU corretamente Eldorado incompleto; MG e RBR intactos")
+        # Auditar e corrigir SCS JA EXISTENTE. A executavel precisa
+        # importar o modulo de auditoria em ambiente PyInstaller isolado.
+        from test_auditor_existentes import AuditorSCSRegression
+        fixture=AuditorSCSRegression()
+        fixture.setUp()
+        try:
+            target=fixture.root/"exe_audit_existing"
+            command=[str(Path(exe_path).resolve()),"--cli","--audit-existing",
+                     "--only-eldorado","--existing-eldorado",str(fixture.existing),
+                     "--eldorado",str(fixture.baseline),"--output",str(target)]
+            returned=subprocess.run(command,timeout=120,check=False)
+            if returned.returncode:
+                raise RuntimeError("EXE nao corrigiu Company existente: "+str(returned.returncode))
+            corrected=list(target.glob("ETS2_ELDORADO_AUDITADA_V25_*.scs"))
+            assert len(corrected)==1,"Companhia corrigida inexistente"
+            import zipfile,json
+            with zipfile.ZipFile(corrected[0]) as z:
+                assert b'cargo: ""' in z.read("def/company/brasilog/out/carga7.sii")
+                assert b'cargo.carga12' in z.read("def/company/ambev/out/carga12.sii")
+            audit_json=json.loads((target/"AUDITORIA_ELDORADO.json").read_text(
+                encoding="utf-8"))
+            assert audit_json["permissoes_removidas"]>=3
+            print("EXE Windows auditou SCS existente, corrigiu rotas e preservou original")
+        finally:
+            fixture.tearDown()
     finally:
         case.tearDown()
 
