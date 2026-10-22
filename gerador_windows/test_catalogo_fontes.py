@@ -133,7 +133,15 @@ class SourceCargoTests(unittest.TestCase):
         actions=[d for d in data["decisoes"] if d.get("carga")=="carga24"]
         self.assertTrue(actions)
         self.assertFalse(any(d["acao"]=="REMOVER" for d in actions))
-        self.assertTrue(any(d["acao"]=="REVISAR" for d in actions))
+        # Nova excecao REGIONAL foi explicitamente autorizada para Minas:
+        # fazenda pode expedir coco e supermercado pode receber. Essa
+        # associacao NAO vira documentacao de cultivo no IN/OUT original.
+        self.assertTrue(any(
+            d["acao"]=="MANTER_ADAPTACAO_REGIONAL" for d in actions))
+        self.assertGreaterEqual(data["permissoes_adaptacao_regional_herdadas"],2)
+        self.assertTrue(all(
+            d.get("fonte")=="SIMULACAO_ECONOMICA_REGIONAL_AUTORIZADA"
+            for d in actions if d["acao"]=="MANTER_ADAPTACAO_REGIONAL"))
         with zipfile.ZipFile(out/data["arquivo_corrigido"]) as z:
             self.assertEqual(z.read("def/company/supermercado1/in/carga24.sii"),
                              g.cargo_sii("carga24"))
