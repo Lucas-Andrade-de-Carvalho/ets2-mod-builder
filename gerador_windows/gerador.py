@@ -1746,18 +1746,28 @@ def main():
         return
     if args.preflight_real:
         from homologacao_final import run as final_preflight
-        required=("mod","def1","def2","txt","minas","eldorado","rbr",
-                  "existing_minas","existing_eldorado","existing_rbr","output")
+        required=(("mod","def1","def2","txt","rbr","existing_rbr","output")
+                  if args.only_rbr else
+                  ("mod","def1","def2","txt","eldorado","existing_eldorado","output")
+                  if args.only_eldorado else
+                  ("mod","def1","def2","txt","minas","eldorado","rbr",
+                   "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in required if not getattr(args,k)]
         if missing:parser.error("Pre-homologacao exige: "+", ".join(missing))
         sources={key:getattr(args,key) for key in ("mod","def1","def2","txt")}
-        entries={
-            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
+        entries=({"RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
+                 if args.only_rbr else
+                 {"Eldorado":{"existing":args.existing_eldorado,
+                              "map_def":args.eldorado}} if args.only_eldorado
+                 else {"Minas_Gerais":{
+                           "existing":args.existing_minas,"map_def":args.minas,
                            "editor_source":args.editor_minas},
-            "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
-            "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
+                       "Eldorado":{"existing":args.existing_eldorado,
+                                   "map_def":args.eldorado},
+                       "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}})
         report=final_preflight(sys.modules[__name__],sources,entries,args.output,
-                               game_log=args.game_log,log=print)
+                               game_log=args.game_log,log=print,
+                               expected_maps=tuple(entries))
         print("PRE-HOMOLOGACAO:",report["status_pre_homologacao"],
               "| bloqueios:",len(report["bloqueios"]),
               "| homologado_ets2:",report["homologado_no_ets2"])
