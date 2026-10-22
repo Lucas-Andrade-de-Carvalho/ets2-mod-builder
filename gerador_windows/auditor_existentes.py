@@ -137,7 +137,8 @@ def proven_incompatibility(company, category, direction, spec=None):
         return "Bananal nao fornece outras culturas nem recebe genericamente estes produtos"
     if direction=="out" and (
         (role in {"automotiva_fabrica","maquinas"} and category=="bobina") or
-        (role=="premoldados" and category=="cimento")
+        (role=="premoldados" and category=="cimento") or
+        (role=="metalurgica" and category=="tijolo")
     ):
         return "Fabricante identificado nao produz a materia-prima correspondente"
     return None
