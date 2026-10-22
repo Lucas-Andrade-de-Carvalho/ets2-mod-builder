@@ -78,6 +78,11 @@ def disable_id(g, raw, cargo_id):
     return out.encode("utf-8")
 
 def safe_reason(g, c,cat,direction,map_name,professional=False,spec=None):
+    if professional:
+        regional=professional_policy.regional_approved_decision(
+            c,cat,direction,map_name)
+        if regional is not None and regional.allowed:
+            return regional.reason
     if spec is not None:
         verdict=catalogo_cargas.evaluate(c,spec,direction,professional_policy.classify(c))
         return verdict.reason if verdict.allowed else None
@@ -101,6 +106,14 @@ def explicit_confidence(c):
     return True
 
 def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
+    if professional:
+        regional=professional_policy.regional_approved_decision(
+            c,cat,direction,map_name)
+        if regional is not None and regional.allowed:
+            # Escopo MG/Eldorado, somente carga5/pluma e carga24/coco.
+            # Permitir inclusive company role desconhecido se o
+            # nome for explicitamente fazenda/mercearia/CEASA/armazem.
+            return regional.reason
     why=safe_reason(g,c,cat,direction,map_name,professional=professional,spec=spec)
     explicit_custom=(spec is not None and
                      professional_policy.norm(c.name) in spec.get(direction+"_companies", ()))
@@ -377,9 +390,19 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                                 "motivo":"Caminho de complemento ocupado; evita sobrescrever"})
                             continue
                         changed[new_path]=g.cargo_sii(cargo)
-                        decisions.append({"acao":"ADICIONAR","empresa":company,"direcao":direction,
-                            "carga":cargo,"arquivo":new_path,"setor":comp.role,
-                            "confianca":"alta","motivo":"Empresa compativel validada pela DEF: "+why})
+                        regional=(professional_policy.regional_approved_decision(
+                            comp,cat,direction,name) if professional else None)
+                        adapted=bool(regional and regional.allowed)
+                        decisions.append({
+                            "acao":"ADICIONAR_ADAPTACAO_REGIONAL" if adapted
+                                   else "ADICIONAR",
+                            "empresa":company,"direcao":direction,"carga":cargo,
+                            "arquivo":new_path,"setor":comp.role,
+                            "confianca":"media" if adapted else "alta",
+                            "fonte":"SIMULACAO_ECONOMICA_REGIONAL_AUTORIZADA"
+                                    if adapted else "POLITICA_ECONOMICA",
+                            "motivo":(why if adapted else
+                                      "Empresa compativel validada pela DEF: "+why)})
                         states[company][direction].add(cargo)
                         current[company][direction].add(cargo)
         # Reconstruir estado pelo SCS FINAL, nao confiar nas decisoes.
@@ -403,9 +426,14 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     "origens_lista":src,"destinos_lista":dst,
                     "pares_distintos":len(src)*len(dst)-len(set(src)&set(dst))}
         homologation=(homologacao_logistica.assess(
-            baseline,final_active,manifest,extras,professional_policy,catalogo_cargas)
+            baseline,final_active,manifest,extras,professional_policy,
+            catalogo_cargas,map_name=name)
             if professional else None)
         def territory_decision(c,cat,direction,cargo):
+            regional=professional_policy.regional_approved_decision(
+                c,cat,direction,name)
+            if regional is not None and regional.allowed:
+                return regional
             if cargo in extras:
                 return catalogo_cargas.evaluate(
                     c,extras[cargo],direction,professional_policy.classify(c))
@@ -440,6 +468,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
         preserved=[d for d in decisions if d["acao"]=="PRESERVAR_SEM_EVIDENCIA"]
         plausible=[d for d in decisions if d["acao"]=="MANTER_PLAUSIVEL"]
+        regional_additions=[
+            d for d in decisions if d["acao"]=="ADICIONAR_ADAPTACAO_REGIONAL"
+        ]
         pending_by_company=defaultdict(list)
         for item in manual+preserved+plausible:
             pending_by_company[item["empresa"]].append(item)
@@ -459,6 +490,12 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "diagnostico_pendencias":{
                 "total_decisoes_revisar":len(manual),
                 "permissoes_herdadas_plausiveis_sem_prova_original":len(plausible),
+                "novas_permissoes_adaptacao_regional":len(regional_additions),
+                "empresas_contempladas_por_adaptacao_regional":len({
+                    d["empresa"] for d in regional_additions}),
+                "criterio_adaptacao_regional":"Excecao autorizada pelo usuario "
+                    "para pluma/coco apenas em Minas_Gerais e Eldorado; nao "
+                    "afirma que IN/OUT original traz pluma/coco.",
                 "empresas_com_hipoteses_plausiveis":len(
                     {d["empresa"] for d in plausible}),
                 "permissoes_herdadas_preservadas_sem_evidencia":len(preserved),
@@ -502,6 +539,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "arquivos_adicionados":added,"arquivos_modificados":updated,
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
             "permissoes_plausiveis_sem_evidencia_def":len(plausible),
+            "permissoes_adaptacao_regional_adicionadas":len(regional_additions),
+            "mapa_autorizado_adaptacao_regional":name in {"Minas_Gerais","Eldorado"},
             "permissoes_sem_evidencia_preservadas":len(preserved),
             "empresas_classificacao_pendente":len(classification_pending),
             "cargas_sem_rota_validada":routes_without_pair,
