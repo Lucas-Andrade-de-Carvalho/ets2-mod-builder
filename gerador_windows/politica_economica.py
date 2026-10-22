@@ -189,7 +189,7 @@ def decide(company,category,direction,identity=None):
             return permit("fabrica de fibrocimento compra cimento como materia-prima")
         return forbid("fabrica de telhas nao produz carga de cimento")
     if role=="revenda_madeiras":
-        if category=="madeira" and (direction=="out" or category in old_in):
+        if category=="madeira":
             return permit("comercio especializado de madeira expede produtos ou repoe estoque")
         if category=="palete" and category in (old_out if direction=="out" else old_in):
             return permit("empresa madeireira movimenta paletes documentados", "DEF original da mercadoria")
