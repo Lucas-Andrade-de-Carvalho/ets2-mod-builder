@@ -1499,6 +1499,20 @@ def run_gui():
                   if mode=="corrigir" else "Nenhum SCS gerado. ")+
                  "Veja RESUMO_VALIDACAO_*.txt e PENDENCIAS_CLASSIFICACAO_*.csv. "+
                  "Nao entregar ao cliente sem validar DEF e ETS2.")
+            rbr=next((x for x in results if x["mapa"]=="RBR"),None)
+            coverage=(rbr or {}).get("cobertura_maxima_empresas",{})
+            if coverage:
+                msg+=(
+                    " RBR cobertura por EMPRESA (nao apenas 24/24 cargas): "+
+                    str(coverage["empresas_reconhecidas_totalmente_contempladas"])+"/"+
+                    str(coverage["empresas_reconhecidas_com_ao_menos_uma_carga"])+
+                    " empresas compativeis RECONHECIDAS contempladas; "+
+                    str(coverage["empresas_sem_classificacao"])+
+                    " empresas ainda sem atividade comprovada, das quais "+
+                    str(coverage["desconhecidas_com_sinais_de_carga_a_investigar"])+
+                    " merecem investigacao de compatibilidade. "+
+                    "Confira COBERTURA_MAXIMA_RBR.csv; NAO declarar 100% de cobertura total."
+                )
             work_queue.put(("success",msg))
         except Exception as exc:
             work_queue.put(("error",str(exc)))
