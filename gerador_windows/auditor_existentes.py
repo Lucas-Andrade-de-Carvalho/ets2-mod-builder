@@ -686,6 +686,7 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
         evidence=report.get("cobertura_maxima_empresas") or {}
         quality=report.get("qualidade_logistica") or {}
         cargo_info=quality.get("cargas") or {}
+        total_cargas=int(report.get("total_cargas_catalogo",len(cargo_info)))
         missing_economic=sorted(
             cargo for cargo,v in cargo_info.items()
             if v.get("pares_economicos_distintos",0)==0)
@@ -708,6 +709,7 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
             blockers.append("Cargas sem par com editor documentado")
         items.append({
             "mapa":report["mapa"],
+            "total_cargas_catalogo":total_cargas,
             "empresas_na_def":report.get("empresas_na_def"),
             "empresas_nao_classificadas":evidence.get("empresas_sem_classificacao"),
             "empresas_com_editor_ausente":evidence.get("empresas_sem_editor"),
@@ -762,11 +764,14 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
                 str(item["permissoes_justificadas_atendidas"])+"/"+
                 str(item["permissoes_justificadas"])+")",
                 "Pares IN/OUT documentados: "+
-                str(item["cargas_com_par_documental"])+"/24 cargas",
+                str(item["cargas_com_par_documental"])+"/"+
+                str(item["total_cargas_catalogo"])+" cargas",
                 "Pares com setor conhecido: "+
-                str(item["cargas_com_par_economico"])+"/24 cargas",
+                str(item["cargas_com_par_economico"])+"/"+
+                str(item["total_cargas_catalogo"])+" cargas",
                 "Pares com editor: "+
-                str(item["cargas_candidatas_no_editor"])+"/24 cargas",
+                str(item["cargas_candidatas_no_editor"])+"/"+
+                str(item["total_cargas_catalogo"])+" cargas",
                 "Empresas nao classificadas: "+
                 str(item["empresas_nao_classificadas"]),
                 "Bloqueios: "+"; ".join(item["bloqueios"] or
