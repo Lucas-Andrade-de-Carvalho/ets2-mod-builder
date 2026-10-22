@@ -315,8 +315,9 @@ def extract_map(path):
             # Uma company_permanent pode existir sem qualquer IN/OUT.
             # Ela ainda pertence a DEF e deve participar da cobertura.
             identifier=p.rsplit("/",1)[-1].rsplit(".",1)[0].lower()
-            companies.setdefault(identifier,Company(identifier))
             txt=read_sii(raw)
+            if re.search(r'(?im)^\s*company_permanent\s*:',txt):
+                companies.setdefault(identifier,Company(identifier))
             if re.search(r'(?m)^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:',txt,re.I):
                 legacy.append(p)
             # Nome legivel documentado em company_permanent.
