@@ -1518,7 +1518,7 @@ def run_gui():
                 "Veja PAINEL_GERAL_LOGISTICA_V3.txt e "+
                 "COBERTURA_MAXIMA_<MAPA>.csv. 100% das conhecidas NAO e "+
                 "100% do mapa, nem homologacao de fretes no ETS2.")
-            msg="\\n".join(summary_lines)
+            msg="\n".join(summary_lines)
             work_queue.put(("success",msg))
         except Exception as exc:
             work_queue.put(("error",str(exc)))
