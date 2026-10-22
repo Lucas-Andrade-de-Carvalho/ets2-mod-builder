@@ -611,13 +611,15 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                         key=lambda p:catalogo_cargas.sort_key(p[0])):
                     strong=record.get("candidatos_para_teste",[])
                     original=record.get("candidatos_documentados_para_teste",[])
-                    first=(strong or original or [{}])[0]
+                    regional=record.get("candidatos_simulacao_regional",[])
+                    first=(strong or original or regional or [{}])[0]
                     writer.writerow({
                         "mapa":name,"carga":cargo,
                         "mercadoria":record["nome"],
                         "nivel_evidencia":(
                             "ATIVIDADE_ECONOMICA" if strong else
                             "SOMENTE_IN_OUT_ORIGINAL" if original else
+                            "ADAPTACAO_REGIONAL_AUTORIZADA" if regional else
                             "ORIGEM_DESTINO_NAO_COMPROVADOS"),
                         "status_documental":record["status"],
                         "origem_sugerida":first.get("origem",""),
@@ -631,6 +633,10 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             fp.write("Revisoes pontuais: "+str(len(manual))+"\n")
             fp.write("Permissoes herdadas preservadas sem evidencia: "+
                      str(len(preserved))+"\n")
+            fp.write("Adaptacoes regionais ADICIONADAS de pluma/coco: "+
+                     str(len(regional_additions))+" (simulacao, sem comprovacao no IN/OUT)\n")
+            fp.write("Adaptacoes regionais HERDADAS de pluma/coco: "+
+                     str(len(regional_preserved))+"\n")
             fp.write("Empresas necessitando identificacao de atividade: "+
                      str(len(classification_pending))+"\n")
             if homologation:
