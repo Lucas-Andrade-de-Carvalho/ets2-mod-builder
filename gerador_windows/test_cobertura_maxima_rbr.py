@@ -140,6 +140,28 @@ class RBRCoverageReport(unittest.TestCase):
                          "REVISAR_POSSIVEL_COMPATIBILIDADE")
         self.assertEqual(rows["frucamp"]["status"],"COMPATIVEL_CONTEMPLADA")
 
+    def test_city_unknown_counts_follow_documentary_matrix_not_mutable_cache(self):
+        companies,territory,active=self.fake()
+        territory["instancias_cidade"]=[
+            {"empresa":"frucamp","cidade":"divinopolis",
+             "in_esperados":["carga8"],"out_esperados":[]},
+            {"empresa":"agro_duvidoso","cidade":"divinopolis",
+             "in_esperados":[],"out_esperados":[]},
+        ]
+        companies["frucamp"].role="desconhecida"
+        companies["agro_duvidoso"].role="supermercado"
+        result=coverage.assess(
+            companies,territory,active,
+            {8:("laranja","Sacos de Laranja")},
+            {"cargas_com_par_economico_comprovavel":0,
+             "cargas_candidatas_teste_ets2":0})
+        city=result["cidades"][0]
+        self.assertEqual(city["empresas_compativeis"],1)
+        self.assertEqual(city["empresas_compativeis_cobertas"],1)
+        self.assertEqual(city["empresas_sem_atividade_identificada"],
+                         ["agro_duvidoso"])
+        self.assertEqual(city["situacao"],"REVISAO_COMPATIBILIDADE")
+
     def test_every_company_is_accounted_for_without_fake_completion(self):
         companies,territory,active=self.fake()
         quality={
