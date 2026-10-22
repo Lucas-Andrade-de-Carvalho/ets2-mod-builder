@@ -107,7 +107,7 @@ class DiagnosticTrailerTests(unittest.TestCase):
         p=self.input["mod"]
         with zipfile.ZipFile(p) as arc:
             content={path:arc.read(path) for path in arc.namelist()}
-        content["def/cargo/carga1.sui"]=b"cargo_data : cargo.carga1 {\\x00 }"
+        content["def/cargo/carga1.sui"]=b"cargo_data : cargo.carga1 {\x00 }"
         zip_write(p,content)
         filename,report=diag.inspect(g,self.input,self.txt,self.root/"binary_invalid")
         self.assertTrue(filename.exists())
