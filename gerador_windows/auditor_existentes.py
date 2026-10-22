@@ -141,10 +141,26 @@ def proven_incompatibility(company, category, direction, spec=None):
         if role in spec.get("forbidden_roles",()):
             return "Setor explicitamente proibido no cadastro desta mercadoria"
         return None
+    # Atividades fisicamente incompatíveis prevalecem mesmo se a DEF tiver
+    # um cargo muito genérico: transportadora não vira produtora agrícola.
+    if role=="transportadora":
+        return "Transportadora nao e unidade de producao, compra ou revenda comprovada"
+    if role=="infra_passageiros":
+        return ("Rodoviaria, posto policial ou subestacao nao opera carga "
+                "comercial comprovada das 24 mercadorias")
+    if role=="bananal" and (direction!="in" or category!="adubo"):
+        return "Bananal nao fornece outras culturas nem recebe genericamente estes produtos"
+    if direction=="out" and (
+        (role in {"automotiva_fabrica","maquinas"} and category=="bobina") or
+        (role=="premoldados" and category=="cimento") or
+        (role=="metalurgica" and category=="tijolo")
+    ):
+        return "Fabricante identificado nao produz a materia-prima correspondente"
     original=professional_policy.cargo_categories(
         company.old_in if direction=="in" else company.old_out)
     if category in original:
-        # Mercadoria exata documentada na DEF nesta direcao.
+        # Outros setores: nao apagar mercadoria realmente declarada no
+        # IN/OUT autentico sem uma contradicao material acima.
         return None
     if role in {"posto_combustivel","mineracao_minerios"}:
         return ("A DEF original comprova combustiveis/minerios brutos, "
@@ -154,18 +170,6 @@ def proven_incompatibility(company, category, direction, spec=None):
             "batata","laranja","coco","algodao"}:
         return ("Industria de moveis nao demonstrou operar esta carga "
                 "rural ou alimenticia na DEF original")
-    if role=="transportadora":
-        return "Transportadora nao e unidade de producao, compra ou revenda comprovada"
-    if role=="infra_passageiros":
-        return "Rodoviaria, posto policial ou subestacao nao opera carga comercial documentada das 24 mercadorias"
-    if role=="bananal" and (direction!="in" or category!="adubo"):
-        return "Bananal nao fornece outras culturas nem recebe genericamente estes produtos"
-    if direction=="out" and (
-        (role in {"automotiva_fabrica","maquinas"} and category=="bobina") or
-        (role=="premoldados" and category=="cimento") or
-        (role=="metalurgica" and category=="tijolo")
-    ):
-        return "Fabricante identificado nao produz a materia-prima correspondente"
     return None
 
 
