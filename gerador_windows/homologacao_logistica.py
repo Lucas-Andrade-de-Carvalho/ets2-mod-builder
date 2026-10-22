@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 
-def assess(baseline, active, manifest, extras, policy, catalog):
+def assess(baseline, active, manifest, extras, policy, catalog,map_name=None):
     """Separar pares meramente cadastrados de cadeias com evidencia economica.
 
     A prova automatica de compatibilidade e fundamentada na atividade
@@ -33,14 +33,25 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         all_out={name for name,perm in active.items() if cid in perm["out"]}
         accepted={"in":set(),"out":set()}
         documented={"in":set(),"out":set()}
+        regional={"in":set(),"out":set()}
         reasons={}
         documentary_reasons={}
+        regional_reasons={}
         for direction,names in (("in",all_in),("out",all_out)):
             for name in names:
                 entry=evaluated.get(name)
                 if not entry:
                     continue
                 comp=entry["company"]
+                # A excecao regional do usuario e distinta de:
+                # (a) a mercadoria estar no IN/OUT da DEF original;
+                # (b) a atividade economica estar documentada.
+                # O RBR nunca tem este campo preenchido.
+                adjustment=policy.regional_approved_decision(
+                    comp,category,direction,map_name,entry["identity"])
+                if adjustment is not None and adjustment.allowed:
+                    regional[direction].add(name)
+                    regional_reasons[direction+":"+name]=adjustment.reason
                 if cid in extras:
                     verdict=catalog.evaluate(comp,extras[cid],direction,entry["identity"])
                 else:
@@ -68,6 +79,13 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         # Contar sem construir todas as combinacoes na memoria.
         # Um mapa com milhares de empresas pode gerar milhoes de pares.
         pairs=len(potential_out)*len(potential_in)-len(potential_out & potential_in)
+        reg_in=regional["in"]
+        reg_out=regional["out"]
+        reg_pairs=len(reg_out)*len(reg_in)-len(reg_out & reg_in)
+        reg_editor_out={src for src in reg_out if evaluated[src]["editor"]}
+        reg_editor_in={dst for dst in reg_in if evaluated[dst]["editor"]}
+        reg_editor_pairs=(len(reg_editor_out)*len(reg_editor_in)-
+                          len(reg_editor_out & reg_editor_in))
         doc_in=documented["in"]
         doc_out=documented["out"]
         doc_pairs=len(doc_out)*len(doc_in)-len(doc_out & doc_in)
@@ -88,6 +106,17 @@ def assess(baseline, active, manifest, extras, policy, catalog):
                                    "motivo_destino":reasons["in:"+dst]})
                 if len(candidates)>=30:break
             if len(candidates)>=30:break
+        regional_candidates=[]
+        for src in sorted(reg_editor_out):
+            for dst in sorted(reg_editor_in):
+                if src==dst:continue
+                regional_candidates.append({
+                    "origem":src,"destino":dst,
+                    "regra":"SIMULACAO_REGIONAL_APROVADA_USUARIO",
+                    "motivo_origem":regional_reasons["out:"+src],
+                    "motivo_destino":regional_reasons["in:"+dst]})
+                if len(regional_candidates)>=30:break
+            if len(regional_candidates)>=30:break
         documented_candidates=[]
         for src in sorted(editor_doc_out):
             for dst in sorted(editor_doc_in):
@@ -115,6 +144,8 @@ def assess(baseline, active, manifest, extras, policy, catalog):
                 "ECONOMIA_SEM_EDITOR_VALIDADO" if pairs else
                 "CANDIDATA_TESTE_COM_DOCUMENTO_INOUT" if doc_editor_pairs else
                 "INOUT_DOCUMENTADO_SEM_EDITOR" if doc_pairs else
+                "ADAPTACAO_REGIONAL_CANDIDATA_TESTE" if reg_editor_pairs else
+                "ADAPTACAO_REGIONAL_SEM_EDITOR" if reg_pairs else
                 "SEM_EVIDENCIA_ECONOMICA" if all_pairs else
                 "SEM_PAR_CADASTRADO")
         result[cid]={
@@ -126,6 +157,12 @@ def assess(baseline, active, manifest, extras, policy, catalog):
             "pares_economicos_distintos":pairs,
             "pares_com_evidencia_inout_distintos":doc_pairs,
             "pares_com_editor_evidencia_inout":doc_editor_pairs,
+            "pares_simulacao_regional":reg_pairs,
+            "pares_simulacao_regional_com_editor":reg_editor_pairs,
+            "origens_simulacao_regional":sorted(reg_out),
+            "destinos_simulacao_regional":sorted(reg_in),
+            "candidatos_simulacao_regional":regional_candidates,
+            "regra_excepcional_autorizada":bool(reg_pairs),
             "origens_documentadas":sorted(doc_out),
             "destinos_documentados":sorted(doc_in),
             "candidatos_documentados_para_teste":documented_candidates,
@@ -140,6 +177,8 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         "cargas_com_par_cadastrado":sum(x["total_pares_no_scs"]>0 for x in result.values()),
         "cargas_com_par_economico_comprovavel":sum(x["pares_economicos_distintos"]>0 for x in result.values()),
         "cargas_com_par_evidencia_inout":sum(x["pares_com_evidencia_inout_distintos"]>0 for x in result.values()),
+        "cargas_com_par_simulacao_regional":sum(x["pares_simulacao_regional"]>0 for x in result.values()),
+        "cargas_candidatas_simulacao_regional_teste":sum(x["pares_simulacao_regional_com_editor"]>0 for x in result.values()),
         "cargas_candidatas_documentais_teste":sum(x["pares_com_editor_evidencia_inout"]>0 for x in result.values()),
         "cargas_candidatas_teste_ets2":sum(x["pares_com_editor_em_ambas_empresas"]>0 for x in result.values()),
         "cargas_homologadas_no_ets2":0,
