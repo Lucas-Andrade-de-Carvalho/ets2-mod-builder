@@ -119,7 +119,7 @@ def classify(company):
         elif candidates=={"fazenda_laranja","fazenda"}:
             candidates={"fazenda_laranja"}
         elif candidates=={"materiais","obras"} and re.search(
-                r"(?:materiais?|loja)_?(?:de_?)?(?:construcao|constr|building)|"
+                r"(?:materiais?|material|loja)_?(?:de_?)?(?:construcao|constr|building)|"
                 r"deposito_?materiais?",normalized):
             candidates={"materiais"}
         if len(candidates)==1:
