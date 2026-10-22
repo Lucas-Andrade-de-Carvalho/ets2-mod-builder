@@ -267,7 +267,7 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertNotIn("def/company/brasilog/out/audit_carga16.sii",
                              names)
             self.assertEqual(z.read("Info.txt"),b"KEEP ORIGINAL")
-        self.assertIsNone(original.stat().st_size==0)
+        self.assertGreater(original.stat().st_size,0)
 
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
