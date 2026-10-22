@@ -134,6 +134,8 @@ def proven_incompatibility(company, category, direction, spec=None):
         return None
     if role=="transportadora":
         return "Transportadora nao e unidade de producao, compra ou revenda comprovada"
+    if role=="infra_passageiros":
+        return "Rodoviaria, posto policial ou subestacao nao opera carga comercial documentada das 24 mercadorias"
     if role=="bananal" and (direction!="in" or category!="adubo"):
         return "Bananal nao fornece outras culturas nem recebe genericamente estes produtos"
     if direction=="out" and (
