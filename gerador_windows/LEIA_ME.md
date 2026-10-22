@@ -560,3 +560,50 @@ Este metodo maximiza as empresas compatíveis **com evidencias**;
 NAO promete 100% absoluto onde faltam dados de atividade ou testes
 reais do ETS2. A classificacao usa identificadores precisos do RBR
 e regras de IN/OUT restritas a produtos corretos.
+
+
+## Cobertura maxima: RBR + Eldorado + Minas Gerais (os tres mapas)
+
+**Objetivo definido pelo usuario:** em TODAS as empresas dos mapas que
+possam de fato trabalhar com uma das 24 cargas do Librelato, deve existir
+cada permissao IN/OUT economicamente compativel, sem limitar a apenas
+uma carga ou uma empresa por cidade. Empresas incompativeis podem ficar
+sem cargas. Cargas e cidades nao devem ser inventadas para atingir metas.
+
+A auditoria PRO agora examina 100% das empresas presentes na DEF de CADA
+mapa e exporta os arquivos abaixo para TODOS os mapas selecionados:
+
+| Mapa | Relatorio de cobertura total | Fila priorizada |
+|---|---|---|
+| Minas Gerais | COBERTURA_MAXIMA_MINAS_GERAIS.json e .csv | MINAS_GERAIS_REVISAO_ECONOMICA_PRIORIZADA.csv |
+| Eldorado | COBERTURA_MAXIMA_ELDORADO.json e .csv | ELDORADO_REVISAO_ECONOMICA_PRIORIZADA.csv |
+| RBR | COBERTURA_MAXIMA_RBR.json e .csv | RBR_REVISAO_ECONOMICA_PRIORIZADA.csv |
+
+O programa registra numero total de empresas, classificadas e
+compativeis, classificadas sem nenhuma das 24 cargas, compatibilidades
+com permissoes faltantes, empresas desconhecidas com sinais que
+merecem investigacao, instancias/cidades reais e diferenca IN/OUT
+para cada empresa. A interface apresenta estes numeros MAPA A MAPA.
+
+O indicador 24/24 cadeias economicas NAO equivale a cobertura de
+empresas, pois uma cadeia valida entre duas empresas pode esconder
+outras dezenas de empresas igualmente compativeis esquecidas.
+
+IMPORTANTE: o relatorio usa 'cobertura_empresas_reconhecidas_pct' apenas
+para empresas JA classificadas. O sinal
+'cobertura_100_por_cento_comprovada' fica FALSO enquanto existirem
+atividades nao classificadas, permissoes reconhecidas faltando,
+carga sem cadeia economica ou falta de comprovacao das unidades
+editor. Dados ausentes de Minas Gerais nao sao gerados artificialmente.
+
+Em Minas Gerais, se o editor estiver ausente da DEF e da Company,
+selecionar o pacote original com company_def/city/prefab no campo
+opcional Editor Minas. Sem ele, as rotas por empresa podem ser
+justificadas, mas a cobertura por cidade permanece nao comprovada.
+
+Empresas desconhecidas nunca recebem IN/OUT automatico apenas por
+palavras-chave: os sinais servem SOMENTE para revisao priorizada.
+Para conferir o resultado, executar '3. AUDITAR / CORRIGIR SCS'
+com todos os 3 mapas e comparar os tres CSVs de cobertura.
+
+**Este programa ainda nao comprova entrega e coleta dentro do ETS2.**
