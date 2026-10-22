@@ -309,6 +309,23 @@ class RBRCoverageReport(unittest.TestCase):
             self.assertEqual(len(review_rows),1)
             self.assertEqual(review_rows[0]["empresa"],"agro_duvidoso")
 
+    def test_invalid_editor_files_do_not_inflate_territorial_coverage(self):
+        companies,territory,active=self.fake()
+        companies["citrosuco1"].editor_files={
+            "def/company/citrosuco1/editor/fiction.sii":b"SiiNunit {}"}
+        territory["instancias_cidade"]=[
+            {"empresa":"frucamp","cidade":"documented_city",
+             "in_esperados":["carga8"],"out_esperados":[]}]
+        report=coverage.assess(companies,territory,active,
+                {8:("laranja","Sacos de Laranja")},
+                {"cargas_com_par_economico_comprovavel":0,
+                 "cargas_candidatas_teste_ets2":0})
+        rows={r["empresa"]:r for r in report["empresas"]}
+        self.assertEqual(rows["citrosuco1"]["total_instancias_editor"],0)
+        self.assertEqual(rows["frucamp"]["total_instancias_editor"],1)
+        self.assertEqual(report["instancias_editor_detectadas"],1)
+        self.assertEqual(report["empresas_sem_editor"],3)
+
     def test_same_company_coverage_contract_for_all_three_maps(self):
         companies,territory,active=self.fake()
         quality={"cargas_com_par_economico_comprovavel":24,
