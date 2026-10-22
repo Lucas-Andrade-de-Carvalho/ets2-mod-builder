@@ -1324,6 +1324,7 @@ def run_gui():
        ("existing_eldorado","Company EXISTENTE do Eldorado (.scs)"),
        ("existing_minas","Company EXISTENTE Minas Gerais (.scs)"),
        ("existing_rbr","Company EXISTENTE RBR (.scs)"),
+       ("game_log","game.log.txt do ETS2 (opcional, nao homologa)"),
        ("output","Pasta de saida")
     ]
     controls=[]
@@ -1390,20 +1391,24 @@ def run_gui():
         originals=["mod","def1","def2","txt"]
         maps=(["eldorado"] if scope_var.get()=="eldorado"
               else ["minas","eldorado","rbr"])
+        all_maps=["minas","eldorado","rbr"]
+        all_existing=["existing_minas","existing_eldorado","existing_rbr"]
         required=(originals if action=="diagnostic" else
                   originals+maps if action=="generate" else
+                  originals+all_maps+all_existing if action=="preflight" else
                   originals+maps+(
                      ["existing_eldorado"] if scope_var.get()=="eldorado" else
-                     ["existing_minas","existing_eldorado","existing_rbr"]))
+                     all_existing))
         missing=[k for k in required+["output"] if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
-        optional=(["minas","eldorado","rbr"] if action=="diagnostic" else [])
+        optional=(["minas","eldorado","rbr"] if action=="diagnostic" else
+                  ["game_log"] if action=="preflight" else [])
         invalid=[k for k in required+[x for x in optional if widgets[x].get().strip()]
                  if not Path(widgets[k].get()).exists()]
         if invalid:raise ValueError("Arquivo ou pasta inexistente: "+", ".join(invalid))
     def change_busy(value):
         busy[0]=value
-        for c in controls+[btn_diag,btn_generate,btn_audit]:
+        for c in controls+[btn_diag,btn_generate,btn_audit,btn_verify]:
             c.configure(state="disabled" if value else "normal")
         if value:progress.start(12)
         else:progress.stop()
@@ -1478,6 +1483,31 @@ def run_gui():
         except Exception as exc:
             work_queue.put(("error",str(exc)))
 
+    def worker_preflight(snapshot):
+        try:
+            from homologacao_final import run as final_preflight
+            entries={
+                "Minas_Gerais":{"existing":snapshot["existing_minas"],
+                               "map_def":snapshot["minas"]},
+                "Eldorado":{"existing":snapshot["existing_eldorado"],
+                            "map_def":snapshot["eldorado"]},
+                "RBR":{"existing":snapshot["existing_rbr"],
+                       "map_def":snapshot["rbr"]}}
+            sources={key:snapshot[key] for key in ("mod","def1","def2","txt")}
+            report=final_preflight(
+                sys.modules[__name__],sources,entries,snapshot["output"],
+                game_log=snapshot.get("game_log") or None,
+                log=lambda message:work_queue.put(("log",message)))
+            status=report["status_pre_homologacao"]
+            explanation=("Pré-homologacao: "+status+". "+
+                         str(len(report["bloqueios"]))+" bloqueios registrados. "+
+                         "Confira RESULTADO_PRE_HOMOLOGACAO.json e "+
+                         "MATRIZ_ENSAIOS_ETS2.csv. "+
+                         "NENHUM frete foi testado ou homologado automaticamente.")
+            work_queue.put(("success" if status=="PRONTO_PARA_TESTES_NO_JOGO"
+                            else "error",explanation))
+        except Exception as exc:
+            work_queue.put(("error","Pre-homologacao falhou: "+str(exc)))
     def worker_diagnostic(snapshot):
         try:
             from diagnostico_arquivos import inspect
@@ -1514,6 +1544,9 @@ def run_gui():
             if action=="generate":
                 fun=worker_generate
                 args=(snapshot,fix_var.get(),scope_var.get())
+            elif action=="preflight":
+                fun=worker_preflight
+                args=(snapshot,)
             elif action=="audit":
                 fun=worker_audit
                 args=(snapshot,scope_var.get(),audit_mode.get())
@@ -1549,6 +1582,9 @@ def run_gui():
     btn_audit=ttk.Button(actions,text="3. AUDITAR / CORRIGIR SCS EXISTENTE",
                          command=lambda:run("audit"),style="Main.TButton")
     btn_audit.grid(row=1,column=0,sticky="ew",padx=3,pady=2)
+    btn_verify=ttk.Button(actions,text="4. PRE-HOMOLOGAR OS 3 MAPAS",
+                         command=lambda:run("preflight"),style="Main.TButton")
+    btn_verify.grid(row=2,column=0,sticky="ew",padx=3,pady=2)
     def open_folder():
         p=widgets["output"].get()
         if not p or not Path(p).is_dir():
@@ -1556,7 +1592,7 @@ def run_gui():
             return
         if sys.platform=="win32":os.startfile(p)
     btn_folder=ttk.Button(actions,text="Abrir pasta de saida",command=open_folder)
-    btn_folder.grid(row=1,column=1,sticky="ew",padx=3,pady=2)
+    btn_folder.grid(row=2,column=1,sticky="ew",padx=3,pady=2)
     # Checagem automatizada da visibilidade na CI Windows (sem clicar em nada).
     if os.environ.get("ETS2_GUI_LAYOUT_SMOKE")=="1":
         for width,height in ((1024,720),(960,600)):
@@ -1564,7 +1600,7 @@ def run_gui():
             root.update()
             top=root.winfo_rooty()
             bottom=top+root.winfo_height()
-            for btn in (btn_diag,btn_generate,btn_audit,btn_folder):
+            for btn in (btn_diag,btn_generate,btn_audit,btn_verify,btn_folder):
                 y=btn.winfo_rooty()
                 if not btn.winfo_ismapped() or y<top or y+btn.winfo_height()>bottom:
                     raise RuntimeError("Botao oculto fora da tela: "+btn.cget("text"))
@@ -1580,6 +1616,9 @@ def main():
     parser.add_argument("--cli",action="store_true")
     parser.add_argument("--only-eldorado",action="store_true",
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
+    parser.add_argument("--preflight-real",action="store_true",
+                        help="Validar 3 mapas e os 3 SCS do Librelato sem sobrescrever mods")
+    parser.add_argument("--game-log",help="game.log.txt opcional, nao prova frete",required=False)
     parser.add_argument("--diagnose-librelato",action="store_true",
                         help="Diagnosticar MOD/DEF1/DEF2/TXT sem exigir DEF dos mapas")
     parser.add_argument("--audit-existing",action="store_true",
@@ -1591,6 +1630,25 @@ def main():
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
+    if args.preflight_real:
+        from homologacao_final import run as final_preflight
+        required=("mod","def1","def2","txt","minas","eldorado","rbr",
+                  "existing_minas","existing_eldorado","existing_rbr","output")
+        missing=[k for k in required if not getattr(args,k)]
+        if missing:parser.error("Pre-homologacao exige: "+", ".join(missing))
+        sources={key:getattr(args,key) for key in ("mod","def1","def2","txt")}
+        entries={
+            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas},
+            "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
+            "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
+        report=final_preflight(sys.modules[__name__],sources,entries,args.output,
+                               game_log=args.game_log,log=print)
+        print("PRE-HOMOLOGACAO:",report["status_pre_homologacao"],
+              "| bloqueios:",len(report["bloqueios"]),
+              "| homologado_ets2:",report["homologado_no_ets2"])
+        if report["status_pre_homologacao"]!="PRONTO_PARA_TESTES_NO_JOGO":
+            raise ValueError("Pre-homologacao bloqueada; confira RESULTADO_PRE_HOMOLOGACAO.json")
+        return
     if args.diagnose_librelato:
         from diagnostico_arquivos import inspect
         required=("mod","def1","def2","txt","output")
