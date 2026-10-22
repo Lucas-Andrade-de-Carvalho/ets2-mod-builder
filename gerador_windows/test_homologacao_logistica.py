@@ -46,6 +46,46 @@ class LogisticsCertificateTests(unittest.TestCase):
         self.assertFalse(cargo["homologado_no_ets2"])
         self.assertEqual(cert["cargas_homologadas_no_ets2"],0)
 
+    def test_fictional_companies_can_prove_directional_cargo_without_sector(self):
+        comps={
+            "origem_99":company("origem_99",out_cargos={"beer"},editor=True),
+            "destino_88":company("destino_88",in_cargos={"beer"},editor=True)}
+        evidence=self.assessment(comps,state(
+            origins=["origem_99"],destinations=["destino_88"]))
+        item=evidence["cargas"]["carga12"]
+        self.assertEqual(item["total_pares_no_scs"],1)
+        self.assertEqual(item["pares_economicos_distintos"],0)
+        self.assertEqual(item["pares_com_evidencia_inout_distintos"],1)
+        self.assertEqual(item["pares_com_editor_evidencia_inout"],1)
+        self.assertEqual(item["origens_documentadas"],["origem_99"])
+        self.assertEqual(item["destinos_documentados"],["destino_88"])
+        self.assertEqual(item["status"],"CANDIDATA_TESTE_COM_DOCUMENTO_INOUT")
+        self.assertEqual(evidence["cargas_com_par_evidencia_inout"],1)
+        self.assertEqual(evidence["cargas_candidatas_documentais_teste"],1)
+        self.assertEqual(evidence["cargas_com_par_economico_comprovavel"],0)
+        self.assertFalse(item["homologado_no_ets2"])
+        self.assertFalse(item["candidatos_documentados_para_teste"][0][
+            "setores_ambos_confirmados"])
+
+    def test_fictional_documented_routes_without_editor_are_not_testable(self):
+        comps={"origem_99":company("origem_99",out_cargos={"beer"}),
+               "destino_88":company("destino_88",in_cargos={"beer"})}
+        row=self.assessment(comps,state(origins=["origem_99"],
+                            destinations=["destino_88"]))["cargas"]["carga12"]
+        self.assertEqual(row["pares_com_evidencia_inout_distintos"],1)
+        self.assertEqual(row["pares_com_editor_evidencia_inout"],0)
+        self.assertEqual(row["status"],"INOUT_DOCUMENTADO_SEM_EDITOR")
+        self.assertEqual(row["candidatos_documentados_para_teste"],[])
+
+    def test_wrong_direction_and_cross_category_still_rejected(self):
+        comps={"origem_99":company("origem_99",in_cargos={"beer"},editor=True),
+               "destino_88":company("destino_88",out_cargos={"cement"},editor=True)}
+        row=self.assessment(comps,state(origins=["origem_99"],
+                            destinations=["destino_88"]))["cargas"]["carga12"]
+        self.assertEqual(row["pares_com_evidencia_inout_distintos"],0)
+        self.assertEqual(row["pares_economicos_distintos"],0)
+        self.assertNotEqual(row["status"],"CANDIDATA_TESTE_COM_DOCUMENTO_INOUT")
+
     def test_empty_editor_files_do_not_fake_testable_freight(self):
         origin=company("ambev",out_cargos={"beer"})
         destination=company("supermercado_centro",in_cargos={"beer"})
