@@ -62,6 +62,36 @@ class ProfessionalEconomyTests(unittest.TestCase):
             self.assertEqual(policy.classify(companies["abz"]).role,"desconhecida")
             self.assertEqual(policy.classify(companies["mx1"]).role,"desconhecida")
 
+    def test_real_rbr_company_names_resolve_hierarchical_roles(self):
+        # Casos presentes em AUDITORIA_RBR(2).json. O classificador
+        # antigo classificava estes nomes como desconhecidos porque
+        # reconhecia duas expressoes sobrepostas.
+        cases=[
+            ("batata_f","Batata Fazenda","fazenda_batata","batata"),
+            ("batata_ms1","Fazenda de Batatas","fazenda_batata","batata"),
+            ("depos_ribas","Depósito Materiais de Construção","materiais","cimento"),
+        ]
+        for identifier,label,role,category in cases:
+            with self.subTest(company=identifier):
+                company=g.Company(identifier,display_name=label)
+                self.assertEqual(policy.classify(company).role,role)
+                self.assertTrue(policy.decide(company,category,"out").allowed)
+        # Sem compatibilidade presumida de empresa sem nome/sufixo.
+        self.assertEqual(policy.classify(g.Company("depos_ribas")).role,
+                         "desconhecida")
+        self.assertEqual(policy.classify(g.Company(
+            "mx1",display_name="Transportadora e Supermercado")).role,
+            "desconhecida")
+
+    def test_cimoagro_is_documented_agricultural_inputs_wholesaler(self):
+        # Identificador do RBR + ramo confirmado em fontes publicas:
+        # cimoagro.com.br e CNPJ com CNAE de fertilizantes/adubos.
+        c=g.Company("cimoagro",display_name="Cimoagro")
+        self.assertEqual(policy.classify(c).role,"agroinsumos")
+        self.assertTrue(policy.decide(c,"adubo","out").allowed)
+        self.assertTrue(policy.decide(c,"adubo","in").allowed)
+        self.assertFalse(policy.decide(c,"bobina","out").allowed)
+
     def test_purchase_perspective_and_english_terms(self):
         cases=[
             ("fiat","bobina","out",False),
