@@ -45,7 +45,7 @@ class EndToEndPreflightTests(unittest.TestCase):
         with zipfile.ZipFile(self.source["mod"]) as z:
             content={p:z.read(p) for p in z.namelist()}
         content["def/cargo/carga24.sui"]=(
-            b'cargo_data : cargo.carga24 { body_types[]: alta }\n')
+            b'cargo_data : cargo.carga24 {\n body_types[]: alta\n}\n')
         zip_write(self.source["mod"],content)
         target=self.root/"full_24"
         summary=final.run(g,self.source,self.maps,target)
@@ -75,7 +75,7 @@ class EndToEndPreflightTests(unittest.TestCase):
         self.assertFalse(result["teste_real_ets2_comprovado"])
 
     def test_missing_map_is_not_silently_ignored(self):
-        with self.assertRaisesRegex(ValueError,"tres mapas"):
+        with self.assertRaisesRegex(ValueError,"Minas_Gerais, Eldorado e RBR"):
             final.run(g,self.source,
                       {"Eldorado":self.maps["Eldorado"]},
                       self.root/"incomplete")
