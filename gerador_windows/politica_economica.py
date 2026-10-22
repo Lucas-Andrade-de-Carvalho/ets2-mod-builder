@@ -337,7 +337,7 @@ def classify(company):
     evidence_role=infer_by_flow(company)
     if (evidence_role is not None and
             evidence_role.role=="agroinsumos" and
-            re.search(r"prod_?agric|produtos_?agr|insumos_?agr",
+            re.search(r"prod[._-]*agric|produtos[._-]*agr|insumos[._-]*agr",
                       norm(public_name))):
         return evidence_role
     if public_name and "@@" not in public_name:
