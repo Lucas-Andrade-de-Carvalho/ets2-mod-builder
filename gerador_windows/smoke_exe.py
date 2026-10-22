@@ -28,6 +28,22 @@ def main(exe_path):
             if hasattr(case,"g") else
             "\n".join(f"carga{n} = {name}" for n,(_,name) in __import__("gerador").MANIFEST.items()),
             encoding="utf-8")
+        # Diagnostico binario deve funcionar com SCS/TXT SEM nenhuma DEF de mapa.
+        independent=case.root/"diagnostico_librelato_exe"
+        pre=[str(Path(exe_path).resolve()),"--cli","--diagnose-librelato",
+             "--mod",str(p["mod"]),"--def1",str(p["def1"]),
+             "--def2",str(p["def2"]),"--txt",str(case.root/"cargas.txt"),
+             "--output",str(independent)]
+        checked=subprocess.run(pre,timeout=120,check=False)
+        if checked.returncode:
+            raise RuntimeError("EXE falhou em diagnosticar so o Librelato/TXT")
+        import json
+        source_report=json.loads(
+            (independent/"DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json").read_text(
+                encoding="utf-8"))
+        assert source_report["total_cargas_catalogo"]==23
+        assert not source_report["erros"]
+        print("EXE diagnosticou MOD/DEF1/DEF2 e TXT sem DEFs de mapas")
         r=subprocess.run(cmd,timeout=120,check=False)
         # O mapa simples dos testes nao contem 23 cadeias economicamente
         # corretas. Modo profissional deve REJEITAR e emitir lacunas.
@@ -80,12 +96,19 @@ def main(exe_path):
         fixture.setUp()
         try:
             target=fixture.root/"exe_audit_existing"
+            audittxt=fixture.root/"auditoria_cargas.txt"
+            from gerador import MANIFEST
+            audittxt.write_text(
+                "\\n".join(f"carga{n} = {title}"
+                          for n,(_category,title) in MANIFEST.items()),
+                encoding="utf-8")
             command=[str(Path(exe_path).resolve()),"--cli","--audit-existing",
                      "--only-eldorado","--existing-eldorado",str(fixture.existing),
                      "--eldorado",str(fixture.baseline),
                      "--mod",str(fixture.fixture.inp["mod"]),
                      "--def1",str(fixture.fixture.inp["def1"]),
                      "--def2",str(fixture.fixture.inp["def2"]),
+                     "--txt",str(audittxt),
                      "--output",str(target)]
             returned=subprocess.run(command,timeout=120,check=False)
             if returned.returncode:
