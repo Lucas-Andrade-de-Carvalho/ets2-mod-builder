@@ -1,4 +1,4 @@
-"""Auditoria objetiva de COBERTURA MAXIMA para cada empresa/cidade do RBR.
+"""Auditoria objetiva de COBERTURA MAXIMA por empresa/cidade em qualquer mapa.
 
 O indicador 24/24 mercadorias COM rotas NAO mede cobertura das empresas.
 Este modulo cruza toda a matriz de empresas conhecidas e evidencia onde
@@ -104,6 +104,9 @@ def assess(companies,territory,final_active,manifest,quality):
             if known_with_cargo else None,
         "cadeias_economicas":economic,
         "cargas_candidatas_teste":with_editor,
+        "instancias_editor_detectadas":sum(len(c.editor_files) for c in companies.values()),
+        "cidades_identificadas":len({x["cidade"] for x in territory["instancias_cidade"]}),
+        "empresas_sem_editor":sum(not c.editor_files for c in companies.values()),
         "total_cargas":total_cargos,
         "cobertura_100_por_cento_comprovada":bool(complete),
         "aviso":"Percentual se limita a empresas JA classificadas. "
@@ -112,12 +115,17 @@ def assess(companies,territory,final_active,manifest,quality):
         "empresas":rows
     }
 
-def write(directory, report):
+def write(directory, report, map_name="RBR"):
+    """Relatorios isolados por mapa, com nomes estaveis e CSV priorizado."""
+    allowed={"RBR","ELDORADO","MINAS_GERAIS"}
+    key=map_name.upper()
+    if key not in allowed:
+        raise ValueError("Mapa nao suportado para cobertura: "+str(map_name))
     out=Path(directory)
     out.mkdir(parents=True,exist_ok=True)
-    (out/"COBERTURA_MAXIMA_RBR.json").write_text(
+    (out/("COBERTURA_MAXIMA_"+key+".json")).write_text(
         json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
-    with (out/"COBERTURA_MAXIMA_RBR.csv").open(
+    with (out/("COBERTURA_MAXIMA_"+key+".csv")).open(
             "w",newline="",encoding="utf-8-sig") as f:
         fieldnames=[
             "empresa","nome_exibido","setor","status","cidades",
@@ -136,7 +144,7 @@ def write(directory, report):
         (r for r in report["empresas"] if r["status"] in priority),
         key=lambda r:(priority[r["status"]],
                       -r["total_instancias_editor"],r["empresa"]))
-    with (out/"RBR_REVISAO_ECONOMICA_PRIORIZADA.csv").open(
+    with (out/(key+"_REVISAO_ECONOMICA_PRIORIZADA.csv")).open(
             "w",newline="",encoding="utf-8-sig") as f:
         w=csv.DictWriter(f,fieldnames=fieldnames,delimiter=";")
         w.writeheader()
