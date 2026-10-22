@@ -540,6 +540,37 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             with (out/("QUALIDADE_LOGISTICA_"+name.upper()+".json")).open(
                     "w",encoding="utf-8") as fp:
                 json.dump(homologation,fp,ensure_ascii=False,indent=2)
+        if professional and homologation:
+            # Um mapa de cada vez: checklist independente do preflight de 3
+            # mapas. Nao provar frete de jogo apenas por presença no SCS.
+            checklist=out/("MATRIZ_ENSAIOS_ETS2_"+name.upper()+".csv")
+            with checklist.open("w",newline="",encoding="utf-8-sig") as fp:
+                fields=("mapa","carga","mercadoria","nivel_evidencia",
+                        "status_documental","origem_sugerida","destino_sugerido",
+                        "origem_real_testada","destino_real_testado",
+                        "frete_visivel_no_ets2","modelo_da_carga_visivel",
+                        "coleta_realizada","entrega_concluida",
+                        "game_log_sem_erro_relevante","evidencia_arquivo",
+                        "observacoes")
+                writer=csv.DictWriter(fp,fieldnames=fields,delimiter=";")
+                writer.writeheader()
+                for cargo,record in sorted(
+                        homologation["cargas"].items(),
+                        key=lambda p:catalogo_cargas.sort_key(p[0])):
+                    strong=record.get("candidatos_para_teste",[])
+                    original=record.get("candidatos_documentados_para_teste",[])
+                    first=(strong or original or [{}])[0]
+                    writer.writerow({
+                        "mapa":name,"carga":cargo,
+                        "mercadoria":record["nome"],
+                        "nivel_evidencia":(
+                            "ATIVIDADE_ECONOMICA" if strong else
+                            "SOMENTE_IN_OUT_ORIGINAL" if original else
+                            "ORIGEM_DESTINO_NAO_COMPROVADOS"),
+                        "status_documental":record["status"],
+                        "origem_sugerida":first.get("origem",""),
+                        "destino_sugerido":first.get("destino","")
+                    })
         # Dois niveis de diagnostico: aviso acionavel vs situacao herdada
         # somente informativa. O conjunto completo continua em AUDITORIA*.csv.
         with (out/("RESUMO_VALIDACAO_"+name.upper()+".txt")).open(
