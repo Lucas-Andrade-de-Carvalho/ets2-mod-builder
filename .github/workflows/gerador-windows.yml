@@ -44,6 +44,7 @@ jobs:
           Copy-Item dist/ETS2_Company_Gerador.exe release/ETS2_Company_Gerador.exe
           Copy-Item gerador_windows/GUIA_VERSAO_FINAL_CANDIDATA_20261022.md release/GUIA_DE_UTILIZACAO.md
           Copy-Item gerador_windows/VALIDACAO_FINAL_RBR_20261022.md release/VALIDACAO_FINAL_RBR.md
+          Copy-Item gerador_windows/GUIA_ADAPTACAO_PLUMA_COCO_20261022.md release/GUIA_PLUMA_COCO_MG_ELDORADO.md
           Copy-Item gerador_windows/CORRECAO_LACUNAS_RELATORIOS_4_20261022.md release/LACUNAS_MG_ELDORADO_RBR.md
           $sha=(Get-FileHash release/ETS2_Company_Gerador.exe -Algorithm SHA256).Hash.ToLower()
           "COMMIT=$env:GITHUB_SHA" | Out-File release/PROVENIENCIA_SHA256.txt -Encoding utf8
