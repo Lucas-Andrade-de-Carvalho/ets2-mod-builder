@@ -8,6 +8,62 @@ import politica_economica as p
 import cobertura_maxima_rbr as coverage
 
 
+class RealMapPalletGapRegression(unittest.TestCase):
+    """Casos reproduzidos dos arquivos AUDITORIA_(4).json do cliente."""
+
+    def test_eldorado_real_original_empty_palet_is_librelato_pallet(self):
+        for value in ("empty_palet","empty_palets","empty_pallet",
+                      "empty_pallets","supaletes"):
+            with self.subTest(value=value):
+                self.assertEqual(p.cargo_categories({value}),{"palete"})
+        self.assertNotIn("algodao",p.cargo_categories({"cott_seed","clothes"}))
+        self.assertNotIn("coco",p.cargo_categories({"oranges","banana","citrus"}))
+
+    def test_spani_original_in_out_documentary_pallets(self):
+        c=g.Company("spani",old_in={"empty_palet","potatoes"},
+                    old_out={"empty_palet"})
+        self.assertEqual(p.classify(c).role,"supermercado")
+        self.assertTrue(p.decide(c,"palete","in").allowed)
+        self.assertTrue(p.decide(c,"palete","out").allowed)
+        self.assertFalse(p.decide(c,"algodao","out").allowed)
+
+    def test_kaarfor2_original_only_out_empty_palet(self):
+        c=g.Company("kaarfor2",old_in={"oranges","potatoes"},
+                    old_out={"empty_palet","used_packag"})
+        self.assertEqual(p.classify(c).role,"supermercado")
+        self.assertTrue(p.decide(c,"palete","out").allowed)
+        self.assertFalse(p.decide(c,"palete","in").allowed)
+
+    def test_eldorado_madereira_out_and_in_original_pallets(self):
+        c=g.Company("madereira",old_in={"empty_palet","logs"},
+                    old_out={"empty_palet","logs"})
+        self.assertTrue(p.decide(c,"palete","out").allowed)
+        self.assertTrue(p.decide(c,"palete","in").allowed)
+        report=p.coverage({c.name:c},g.MANIFEST)["empresas"][0]
+        self.assertIn("carga16",report["in_esperados"])
+        self.assertIn("carga16",report["out_esperados"])
+
+    def test_minas_real_original_supaletes_preserves_only_out(self):
+        c=g.Company("abcatacado",old_in={"oranges","potatoes"},
+                    old_out={"supaletes","papelao"})
+        self.assertEqual(p.classify(c).role,"distribuidor")
+        self.assertTrue(p.decide(c,"palete","out").allowed)
+        self.assertFalse(p.decide(c,"palete","in").allowed)
+        self.assertFalse(p.decide(c,"coco","out").allowed)
+
+    def test_transportadora_cannot_become_pallet_manufacturer(self):
+        c=g.Company("brasilog",old_in={"empty_palet"},
+                    old_out={"empty_palet"})
+        self.assertEqual(p.classify(c).role,"transportadora")
+        self.assertFalse(p.decide(c,"palete","in").allowed)
+        self.assertFalse(p.decide(c,"palete","out").allowed)
+
+    def test_missing_cotton_producer_not_filled_from_name_only(self):
+        c=g.Company("fazenda3",old_in={"fertilizer"},old_out={"corn"})
+        self.assertFalse(p.decide(c,"algodao","out").allowed)
+        self.assertFalse(p.decide(c,"coco","out").allowed)
+
+
 class RBRRolePolicy(unittest.TestCase):
     def test_important_new_producers_consumers(self):
         cases=[
