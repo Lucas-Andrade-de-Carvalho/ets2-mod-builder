@@ -95,6 +95,30 @@ def main(exe_path):
         fixture=AuditorSCSRegression()
         fixture.setUp()
         try:
+            # Protocolo final deve funcionar EMBUTIDO no EXE Windows e
+            # rejeitar os 23 cargos sinteticos quando sao exigidos 24.
+            prescan=fixture.root/"exe_real_preflight"
+            checklist_cmd=[str(Path(exe_path).resolve()),"--cli","--preflight-real",
+                "--mod",str(p["mod"]),"--def1",str(p["def1"]),
+                "--def2",str(p["def2"]), "--txt",str(case.root/"cargas.txt"),
+                "--minas",str(fixture.baseline),
+                "--eldorado",str(fixture.baseline),
+                "--rbr",str(fixture.baseline),
+                "--existing-minas",str(fixture.existing),
+                "--existing-eldorado",str(fixture.existing),
+                "--existing-rbr",str(fixture.existing),
+                "--output",str(prescan)]
+            checked=subprocess.run(checklist_cmd,timeout=120,check=False)
+            if checked.returncode==0:
+                raise RuntimeError("Preflight aprovou erroneamente 23 cargas como 24")
+            summary_path=prescan/"RESULTADO_PRE_HOMOLOGACAO.json"
+            if not summary_path.is_file():
+                raise RuntimeError("Preflight do EXE nao gerou relatorio de bloqueio")
+            import json
+            summary=json.loads(summary_path.read_text(encoding="utf-8"))
+            assert summary["status_pre_homologacao"]=="BLOQUEADO_TECNICO"
+            assert not summary["homologado_no_ets2"]
+            print("EXE: pre-homologacao bloqueou 23/24 cargas; relatorio preservado")
             target=fixture.root/"exe_audit_existing"
             audittxt=fixture.root/"auditoria_cargas.txt"
             from gerador import MANIFEST
