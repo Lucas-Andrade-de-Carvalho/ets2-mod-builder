@@ -129,7 +129,12 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertEqual(policy.cargo_categories(["steel_coils"]),{"bobina"})
         self.assertEqual(policy.classify(g.Company("mystery")).certainty,"indeterminada")
         mystery=g.Company("mystery",old_out={"steel_coils"})
-        self.assertFalse(policy.decide(mystery,"bobina","out").allowed)
+        # Nao se deduz siderurgica. Apenas converte a mesma mercadoria
+        # que a DEF original JA declara no OUT para a variante Librelato.
+        self.assertEqual(policy.classify(mystery).role,"desconhecida")
+        self.assertTrue(policy.decide(mystery,"bobina","out").allowed)
+        self.assertFalse(policy.decide(mystery,"bobina","in").allowed)
+        self.assertFalse(policy.decide(mystery,"cimento","out").allowed)
 
     def test_farms_need_crop_evidence_not_just_generic_label(self):
         farm=g.Company("fazenda_santa_rita",old_in={"fertilizer"},
