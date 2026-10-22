@@ -130,3 +130,16 @@ def write(directory, report):
         for row in report["empresas"]:
             w.writerow({k:",".join(v) if isinstance(v,list) else v
                         for k,v in row.items()})
+    priority={"COMPATIVEL_COM_LACUNAS":0,
+              "REVISAR_POSSIVEL_COMPATIBILIDADE":1}
+    pending=sorted(
+        (r for r in report["empresas"] if r["status"] in priority),
+        key=lambda r:(priority[r["status"]],
+                      -r["total_instancias_editor"],r["empresa"]))
+    with (out/"RBR_REVISAO_ECONOMICA_PRIORIZADA.csv").open(
+            "w",newline="",encoding="utf-8-sig") as f:
+        w=csv.DictWriter(f,fieldnames=fieldnames,delimiter=";")
+        w.writeheader()
+        for row in pending:
+            w.writerow({k:",".join(v) if isinstance(v,list) else v
+                        for k,v in row.items()})
