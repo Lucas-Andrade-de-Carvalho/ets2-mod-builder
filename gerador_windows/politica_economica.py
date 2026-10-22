@@ -30,7 +30,7 @@ ROLES=(
     ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
     ("madeireira",r"madeireira|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
     ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro"),
-    ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo"),
+    ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo|^cimoagro$"),
     ("silo",r"silo|armazem|armz|grain_elevator|grain_storage|cerealista|caramuru"),
     ("cooperativa",r"cooper|coamo|^coop|camda|comigo"),
     ("pecuaria",r"pecuar|gado|cattle|livestock|poultry_farm|suino|criatorio|feedlot|confinamento"),
@@ -102,6 +102,18 @@ def classify(company):
     if public_name and "@@" not in public_name:
         normalized=norm(public_name)
         candidates={role for role,pattern in ROLES if re.search(pattern,normalized,re.I)}
+        # "Fazenda de Batatas" satisfaz tanto o papel especifico quanto
+        # "fazenda" generico. O mesmo ocorre com loja de materiais e
+        # "construcao": sao sobreposicoes hierarquicas, nao dois negocios
+        # contraditorios. Manter o bloqueio para misturas verdadeiras.
+        if candidates=={"fazenda_batata","fazenda"}:
+            candidates={"fazenda_batata"}
+        elif candidates=={"fazenda_laranja","fazenda"}:
+            candidates={"fazenda_laranja"}
+        elif candidates=={"materiais","obras"} and re.search(
+                r"(?:materiais?|loja)_?(?:de_?)?(?:construcao|constr|building)|"
+                r"deposito_?materiais?",normalized):
+            candidates={"materiais"}
         if len(candidates)==1:
             found=next(iter(candidates))
             return Identity(found,"alta",
