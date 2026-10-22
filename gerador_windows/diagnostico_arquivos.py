@@ -99,7 +99,11 @@ def inspect(g, source_files, txt_path, output):
             cid=m.group(1)
             if not catalogo.CARGO_NUMBER.fullmatch(cid):
                 continue
-            txt=g.read_sii(raw)
+            try:
+                txt=g.read_sii(raw)
+            except ValueError as exc:
+                errors.append(label+" / "+internal+": "+str(exc))
+                continue
             if cid not in (unit.lower() for unit in g.RE_CARGO_UNIT.findall(txt)):
                 continue
             bodies=sorted(set(g.RE_CARGO_BODY.findall(txt)))
@@ -158,7 +162,12 @@ def inspect(g, source_files, txt_path, output):
             "ocorrencias_originais":definitions.get(cid,[]),
             "validado_no_ets2":False,
         })
-    modern_models=model_loading_evidence(g,sources,records,manifest) if manifest else {}
+    modern_models={}
+    if manifest:
+        try:
+            modern_models=model_loading_evidence(g,sources,records,manifest)
+        except ValueError as exc:
+            errors.append("Definicao de modelo/carroceria invalida: "+str(exc))
     for cid,data in modern_models.items():
         if data["incompatibilidade_explicita_de_metodos"]:
             warnings.append(cid+": metodo de carga do modelo nao coincide com "
