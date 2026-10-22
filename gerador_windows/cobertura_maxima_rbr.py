@@ -83,6 +83,55 @@ def assess(companies,territory,final_active,manifest,quality):
                 candidate and (actual_in or actual_out)),
             "sinal_compatibilidade_a_investigar":bool(maybe)
         })
+    # Matriz territorial: cidade e unidade SEM estimar geografia quando
+    # a DEF nao fornece company_def/editor. Um par de empresas iguais
+    # em varias cidades nao comprova o prefab navegavel dentro do jogo.
+    by_city={}
+    for unit in territory["instancias_cidade"]:
+        city=unit["cidade"]
+        company_id=unit["empresa"]
+        company=companies[company_id]
+        role=company.role
+        bucket=by_city.setdefault(city,{
+            "cidade":city,"instancias":0,"empresas":set(),
+            "compativeis":set(),"compativeis_cobertas":set(),
+            "compativeis_incompletas":set(),"desconhecidas":set(),
+            "sem_cargas_24":set()})
+        bucket["instancias"]+=1
+        bucket["empresas"].add(company_id)
+        if role=="desconhecida":
+            bucket["desconhecidas"].add(company_id)
+        elif unit["in_esperados"] or unit["out_esperados"]:
+            bucket["compativeis"].add(company_id)
+            actual=final_active[company_id]
+            if (set(unit["in_esperados"])-set(actual["in"]) or
+                    set(unit["out_esperados"])-set(actual["out"])):
+                bucket["compativeis_incompletas"].add(company_id)
+            else:
+                bucket["compativeis_cobertas"].add(company_id)
+        else:
+            bucket["sem_cargas_24"].add(company_id)
+    cities_report=[]
+    for city,record in sorted(by_city.items()):
+        missing=record["compativeis_incompletas"]
+        unknown=record["desconhecidas"]
+        cities_report.append({
+            "cidade":city,
+            "instancias_editor":record["instancias"],
+            "empresas_distintas":len(record["empresas"]),
+            "empresas_compativeis":len(record["compativeis"]),
+            "empresas_compativeis_cobertas":len(record["compativeis_cobertas"]-
+                                                missing),
+            "empresas_compativeis_incompletas":sorted(missing),
+            "empresas_sem_atividade_identificada":sorted(unknown),
+            "empresas_fora_das_24":len(record["sem_cargas_24"]),
+            "situacao":(
+                "REVISAO_COMPATIBILIDADE" if unknown else
+                "INCOMPLETA" if missing else
+                "COMPATIVEIS_COBERTAS" if record["compativeis"] else
+                "SEM_EMPRESA_COMPATIVEL_CONFIRMADA"
+            )
+        })
     total_cargos=len(manifest)
     economic=int(quality.get("cargas_com_par_economico_comprovavel",0))
     with_editor=int(quality.get("cargas_candidatas_teste_ets2",0))
@@ -105,14 +154,21 @@ def assess(companies,territory,final_active,manifest,quality):
         "cadeias_economicas":economic,
         "cargas_candidatas_teste":with_editor,
         "instancias_editor_detectadas":sum(len(c.editor_files) for c in companies.values()),
-        "cidades_identificadas":len({x["cidade"] for x in territory["instancias_cidade"]}),
+        "cidades_identificadas":len(cities_report),
+        "cidades_com_empresas_compativeis_incompletas":sum(
+            bool(row["empresas_compativeis_incompletas"]) for row in cities_report),
+        "cidades_com_empresas_sem_classificacao":sum(
+            bool(row["empresas_sem_atividade_identificada"]) for row in cities_report),
+        "cidades_com_compativeis_reconhecidas_cobertas":sum(
+            row["situacao"]=="COMPATIVEIS_COBERTAS" for row in cities_report),
         "empresas_sem_editor":sum(not c.editor_files for c in companies.values()),
         "total_cargas":total_cargos,
         "cobertura_100_por_cento_comprovada":bool(complete),
         "aviso":"Percentual se limita a empresas JA classificadas. "
                 "Nao representa 100% das empresas compativeis enquanto "
                 "restarem empresas nao classificadas, e NAO homologa jogo.",
-        "empresas":rows
+        "empresas":rows,
+        "cidades":cities_report
     }
 
 def write(directory, report, map_name="RBR"):
@@ -125,6 +181,21 @@ def write(directory, report, map_name="RBR"):
     out.mkdir(parents=True,exist_ok=True)
     (out/("COBERTURA_MAXIMA_"+key+".json")).write_text(
         json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+    (out/("COBERTURA_CIDADES_"+key+".json")).write_text(
+        json.dumps(report["cidades"],ensure_ascii=False,indent=2),
+        encoding="utf-8")
+    with (out/("COBERTURA_CIDADES_"+key+".csv")).open(
+            "w",newline="",encoding="utf-8-sig") as f:
+        columns=["cidade","instancias_editor","empresas_distintas",
+                 "empresas_compativeis","empresas_compativeis_cobertas",
+                 "empresas_compativeis_incompletas",
+                 "empresas_sem_atividade_identificada",
+                 "empresas_fora_das_24","situacao"]
+        w=csv.DictWriter(f,fieldnames=columns,delimiter=";")
+        w.writeheader()
+        for item in report["cidades"]:
+            w.writerow({k:",".join(v) if isinstance(v,list) else v
+                        for k,v in item.items()})
     with (out/("COBERTURA_MAXIMA_"+key+".csv")).open(
             "w",newline="",encoding="utf-8-sig") as f:
         fieldnames=[
