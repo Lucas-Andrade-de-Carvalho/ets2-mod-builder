@@ -195,6 +195,8 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertEqual(len(full["empresas"]),11)
             self.assertTrue((out/("COBERTURA_MAXIMA_"+prefix+".csv")).exists())
             self.assertTrue((out/(prefix+"_REVISAO_ECONOMICA_PRIORIZADA.csv")).exists())
+            self.assertTrue((out/("COBERTURA_CIDADES_"+prefix+".csv")).exists())
+            self.assertTrue((out/("COBERTURA_CIDADES_"+prefix+".json")).exists())
             self.assertEqual(full["cargas_candidatas_teste"],
                              r["qualidade_logistica"]["cargas_candidatas_teste_ets2"])
 
