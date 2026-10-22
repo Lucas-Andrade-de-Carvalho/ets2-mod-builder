@@ -329,3 +329,34 @@ gerar Companies, nao altera SCS originais e nao exige mapa instalado.
 Na auditoria, o TXT e obrigatorio porque a identificacao das cargas
 adicionais depende da especificacao recebida. O diagnostico tecnico
 nao prova fretes jogaveis nem viabilidade economica de empresas.
+
+## Auditoria de qualidade logistica por carga (etapa de homologacao)
+
+A partir da versao refinada da V3.0, **Auditar/Corrigir** tambem escreve:
+- `QUALIDADE_LOGISTICA_<MAPA>.json`: evidencia de setor/produto,
+  fonte e destino, vagas de transporte existentes no SCS e candidatos a
+  teste fisico no ETS2.
+- `CADEIAS_COMPROVADAS_<MAPA>.csv`: um registro por carga com pares
+  cadastrados, pares sustentados pela atividade economica, pares cuja
+  origem e destino tem `editor` e bloqueios de cada cadeia.
+
+**Definicoes rigorosas:**
+1. `total_pares_no_scs`: pares de empresas IN/OUT diferentes,
+   nao significam fretes verdadeiros; podem incluir permissoes antigas
+   preservadas sem evidencia.
+2. `pares_economicos_distintos`: existe produtor/fornecedor + comprador
+   com identificacao de setor inequivoca e regra da mercadoria.
+3. `pares_com_editor_em_ambas_empresas`: a DEF informava instancia
+   editor para ambas as empresas. E apenas um **candidato** a teste,
+   nao comprova conexao no mapa, disponibilidade nem distancia.
+4. `homologado_no_ets2` permanece `false` sem uma verificacao
+   documentada no jogo real; o gerador nao deve inferir esse status.
+
+A aplicacao NAO cria fretes sem origem e destino economicos validos para
+preencher contagem. Empresas ambiguas conservam as permissoes antigas,
+mas elas nao entram nos totais de pares economicamente comprovados.
+
+**Status de entrega:** codigo/EXE aprovado em testes sinteticos nao
+equivale a `scs` do cliente homologado. Para fechar MG, Eldorado e RBR
+comprove os hashes do MOD/DEF1/DEF2 e TXT, as DEFs dos tres mapas,
+as Companies geradas, o `game.log.txt` e a aparicao dos fretes no jogo.
