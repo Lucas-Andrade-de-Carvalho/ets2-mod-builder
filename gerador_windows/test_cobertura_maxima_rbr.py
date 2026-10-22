@@ -120,7 +120,8 @@ class EvidenceFromRealDEF(unittest.TestCase):
         silo=g.Company("silo_documentado",old_in={"carga1"})
         self.assertTrue(p.decide(silo,"milho","in").allowed)
         self.assertFalse(p.decide(silo,"soja","in").allowed)
-        # Silos podem reexpedir o grao que receberam e armazenaram.\n        self.assertTrue(p.decide(silo,"milho","out").allowed)
+        # Silos podem reexpedir o grao que receberam e armazenaram.
+        self.assertTrue(p.decide(silo,"milho","out").allowed)
 
     def test_city_requires_documented_city_and_prefab_not_filename(self):
         comp=g.Company("constdivi")
