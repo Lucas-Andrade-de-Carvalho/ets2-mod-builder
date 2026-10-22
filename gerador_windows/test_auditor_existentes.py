@@ -421,8 +421,14 @@ class AuditorSCSRegression(unittest.TestCase):
                     quality["cargas"]["carga5"]["pares_simulacao_regional"],0)
                 self.assertGreater(
                     quality["cargas"]["carga24"]["pares_simulacao_regional"],0)
+                # Algumas CEASAs ja possuem comercio hortifruti como
+                # ramo forte; nao exigir zero pares setoriais. O essencial
+                # e que a nova producao na fazenda NAO seja tratada como
+                # cultivo documentado no OUT da DEF original.
                 self.assertEqual(
-                    quality["cargas"]["carga24"]["pares_economicos_distintos"],0)
+                    quality["cargas"]["carga24"]["pares_com_evidencia_inout_distintos"],0)
+                self.assertFalse(
+                    quality["cargas"]["carga24"]["homologado_no_ets2"])
                 decisions=[d for d in report["decisoes"]
                            if d["acao"]=="ADICIONAR_ADAPTACAO_REGIONAL"]
                 self.assertTrue(decisions)
