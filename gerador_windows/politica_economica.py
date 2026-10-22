@@ -21,6 +21,16 @@ ROLES=(
     # Cadeias adicionais observadas no relatório real RBR: setores por
     # nome publicamente exibido e marcas documentadas, nao por "agro"
     # generico ou outras palavras ambiguas.
+    # RBR: atividades verificadas na DEF e em materiais dos fabricantes.
+    # A classificacao nao inclui automaticamente o produto final da
+    # industria, que pode nem existir nas 24 cargas disponiveis.
+    ("processadora_citricos",r"^citrosuco[12]?$|^frucamp$"),
+    ("fabrica_paineis",r"^greenplac$"),
+    ("fabrica_fibrocimento",r"^eternit$"),
+    ("revenda_madeiras",r"^go_madeirani$|^go_madesaba$|^made_itaja$|^madei_rdoce$|^madereira(?:[1237]|se|vo)$|^ms_vale_mad$|^mt_cia_madei$|^pr_mademape$"),
+    ("revenda_aco",r"^br_ferro$|^mt_ferro_aco$|^udiaco$"),
+    ("plantacao_cana",r"^cana_acucar2?$|^cana_agu$|^cana_ms1$|^usina_cana$"),
+    ("infra_passageiros",r"^rodoviaria\d*$|^rodo_(?:bh|go\d+|mg\d+|ms\d+|mt\d+)$|^pr_rodo$|^sc_rodo_(?:gar|ita|join|pic)$|^aero_rverde$|^prf_nlima$|^enel_(?:acreu|india|stb)$"),
     ("entreposto_hortigraos",r"^ceagesp$"),
     ("fabricante_fertilizante",r"^mosaico2?$|^mosaic_fertilizantes$"),
     ("beneficiadora_algodao",r"algodoeira|cotton_gin|^mt_torre_alg$|^ms_alg_ib$"),
@@ -37,7 +47,7 @@ ROLES=(
     ("ceramica",r"ceramica|olaria|brickyard|brick_factory|tijolaria"),
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
     ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
-    ("madeireira",r"madeireira|^madereira$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
+    ("madeireira",r"madeireira|^madereira$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$|^extr_rio_p2$|^extracao2$|^extracao_sc$"),
     ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro|^nutrition$|^trouw_nutrition$"),
     ("revenda_racao",r"^raguife$|(?:^|_)racoes(?:_|$)|feed_store|loja_racao"),
     ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo|^cimoagro$"),
@@ -46,10 +56,10 @@ ROLES=(
     ("pecuaria",r"pecuar|gado|cattle|livestock|poultry_farm|suino|criatorio|feedlot|confinamento"),
     ("fazenda",r"fazenda|^faz_|^faze_|(?:^|_)faz_|^faz(?:bale|boa|brejo|cerra|grao|irmas|pedra|pit|sao|serena|serra|sp|sbene|pg)|^farm|_farm|plantacao|farming|agricultural_farm|agric"),
     ("textil",r"textil|tecel|fiacao|cotton_mill|textile|spinning_mill"),
-    ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem|^itcc2?$"),
+    ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem|^itcc2?$|^marcegaglia$"),
     ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|^material(?:ber|se1)$|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_|^leroy_merlin$|^pinheiralvo$|^depo_(?:bh|cacu)$"),
-    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$|^sanbuilders2?$|^konstnr(?:_hs)?2?$"),
-    ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^kaarfor2?$|^sellplan2?$|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
+    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$|^sanbuilders2?$|^konstnr(?:_hs)?2?$|^cons_rbr$|^const_c_g$|^coluna_ma$"),
+    ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^kaarfor2?$|^sellplan2?$|^pr_samsclub$|^mt_mer_reti$|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
     ("alimentos",r"industria_alim|food_processing|cannery|conservas|^arcor"),
     ("distribuidor",r"atacad|wholesale|distribuidor|distrib_fruit|distrib_|^distrbebidas$"),
@@ -164,6 +174,34 @@ def decide(company,category,direction,identity=None):
         return forbid("ramo nao confirmado; carga deve ser revisada, sem preencher automaticamente")
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
+    if role=="infra_passageiros":
+        return forbid("rodoviaria/infraestrutura de passageiros nao e fabrica, mercado ou recebedora comprovada das 24 cargas")
+    if role=="processadora_citricos":
+        if category=="laranja" and direction=="in":
+            return permit("industria de suco recebe fruta para processamento")
+        return forbid("industria de suco NAO expede fruta bruta nem mercadoria nao demonstrada")
+    if role=="fabrica_paineis":
+        if category=="madeira" and direction=="in":
+            return permit("industria MDF recebe madeira como materia-prima")
+        return forbid("paineis MDF nao equivalem automaticamente a carga madeira/toras do reboque")
+    if role=="fabrica_fibrocimento":
+        if category=="cimento" and direction=="in":
+            return permit("fabrica de fibrocimento compra cimento como materia-prima")
+        return forbid("fabrica de telhas nao produz carga de cimento")
+    if role=="revenda_madeiras":
+        if category=="madeira" and (direction=="out" or category in old_in):
+            return permit("comercio especializado de madeira expede produtos ou repoe estoque")
+        if category=="palete" and category in (old_out if direction=="out" else old_in):
+            return permit("empresa madeireira movimenta paletes documentados", "DEF original da mercadoria")
+        return forbid("revenda de madeiras nao fabrica nem consome automaticamente outras cargas")
+    if role=="revenda_aco":
+        if category=="bobina" and category in (old_out if direction=="out" else old_in):
+            return permit("distribuidora de aco movimenta bobina documentada na DEF","DEF original da bobina")
+        return forbid("comercio de ferro/aco nao comprova bobinas sem evidencias na DEF")
+    if role=="plantacao_cana":
+        if category=="adubo" and direction=="in":
+            return permit("lavoura de cana recebe adubo")
+        return forbid("cana nao equivale a milho, soja, sorgo ou outras 24 cargas")
     if role=="fabricante_fertilizante":
         if category=="adubo" and direction=="out":
             return permit("Mosaic fabrica e comercializa adubo",
