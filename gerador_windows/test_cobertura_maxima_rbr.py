@@ -99,6 +99,24 @@ class RBRRolePolicy(unittest.TestCase):
 
 
 class EvidenceFromRealDEF(unittest.TestCase):
+    def test_permanent_only_company_must_enter_coverage(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/"def_map.scs"
+            with zipfile.ZipFile(path,"w") as z:
+                z.writestr("def/company/ambev/out/beer.sii",
+                           'SiiNunit\n{\ncargo_data : .beer {\n cargo: cargo.beer\n}\n}\n')
+                z.writestr("def/company/unit42.sii",
+                           'SiiNunit\n{\ncompany_permanent : company.unit42 {\n name: "Construcao Brasil"\n}\n}\n')
+            companies,_=g.extract_map(path)
+            self.assertIn("unit42",companies)
+            site=companies["unit42"]
+            self.assertFalse(site.old_in or site.old_out)
+            self.assertEqual(site.display_name,"Construcao Brasil")
+            self.assertEqual(p.classify(site).role,"obras")
+            self.assertTrue(p.decide(site,"cimento","in").allowed)
+            self.assertFalse(p.decide(site,"cimento","out").allowed)
+
     def test_original_24_ids_are_exact_evidence_without_wrong_categories(self):
         self.assertEqual(len(p.LIBRELATO_ID_CATEGORIES), 24)
         self.assertEqual(p.cargo_categories({"carga1","carga21","carga24"}),
