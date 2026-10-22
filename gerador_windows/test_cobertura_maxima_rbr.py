@@ -43,6 +43,15 @@ class RBRRolePolicy(unittest.TestCase):
                 if positive:
                     self.assertTrue(p.decide(c,*positive).allowed)
                 self.assertFalse(p.decide(c,*negative).allowed)
+    def test_agromec_votuporanga_is_fertilizer_only(self):
+        c=g.Company("agromecvo",display_name="Agromec")
+        self.assertEqual(p.classify(c).role,"revenda_fertilizante")
+        self.assertTrue(p.decide(c,"adubo","in").allowed)
+        self.assertTrue(p.decide(c,"adubo","out").allowed)
+        self.assertFalse(p.decide(c,"racao","out").allowed)
+        self.assertFalse(p.decide(c,"sorgo","in").allowed)
+        self.assertFalse(p.decide(c,"bobina","out").allowed)
+
     def test_resell_steel_coils_only_with_original_def_proof(self):
         c=g.Company("br_ferro")
         self.assertEqual(p.classify(c).role,"revenda_aco")
@@ -55,7 +64,7 @@ class RBRRolePolicy(unittest.TestCase):
         self.assertTrue(p.decide(c,"bobina","out").allowed)
         self.assertFalse(p.decide(c,"tijolo","out").allowed)
     def test_ambiguous_unknowns_remain_unclassified(self):
-        for id in ("agromecvo","mt_agrogarca","carga_des3","porto1",
+        for id in ("agro_capim","mt_agrogarca","carga_des3","porto1",
                    "pr_deposito","rubinei","madei_generico_falso"):
             with self.subTest(id=id):
                 self.assertEqual(p.classify(g.Company(id)).role,"desconhecida")
