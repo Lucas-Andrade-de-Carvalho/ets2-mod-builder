@@ -87,6 +87,10 @@ class ThreeMapOfflineFinalizationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             finish.run(g,self.src,maps,out)
         self.assertFalse(list(out.rglob("*.scs")))
+        failure=out/"FALHA_FINALIZACAO_OFFLINE.json"
+        self.assertTrue(failure.is_file())
+        self.assertEqual(json.loads(failure.read_text(encoding="utf-8"))[
+            "status"],"INTERROMPIDO")
 
 
 if __name__=="__main__":
