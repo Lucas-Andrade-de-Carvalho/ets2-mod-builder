@@ -321,9 +321,17 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 reason=safe_reason(g,comp,cat,direction,name,professional=professional,
                                    spec=extras.get(cargo))
                 if reason:
-                    decisions.append({"acao":"MANTER","empresa":company,"direcao":direction,
+                    regional=(professional_policy.regional_approved_decision(
+                        comp,cat,direction,name) if professional else None)
+                    adapted=bool(regional and regional.allowed)
+                    decisions.append({
+                        "acao":"MANTER_ADAPTACAO_REGIONAL" if adapted else "MANTER",
+                        "empresa":company,"direcao":direction,
                         "carga":cargo,"arquivo":path,"setor":comp.role,
-                        "confianca":"alta" if explicit_confidence(comp) else "media",
+                        "fonte":"SIMULACAO_ECONOMICA_REGIONAL_AUTORIZADA"
+                                if adapted else "POLITICA_ECONOMICA",
+                        "confianca":"media" if adapted else
+                                     "alta" if explicit_confidence(comp) else "media",
                         "motivo":reason})
                     states[company][direction].add(cargo)
                 else:
@@ -471,6 +479,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         regional_additions=[
             d for d in decisions if d["acao"]=="ADICIONAR_ADAPTACAO_REGIONAL"
         ]
+        regional_preserved=[
+            d for d in decisions if d["acao"]=="MANTER_ADAPTACAO_REGIONAL"
+        ]
         pending_by_company=defaultdict(list)
         for item in manual+preserved+plausible:
             pending_by_company[item["empresa"]].append(item)
@@ -491,6 +502,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 "total_decisoes_revisar":len(manual),
                 "permissoes_herdadas_plausiveis_sem_prova_original":len(plausible),
                 "novas_permissoes_adaptacao_regional":len(regional_additions),
+                "permissoes_anteriores_adaptacao_regional":len(regional_preserved),
                 "empresas_contempladas_por_adaptacao_regional":len({
                     d["empresa"] for d in regional_additions}),
                 "criterio_adaptacao_regional":"Excecao autorizada pelo usuario "
@@ -540,6 +552,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
             "permissoes_plausiveis_sem_evidencia_def":len(plausible),
             "permissoes_adaptacao_regional_adicionadas":len(regional_additions),
+            "permissoes_adaptacao_regional_herdadas":len(regional_preserved),
             "mapa_autorizado_adaptacao_regional":name in {"Minas_Gerais","Eldorado"},
             "permissoes_sem_evidencia_preservadas":len(preserved),
             "empresas_classificacao_pendente":len(classification_pending),
