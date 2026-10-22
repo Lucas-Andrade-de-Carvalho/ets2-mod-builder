@@ -1033,8 +1033,11 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 for c in companies.values():
                     for direction,results_list in (("out",outs),("in",ins)):
                         if professional:
-                            evaluation=(catalogo_cargas.evaluate(
-                                c,extras[id],direction,professional_policy.classify(c))
+                            regional=professional_policy.regional_approved_decision(
+                                c,category,direction,name)
+                            evaluation=(regional if regional is not None and regional.allowed
+                                else catalogo_cargas.evaluate(
+                                    c,extras[id],direction,professional_policy.classify(c))
                                 if id in extras else
                                 professional_policy.decide(c,category,direction))
                             why=evaluation.reason if evaluation.allowed else None
@@ -1054,6 +1057,10 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
                 for c_id in ins:work.setdefault(c_id,{"in":set(),"out":set()})["in"].add(id)
             coverage=coverage_audit(companies,bycargo,records,name,manifest)
             def decision_at(c,cat,direction,cargo):
+                regional=professional_policy.regional_approved_decision(
+                    c,cat,direction,name)
+                if regional is not None and regional.allowed:
+                    return regional
                 if cargo in extras:
                     return catalogo_cargas.evaluate(
                         c,extras[cargo],direction,professional_policy.classify(c))
