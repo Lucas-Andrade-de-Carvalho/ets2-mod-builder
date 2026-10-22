@@ -37,9 +37,20 @@ jobs:
         run: |
           if (-not (Test-Path "dist/ETS2_Company_Gerador.exe")) { throw "EXE nao gerado" }
           if ((Get-Item "dist/ETS2_Company_Gerador.exe").Length -lt 2000000) { throw "EXE incompleto" }
-      - name: Disponibilizar EXE no GitHub
+      - name: Preparar pacote de entrega com instrucoes e hash
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item dist/ETS2_Company_Gerador.exe release/ETS2_Company_Gerador.exe
+          Copy-Item gerador_windows/GUIA_VERSAO_FINAL_CANDIDATA_20261022.md release/GUIA_DE_UTILIZACAO.md
+          $sha=(Get-FileHash release/ETS2_Company_Gerador.exe -Algorithm SHA256).Hash.ToLower()
+          "COMMIT=$env:GITHUB_SHA" | Out-File release/PROVENIENCIA_SHA256.txt -Encoding utf8
+          "SHA256_EXE=$sha" | Out-File release/PROVENIENCIA_SHA256.txt -Append -Encoding utf8
+          "HOMOLOGACAO_ETS2=PENDENTE_DE_TESTES_REAIS" | Out-File release/PROVENIENCIA_SHA256.txt -Append -Encoding utf8
+      - name: Disponibilizar pacote Windows no GitHub
         uses: actions/upload-artifact@v4
         with:
           name: Gerador-ETS2-Windows
-          path: dist/ETS2_Company_Gerador.exe
+          path: release/*
+          if-no-files-found: error
           retention-days: 30
