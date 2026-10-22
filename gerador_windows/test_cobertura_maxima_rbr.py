@@ -322,6 +322,21 @@ class RBRCoverageReport(unittest.TestCase):
             self.assertEqual(len(review_rows),1)
             self.assertEqual(review_rows[0]["empresa"],"agro_duvidoso")
 
+    def test_perfect_cargo_pairs_never_homologate_compatible_companies_without_city(self):
+        companies,territory,active=self.fake()
+        for missing in ("rodoviaria11","agro_duvidoso"):
+            del companies[missing]
+        territory["empresas"]=[
+            row for row in territory["empresas"] if row["empresa"] in companies]
+        proof=coverage.assess(
+            companies,territory,active,{8:("laranja","Sacos de Laranja")},
+            {"cargas_com_par_economico_comprovavel":1,
+             "cargas_candidatas_teste_ets2":1})
+        self.assertEqual(proof["empresas_sem_classificacao"],0)
+        self.assertEqual(proof["empresas_reconhecidas_com_lacunas"],0)
+        self.assertEqual(proof["empresas_compativeis_sem_editor_valido"],2)
+        self.assertFalse(proof["cobertura_100_por_cento_comprovada"])
+
     def test_invalid_editor_files_do_not_inflate_territorial_coverage(self):
         companies,territory,active=self.fake()
         companies["citrosuco1"].editor_files={
