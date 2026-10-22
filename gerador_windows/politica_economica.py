@@ -179,8 +179,8 @@ def decide(company,category,direction,identity=None):
             return permit("produtor identificado de "+category)
         if role=="madeireira" and category=="palete":
             return permit("madeireira fornece paletes")
-        if role=="agroinsumos" and category in {"adubo","racao"}:
-            return permit("agropecuaria fornece insumo/ração solicitado pelo comprador")
+        if role=="agroinsumos" and category in {"adubo","racao","sorgo"}:
+            return permit("agropecuaria fornece insumo ou alimento animal solicitado pelo comprador")
         if role=="materiais" and category in BUILDING_CLASSES:
             # Lojas fornecem cimento/tijolos/madeira; para rochas ornamentais
             # exigir prova de comercializacao no arquivo de origem.
@@ -198,8 +198,10 @@ def decide(company,category,direction,identity=None):
     if role in {"fazenda","fazenda_batata","fazenda_laranja"}:
         if category=="adubo":
             return permit("fazenda precisa repor fertilizante para a lavoura")
-        if category=="racao" and "racao" in old_in:
-            return permit("criacao de animais documentou compra de racao","IN de racao na DEF")
+        if category in {"racao","sorgo"} and (
+                category in old_in or "racao" in old_in):
+            return permit("criacao de animais documentou compra de alimento animal",
+                          "IN de racao/sorgo na DEF")
         return forbid("fazenda nao possui necessidade comprovada desta mercadoria")
     if role=="pecuaria" and category in {"racao","sorgo"}:
         return permit("criacao animal compra alimento para o rebanho")
@@ -209,7 +211,7 @@ def decide(company,category,direction,identity=None):
         return permit("CEASA/hortifruti recebe produto para revenda/distribuicao")
     if role=="alimentos" and category in {"batata","laranja","milho","soja","coco"} and category in old_in:
         return permit("industria alimenticia usa materia-prima documentada","IN original")
-    if role=="agroinsumos" and category in {"adubo","racao"}:
+    if role=="agroinsumos" and category in {"adubo","racao","sorgo"}:
         return permit("agropecuaria reabastece mercadoria para revenda")
     if role=="fabrica_racao" and category in GRAIN_CLASSES:
         return permit("fabrica de racao compra materia-prima para fabricar alimento animal")
