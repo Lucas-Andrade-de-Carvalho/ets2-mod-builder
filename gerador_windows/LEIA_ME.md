@@ -1,3 +1,43 @@
+# V3.0 — Cobertura econômica documental (22/10/2026)
+
+## Estado da homologação
+
+**Versão atual usa o catálogo das 24 cargas originais do Librelato**, incluindo
+`carga24` (coco) quando comprovada no MOD/DEF/TXT. O código reconhece
+`carga1`–`carga24` como IDs exatos de carga documentada, sem confundir
+`carga17` (ração mineral) com laranja ou `carga10` (cimento paletizado)
+com paletes usados.
+
+**Homologação real no ETS2 NÃO é concedida por compilação, testes sintéticos,
+porcentagem de empresas reconhecidas ou mera presença de arquivos editor.**
+Para ser candidata a teste, cada cadeia exige empresas distintas e
+`company_def` com cidade e prefab em ambos os lados, além de evidência
+econômica. Testar visibilidade, coleta e entrega no jogo é obrigatório.
+
+Novos reconhecimentos guiados por DEF original e atividade:
+
+- Minas Gerais: `casabatata` comercializa apenas batata/milho/ração presentes
+  na direção original da DEF; `jmbebidas` pode comercializar cerveja quando
+  marcas identificáveis aparecem na DEF (o termo genérico `bebidas` não basta)
+- Mercados documentados: `martmix`, `villefort`, `hipermax`, `walmart`,
+  `spani` e `shibata_ca`
+- `csnarcos[2-4]?`: mineração de calcário/brita; a unidade da CSN Arcos
+  **não pode ser tratada como produtora de bobinas ou granito**
+- Unidades territoriais: cidade nunca é deduzida do nome do arquivo; exige
+  `company_def` com os campos `city` e `prefab`
+- As Companies `company_permanent` sem IN/OUT também entram na avaliação
+
+**Arquivos reais indispensáveis:** MOD Librelato, DEF1, DEF2, TXT completo,
+DEF Company e Company existente de cada mapa; usar `Editor Minas` opcional
+quando houver dados reais city/prefab. A falta de `editor` em Minas Gerais
+não pode ser corrigida fabricando cidades. Os três mapas continuam independentes.
+
+Os testes automatizados e o compilador Windows são executados pelo workflow
+`.github/workflows/gerador-windows.yml`. A execução com DEFs e Companies
+REAIS seguida dos ensaios no ETS2 é uma fase diferente.
+
+---
+
 # Company Logistics Ultimate V3.0 — motor econômico profissional
 
 ## Objetivo: a necessidade do comprador determina o frete
