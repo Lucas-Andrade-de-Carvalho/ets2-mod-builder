@@ -43,6 +43,18 @@ class RBRRolePolicy(unittest.TestCase):
                 if positive:
                     self.assertTrue(p.decide(c,*positive).allowed)
                 self.assertFalse(p.decide(c,*negative).allowed)
+    def test_passenger_terminals_with_inherited_cargo_are_neutralized(self):
+        from auditor_existentes import proven_incompatibility
+        for id in ("rodoviaria10","rodo_mg1","enel_stb","prf_nlima"):
+            with self.subTest(company=id):
+                c=g.Company(id)
+                c.role=p.classify(c).role
+                self.assertEqual(c.role,"infra_passageiros")
+                self.assertIsNotNone(proven_incompatibility(c,"cerveja","in"))
+                self.assertIsNotNone(proven_incompatibility(c,"palete","out"))
+        self.assertIsNone(proven_incompatibility(
+            g.Company("pr_samsclub",role="supermercado"),"cerveja","in"))
+
     def test_agromec_votuporanga_is_fertilizer_only(self):
         c=g.Company("agromecvo",display_name="Agromec")
         self.assertEqual(p.classify(c).role,"revenda_fertilizante")
