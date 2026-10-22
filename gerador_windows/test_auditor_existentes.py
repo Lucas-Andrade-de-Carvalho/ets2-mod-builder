@@ -145,6 +145,28 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(list(dest.glob("*.scs")),[])
         self.assertTrue((dest/"AUDITORIA_INCOMPLETA.txt").is_file())
 
+    def test_professional_audit_exports_economic_certification_ledger(self):
+        out=self.root/"certificacao_pro"
+        mod=self.fixture.inp
+        result=audit.run(g,{"Eldorado":{"existing":self.existing,
+                            "map_def":self.baseline}},out,mode="auditar",
+                            professional=True,source_files={
+                                "mod":mod["mod"],"def1":mod["def1"],
+                                "def2":mod["def2"]})[0]
+        quality=result["qualidade_logistica"]
+        self.assertIsNotNone(quality)
+        self.assertEqual(quality["cargas_homologadas_no_ets2"],0)
+        self.assertEqual(len(quality["cargas"]),23)
+        self.assertTrue((out/"QUALIDADE_LOGISTICA_ELDORADO.json").exists())
+        self.assertTrue((out/"CADEIAS_COMPROVADAS_ELDORADO.csv").exists())
+        self.assertFalse(list(out.glob("*.scs")))
+        for row in quality["cargas"].values():
+            self.assertFalse(row["homologado_no_ets2"])
+            self.assertGreaterEqual(row["total_pares_no_scs"],
+                                    row["pares_economicos_distintos"])
+            self.assertGreaterEqual(row["pares_economicos_distintos"],
+                                    row["pares_com_editor_em_ambas_empresas"])
+
     def test_reauditing_corrected_scs_is_idempotent(self):
         """Executar a mesma correção de novo não deve inventar mudanças."""
         first=self.invoke(out=self.root/"primeira")[0]
