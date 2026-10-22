@@ -45,7 +45,7 @@ ROLES=(
     ("premoldados",r"carmoprem|premold|pre_mold|precast|concrete_products"),
     ("cervejaria",r"ambev|heineken|brahma|cervejaria|brewery|brewing|beer_factory|^grupo_petropolis$|^grupo_p2?$|^cercrystal$|^cerveja_crystal$"),
     ("reciclagem",r"recicl|sucata|sucatao|ferro_velho|ferrovelho|scrapyard|recycling_yard"),
-    ("ceramica",r"ceramica|^ceramfazpgra$|^cerami_para2?$|olaria|brickyard|brick_factory|tijolaria"),
+    ("ceramica",r"ceramica|^ceramfazpgra$|^cerami_para(?:2|p)$|olaria|brickyard|brick_factory|tijolaria"),
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
     ("marmoraria",r"marmoraria|^marmolider$|marmor|granito|granite_shop|stoneworks"),
     ("madeireira",r"madeireira|^madereira$|^araraserr$|^extrmadserr$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$|^extr_rio_p2$|^extracao2$|^extracao_sc$"),
