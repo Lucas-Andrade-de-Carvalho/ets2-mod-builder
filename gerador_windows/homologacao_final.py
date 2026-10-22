@@ -119,6 +119,11 @@ def run(g, sources, entries, out_path, game_log=None,
             if summary.get("pendencias_revisao"):
                 blocked.append(map_name+": "+
                                str(summary["pendencias_revisao"])+" revisoes pontuais")
+            if summary.get("permissoes_plausiveis_sem_evidencia_def"):
+                blocked.append(map_name+": "+
+                               str(summary["permissoes_plausiveis_sem_evidencia_def"])+
+                               " fretes antigos economicamente plausiveis, "
+                               "mas ainda sem comprovacao de mercadoria na DEF")
             if summary.get("empresas_classificacao_pendente"):
                 blocked.append(map_name+": "+
                                str(summary["empresas_classificacao_pendente"])+
@@ -163,6 +168,8 @@ def run(g, sources, entries, out_path, game_log=None,
                 (m.get("qualidade_logistica") or {}).get(
                     "cargas_candidatas_teste_ets2",0),
             "revisoes_pontuais":m.get("pendencias_revisao"),
+            "fretes_herdados_plausiveis_sem_def":
+                m.get("permissoes_plausiveis_sem_evidencia_def",0),
             "empresas_sem_classificacao":m.get("empresas_classificacao_pendente"),
             "hash_company_original":m["sha256_entrada"],
             "hash_def_original":m["sha256_def"],
