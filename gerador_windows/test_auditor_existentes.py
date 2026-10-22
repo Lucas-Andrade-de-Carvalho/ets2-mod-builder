@@ -145,6 +145,44 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertIn("bricks",matrix["company_z_build"]["in_originais_def"])
 
 
+    def test_fictional_unnamed_company_preserves_exact_original_cargo_directions(self):
+        """Prova em SCS: IN de milho e OUT de cimento, sem descobrir o ramo."""
+        def_map=self.root/"def_ficcional_misto.zip"
+        zip_write(def_map,{
+            "z_company_917/in/corn.sii":old("corn"),
+            "z_company_917/out/cement.sii":old("cement"),
+        })
+        existing=self.root/"company_neutra.zip"
+        zip_write(existing,{"original.txt":b"permanecer intacto"})
+        dest=self.root/"audit_z_company"
+        source={key:self.fixture.inp[key] for key in ("mod","def1","def2")}
+        reports=audit.run(
+            g,{"Minas_Gerais":{"existing":existing,"map_def":def_map}},dest,
+            professional=True,source_files=source)
+        self.assertEqual(len(reports),1)
+        with zipfile.ZipFile(dest/reports[0]["arquivo_corrigido"]) as z:
+            filenames=set(z.namelist())
+            self.assertIsNone(z.testzip())
+            for n in (1,22):
+                self.assertIn(f"def/company/z_company_917/in/audit_carga{n}.sii",
+                              filenames)
+                self.assertNotIn(f"def/company/z_company_917/out/audit_carga{n}.sii",
+                                 filenames)
+            for n in (6,10,11):
+                self.assertIn(f"def/company/z_company_917/out/audit_carga{n}.sii",
+                              filenames)
+                self.assertNotIn(f"def/company/z_company_917/in/audit_carga{n}.sii",
+                                 filenames)
+            self.assertNotIn("def/company/z_company_917/out/audit_carga2.sii",
+                             filenames)
+            self.assertEqual(z.read("original.txt"),b"permanecer intacto")
+        row=reports[0]["matriz_empresa_cidade"]["empresas"][0]
+        self.assertEqual(row["atividade"],"desconhecida")
+        self.assertEqual(row["in_originais_def"],["corn"])
+        self.assertEqual(row["out_originais_def"],["cement"])
+        self.assertNotEqual(reports[0]["status"],"AUDITORIA_ESTRUTURAL_CONCLUÍDA")
+
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
