@@ -48,20 +48,21 @@ def assess(baseline, active, manifest, extras, policy, catalog):
                 if not verdict.allowed:
                     continue
                 key=direction+":"+name
+                in_original=policy.cargo_categories(
+                    comp.old_in if direction=="in" else comp.old_out)
                 if entry["explicit"]:
+                    # Evidencia SETORIAL autoriza a cadeia economica mesmo
+                    # quando a DEF nao tinha aquela mercadoria original.
                     accepted[direction].add(name)
                     reasons[key]=verdict.reason
-                    documented[direction].add(name)
-                    documentary_reasons[key]=verdict.reason
-                elif (entry["identity"].role=="desconhecida" and
-                      category in policy.cargo_categories(
-                          comp.old_in if direction=="in" else comp.old_out)):
-                    # Grupo de mercadorias EXATAMENTE declarado no IN/OUT.
-                    # Nao transformar em industria/setor confirmado.
+                if category in in_original:
+                    # Camada DOCUMENTAL e estritamente IN/OUT de mesma
+                    # categoria e direcao. Nome/atividade sozinho NAO basta.
                     documented[direction].add(name)
                     documentary_reasons[key]=(
-                        "mercadoria comprovada na direcao original da DEF; "
-                        "atividade da empresa nao identificada")
+                        "categoria registrada no IN/OUT original da DEF; "
+                        "papel: "+entry["identity"].role)
+
         potential_in=accepted["in"]
         potential_out=accepted["out"]
         # Contar sem construir todas as combinacoes na memoria.
