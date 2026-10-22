@@ -83,8 +83,8 @@ class DiagnosticTrailerTests(unittest.TestCase):
         _dest,broken=diag.inspect(g,self.input,self.txt,self.root/"models_mismatch")
         self.assertTrue(broken["carga_modelo_154"]["carga1"][
             "incompatibilidade_explicita_de_metodos"])
-        self.assertIn("carga1",str(broken["avisos"]))
-        self.assertNotIn("carga1",str(broken["erros"]))
+        self.assertIn("carga1",str(broken["erros"]))
+        self.assertEqual(broken["resultado"],"BLOQUEADO")
 
     def test_all_sources_and_sha_are_auditable(self):
         dest,report=diag.inspect(g,self.input,self.txt,self.root/"report")
