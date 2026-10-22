@@ -1458,6 +1458,19 @@ def run_gui():
                            for x in results)
             companies=sum(x.get("empresas_classificacao_pendente",0)
                           for x in results)
+            # A contagem anterior (279 nos mapas reais do cliente) considera
+            # apenas desconhecidas COM permissoes preservadas. A DEF inteira
+            # pode conter muitas outras sem ramo identificado.
+            entire_def_unknown=sum(
+                (x.get("matriz_empresa_cidade") or {}).get(
+                    "empresas_sem_identificacao",0) for x in results)
+            editor_instances=sum(
+                (x.get("matriz_empresa_cidade") or {}).get(
+                    "total_instancias_editor",0) for x in results)
+            missing_editor_maps=[
+                x["mapa"] for x in results
+                if (x.get("matriz_empresa_cidade") or {}).get(
+                    "total_instancias_editor",0)==0]
             route_gaps=sum(len(x.get("cargas_sem_rota_validada",[])) for x in results)
             economical=sum(
                 (x.get("qualidade_logistica") or {}).get(
@@ -1468,8 +1481,12 @@ def run_gui():
             total_cargos=sum(x["total_cargas_catalogo"] for x in results)
             msg=(str(len(results))+" Company(s) examinada(s). "+
                  str(review)+" revisoes pontuais; "+
-                 str(companies)+" empresas com classificacao pendente ("+
+                 str(companies)+" empresas com classificacao pendente e permissoes herdadas; "+
+                 str(entire_def_unknown)+" empresas sem atividade identificada na DEF inteira ("+
                  str(unverified)+" permissoes antigas preservadas). "+
+                 str(editor_instances)+" instancias de empresa identificadas em editor; "+
+                 ("mapas sem dados editor: "+", ".join(missing_editor_maps)+". "
+                  if missing_editor_maps else "")+
                  str(route_gaps)+" cadeias sem par registrado. "+
                  str(economical)+"/"+str(total_cargos)+
                  " cadeias com justificativa economica; "+
