@@ -1773,6 +1773,9 @@ def main():
                   if args.only_rbr else
                   ("mod","def1","def2","txt","eldorado","existing_eldorado","output")
                   if args.only_eldorado else
+                  ("mod","def1","def2","txt","minas","eldorado",
+                   "existing_minas","existing_eldorado","output")
+                  if args.only_mg_eldorado else
                   ("mod","def1","def2","txt","minas","eldorado","rbr",
                    "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in required if not getattr(args,k)]
@@ -1783,6 +1786,11 @@ def main():
                  {"Eldorado":{"existing":args.existing_eldorado,
                               "map_def":args.eldorado}} if args.only_eldorado
                  else {"Minas_Gerais":{
+                           "existing":args.existing_minas,"map_def":args.minas,
+                           "editor_source":args.editor_minas},
+                       "Eldorado":{"existing":args.existing_eldorado,
+                                   "map_def":args.eldorado}}
+                 if args.only_mg_eldorado else {"Minas_Gerais":{
                            "existing":args.existing_minas,"map_def":args.minas,
                            "editor_source":args.editor_minas},
                        "Eldorado":{"existing":args.existing_eldorado,
@@ -1814,7 +1822,10 @@ def main():
         needed=(("mod","def1","def2","txt","eldorado","existing_eldorado","output")
                 if args.only_eldorado else
                 ("mod","def1","def2","txt","rbr","existing_rbr","output")
-                if args.only_rbr
+                if args.only_rbr else
+                ("mod","def1","def2","txt","minas","eldorado",
+                 "existing_minas","existing_eldorado","output")
+                if args.only_mg_eldorado
                 else ("mod","def1","def2","txt","minas","eldorado","rbr",
                       "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in needed if not getattr(args,k)]
@@ -1823,6 +1834,10 @@ def main():
               if args.only_eldorado else
               {"RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
               if args.only_rbr else
+              {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
+                           "editor_source":args.editor_minas},
+               "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
+              if args.only_mg_eldorado else
               {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
                            "editor_source":args.editor_minas},
                "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
@@ -1836,6 +1851,7 @@ def main():
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
         "mod","def1","def2","txt","rbr","output") if args.only_rbr else (
+        "mod","def1","def2","txt","minas","eldorado","output") if args.only_mg_eldorado else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
     if any(getattr(args,x) is None for x in required):
         parser.error("Em modo --cli, informe: "+", ".join(required))
@@ -1845,6 +1861,7 @@ def main():
             parser.error(f"TXT incompleto: falta carga{n}")
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
           {"RBR":args.rbr} if args.only_rbr else
+          {"Minas_Gerais":args.minas,"Eldorado":args.eldorado} if args.only_mg_eldorado else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
     inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps,
          "txt":args.txt}
