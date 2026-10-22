@@ -429,11 +429,26 @@ Procedimento:
 Estados:
 - PRONTO_PARA_TESTE_NO_ETS2: 24 cadeias com evidencia economica e candidatos
   territoriais por mapa. Ainda NAO prova visibilidade ou entrega no jogo.
-- CANDIDATAS_COM_LACUNAS_DOCUMENTADAS: SCS reaudidados, mas classificacoes
-  e/ou rotas continuam sem comprovacao. Nao e entrega comercial homologada.
+- BLOQUEADO_ECONOMIA_REAL: detectadas empresas nao classificadas, revisoes
+  ou alguma carga sem fornecedor/comprador e editor coerentes. Os tres SCS
+  candidatos NAO sao publicados; o relatorio enumera lacunas por mapa.
+  A auditoria diagnostica os problemas sem inventar fretes.
 - BLOQUEADO_SEM_ENTREGA ou BLOQUEADO_REAUDITORIA: jamais publicar
   pacotes parciais; consultar relatorio do bloqueio.
 
 Arquivos com nomes ambiguos nao viram produtores ou compradores ficticios.
 Somente o ETS2 instalado comprova a aparicao do frete, a coleta, a carga
 visual e a entrega; uma compilacao aprovada nao substitui essa prova.
+
+
+### Criterio reforcado para entrega de cliente
+
+A versao final passou a **falhar de forma segura**: NUNCA publica tres `.scs`
+quando alguma das 24 mercadorias carece de par economico e referencias editor
+em qualquer um dos tres mapas, ou quando restam classificacoes pendentes,
+revisoes e cadeias sem rota. Em vez disso, publica
+`RESULTADO_FINALIZACAO_OFFLINE.json` com status
+`BLOQUEADO_ECONOMIA_REAL` e motivos individuais. Nao oculta
+pendencias nem as transforma em contratos de transporte ficticios.
+Uma versao sintética de 24 cadeias continua sendo teste de software,
+nao comprovacao de fretes reais dentro do ETS2.
