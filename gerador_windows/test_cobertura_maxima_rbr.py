@@ -171,6 +171,41 @@ class RBRCoverageReport(unittest.TestCase):
             with self.assertRaises(ValueError):
                 coverage.write(temp,result,"MAPA_INEXISTENTE")
 
+    def test_three_map_city_coverage_uses_only_editor_units(self):
+        companies,territory,active=self.fake()
+        territory["instancias_cidade"]=[
+            {"empresa":"citrosuco1","cidade":"divinopolis",
+             "in_esperados":["carga8"],"out_esperados":[]},
+            {"empresa":"frucamp","cidade":"divinopolis",
+             "in_esperados":["carga8"],"out_esperados":[]},
+            {"empresa":"agro_duvidoso","cidade":"divinopolis",
+             "in_esperados":[],"out_esperados":[]},
+            {"empresa":"rodoviaria11","cidade":"itauna",
+             "in_esperados":[],"out_esperados":[]},
+        ]
+        data=coverage.assess(companies,territory,active,
+                             {i:("laranja","Sacos de Laranja") for i in range(24)},
+                             {"cargas_com_par_economico_comprovavel":24,
+                              "cargas_candidatas_teste_ets2":24})
+        self.assertEqual(data["cidades_identificadas"],2)
+        self.assertEqual(data["cidades_com_empresas_sem_classificacao"],1)
+        by_city={row["cidade"]:row for row in data["cidades"]}
+        self.assertEqual(by_city["divinopolis"]["empresas_compativeis"],2)
+        self.assertEqual(by_city["divinopolis"]["empresas_compativeis_cobertas"],2)
+        self.assertEqual(by_city["itauna"]["situacao"],
+                         "SEM_EMPRESA_COMPATIVEL_CONFIRMADA")
+        self.assertFalse(data["cobertura_100_por_cento_comprovada"])
+        with tempfile.TemporaryDirectory() as temp:
+            for name in ("RBR","ELDORADO","MINAS_GERAIS"):
+                coverage.write(temp,data,name)
+                path=Path(temp)/("COBERTURA_CIDADES_"+name+".csv")
+                self.assertTrue(path.exists())
+                with path.open(encoding="utf-8-sig",newline="") as f:
+                    import csv
+                    rows=list(csv.DictReader(f,delimiter=";"))
+                self.assertEqual(len(rows),2)
+                self.assertTrue((Path(temp)/("COBERTURA_CIDADES_"+name+".json")).exists())
+
     def test_no_editor_never_implies_city_homologation(self):
         companies,territory,active=self.fake()
         for key in companies:
