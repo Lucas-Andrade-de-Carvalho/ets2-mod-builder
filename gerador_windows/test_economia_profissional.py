@@ -172,6 +172,19 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertFalse(policy.decide(g.Company(
             "ms_alg_ib",display_name="Algodoeira Irmãos Bürgel"),"algodao","in").allowed)
 
+    def test_actual_animal_feed_industry_and_shops(self):
+        manufacturer=g.Company("nutrition",display_name="Trouw Nutrition")
+        retail=g.Company("raguife",display_name="Raguife Rações")
+        self.assertEqual(policy.classify(manufacturer).role,"fabrica_racao")
+        self.assertTrue(policy.decide(manufacturer,"racao","out").allowed)
+        self.assertTrue(policy.decide(manufacturer,"milho","in").allowed)
+        self.assertFalse(policy.decide(manufacturer,"adubo","out").allowed)
+        self.assertEqual(policy.classify(retail).role,"revenda_racao")
+        self.assertTrue(policy.decide(retail,"racao","in").allowed)
+        self.assertTrue(policy.decide(retail,"racao","out").allowed)
+        self.assertFalse(policy.decide(retail,"adubo","out").allowed)
+        self.assertFalse(policy.decide(retail,"sorgo","out").allowed)
+
     def test_grain_traders_require_original_cargo_evidence(self):
         for company,label in [
                 ("g_cereal_rv","Grupo Cereal"),
