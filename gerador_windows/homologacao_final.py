@@ -58,8 +58,11 @@ def run(g, sources, entries, out_path, game_log=None,
     requested=set(expected_maps)
     if (not requested or not requested.issubset(set(EXPECTED_MAPS))
             or set(entries)!=requested):
+        label=("Minas_Gerais, Eldorado e RBR"
+               if tuple(expected_maps)==EXPECTED_MAPS else
+               ", ".join(expected_maps))
         raise ValueError("Pre-homologacao exige exatamente os mapas escolhidos: "+
-                         ", ".join(expected_maps))
+                         label)
     source_paths={name:Path(sources[name]) for name in required}
     for name,path in source_paths.items():
         if not path.exists():raise FileNotFoundError(name+": "+str(path))
