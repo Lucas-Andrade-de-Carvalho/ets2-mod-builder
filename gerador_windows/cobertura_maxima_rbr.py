@@ -63,10 +63,15 @@ def assess(companies,territory,final_active,manifest,quality):
         # Nenhuma permissao e deduzida a partir deste sinal.
         historical=bool(actual_in|actual_out)
         old_name=getattr(c,"display_name","") or ""
-        maybe=candidate and (
-            bool(HINT.search(id+" "+old_name)) or
-            historical or bool(getattr(c,"old_in",set())|
-                               getattr(c,"old_out",set())))
+        # Um IN/OUT de bananas, combustivel ou eletronicos nao
+        # equivale a uma das 24 mercadorias do Librelato. A regra
+        # anterior marcava TODAS as empresas com qualquer arquivo como
+        # possivel compatibilidade e inflava a fila de revisao.
+        original_relevant=bool(row.get("categorias_in_originais",[]) or
+                               row.get("categorias_out_originais",[]))
+        company_role_hint=bool(HINT.search(id+" "+old_name))
+        maybe=candidate and (original_relevant or company_role_hint or
+                             historical)
         if candidate:
             unclassified+=1
             potential_unknown+=bool(maybe)
@@ -115,6 +120,9 @@ def assess(companies,territory,final_active,manifest,quality):
             "out_faltantes":missing_out,
             "herdadas_nao_comprovadas":bool(
                 candidate and (actual_in or actual_out)),
+            "sinal_nome_atividade":bool(company_role_hint),
+            "sinal_mercadoria_entre_24":bool(original_relevant),
+            "sinal_permissao_herdada":bool(historical),
             "sinal_compatibilidade_a_investigar":bool(maybe)
         })
     # Matriz territorial: cidade e unidade SEM estimar geografia quando
@@ -259,7 +267,9 @@ def write(directory, report, map_name="RBR"):
             "permissoes_justificadas","permissoes_justificadas_atendidas",
             "cidades","total_instancias_editor","in_esperados","out_esperados",
             "in_efetivos","out_efetivos","in_faltantes","out_faltantes",
-            "herdadas_nao_comprovadas","sinal_compatibilidade_a_investigar"
+            "herdadas_nao_comprovadas","sinal_nome_atividade",
+            "sinal_mercadoria_entre_24","sinal_permissao_herdada",
+            "sinal_compatibilidade_a_investigar"
         ]
         w=csv.DictWriter(f,fieldnames=fieldnames,delimiter=";")
         w.writeheader()
