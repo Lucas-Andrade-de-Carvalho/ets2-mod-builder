@@ -1323,6 +1323,7 @@ def run_gui():
        ("rbr","Mapa RBR (.zip)"),
        ("existing_eldorado","Company EXISTENTE do Eldorado (.scs)"),
        ("existing_minas","Company EXISTENTE Minas Gerais (.scs)"),
+       ("editor_minas","Editor Minas (SCS/ZIP com city+prefab, opcional)"),
        ("existing_rbr","Company EXISTENTE RBR (.scs)"),
        ("game_log","game.log.txt do ETS2 (opcional, nao homologa)"),
        ("output","Pasta de saida")
@@ -1402,7 +1403,8 @@ def run_gui():
         missing=[k for k in required+["output"] if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
         optional=(["minas","eldorado","rbr"] if action=="diagnostic" else
-                  ["game_log"] if action in {"preflight","finalize"} else [])
+                  ["game_log","editor_minas"] if action in {"preflight","finalize"} else
+                  ["editor_minas"])
         invalid=[k for k in required+[x for x in optional if widgets[x].get().strip()]
                  if not Path(widgets[k].get()).exists()]
         if invalid:raise ValueError("Arquivo ou pasta inexistente: "+", ".join(invalid))
@@ -1441,7 +1443,8 @@ def run_gui():
             entries=({"Eldorado":{"existing":snapshot["existing_eldorado"],
                                    "map_def":snapshot["eldorado"]}} if scope=="eldorado" else
                      {"Minas_Gerais":{"existing":snapshot["existing_minas"],
-                                     "map_def":snapshot["minas"]},
+                                     "map_def":snapshot["minas"],
+                                     "editor_source":snapshot.get("editor_minas") or None},
                       "Eldorado":{"existing":snapshot["existing_eldorado"],
                                   "map_def":snapshot["eldorado"]},
                       "RBR":{"existing":snapshot["existing_rbr"],
@@ -1505,7 +1508,8 @@ def run_gui():
             from homologacao_final import run as final_preflight
             entries={
                 "Minas_Gerais":{"existing":snapshot["existing_minas"],
-                               "map_def":snapshot["minas"]},
+                               "map_def":snapshot["minas"],
+                               "editor_source":snapshot.get("editor_minas") or None},
                 "Eldorado":{"existing":snapshot["existing_eldorado"],
                             "map_def":snapshot["eldorado"]},
                 "RBR":{"existing":snapshot["existing_rbr"],
@@ -1531,7 +1535,8 @@ def run_gui():
             sources={k:snapshot[k] for k in ("mod","def1","def2","txt")}
             entries={
                 "Minas_Gerais":{"existing":snapshot["existing_minas"],
-                               "map_def":snapshot["minas"]},
+                               "map_def":snapshot["minas"],
+                               "editor_source":snapshot.get("editor_minas") or None},
                 "Eldorado":{"existing":snapshot["existing_eldorado"],
                             "map_def":snapshot["eldorado"]},
                 "RBR":{"existing":snapshot["existing_rbr"],
@@ -1676,7 +1681,8 @@ def main():
     parser.add_argument("--audit-only",action="store_true",
                         help="Gerar somente relatorio de auditoria, sem .scs corrigido")
     for x in ("mod","def1","def2","txt","minas","eldorado","rbr",
-              "existing-eldorado","existing-minas","existing-rbr","output"):
+              "existing-eldorado","existing-minas","existing-rbr",
+              "editor-minas","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
@@ -1688,7 +1694,8 @@ def main():
         if missing:parser.error("Finalizacao exige: "+", ".join(missing))
         sources={k:getattr(args,k) for k in ("mod","def1","def2","txt")}
         entries={
-            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas},
+            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
+                           "editor_source":args.editor_minas},
             "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
             "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
         result=offline_finish(sys.modules[__name__],sources,entries,args.output,
@@ -1707,7 +1714,8 @@ def main():
         if missing:parser.error("Pre-homologacao exige: "+", ".join(missing))
         sources={key:getattr(args,key) for key in ("mod","def1","def2","txt")}
         entries={
-            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas},
+            "Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
+                           "editor_source":args.editor_minas},
             "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
             "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
         report=final_preflight(sys.modules[__name__],sources,entries,args.output,
@@ -1740,7 +1748,8 @@ def main():
         if missing:parser.error("Auditoria exige: "+", ".join(missing))
         jobs=({"Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
               if args.only_eldorado else
-              {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas},
+              {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
+                           "editor_source":args.editor_minas},
                "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
                "RBR":{"existing":args.existing_rbr,"map_def":args.rbr}})
         auditor_existentes.run(sys.modules[__name__],jobs,args.output,
