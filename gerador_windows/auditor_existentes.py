@@ -752,6 +752,7 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
         "mapas":items
     }
     folder=Path(folder)
+    folder.mkdir(parents=True,exist_ok=True)
     (folder/"PAINEL_GERAL_LOGISTICA_V3.json").write_text(
         json.dumps(dashboard,indent=2,ensure_ascii=False),encoding="utf-8")
     lines=["PAINEL GERAL DE LOGISTICA V3 - NAO E HOMOLOGACAO ETS2",
