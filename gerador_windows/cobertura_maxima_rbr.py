@@ -31,8 +31,12 @@ def assess(companies,territory,final_active,manifest,quality):
     known_with_cargo=known_complete=known_incomplete=outside=unclassified=0
     potential_unknown=0
     for id,c in sorted(companies.items()):
-        role=c.role
         row=docs[id]
+        # Usar a MESMA identidade documental empregada pela matriz
+        # empresa/cidade. c.role e um cache mutavel que pode divergir
+        # da atividade do relatorio; misturar os dois produz contadores
+        # inconsistentes entre o total geral e os tres mapas.
+        role=row["atividade"]
         planned_in=set(row["in_esperados"])
         planned_out=set(row["out_esperados"])
         actual_in=set(final_active[id]["in"])
