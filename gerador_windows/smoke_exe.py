@@ -147,6 +147,41 @@ def main(exe_path):
                 encoding="utf-8"))
             assert audit_json["permissoes_removidas"]>=3
             print("EXE Windows auditou SCS existente, corrigiu rotas e preservou original")
+            # Compilado de verdade: 24 cargas + 3 mapas ->
+            # SCS candidatos somente apos segunda auditoria sem mutacoes.
+            with zipfile.ZipFile(fixture.fixture.inp["mod"]) as arc:
+                items={name:arc.read(name) for name in arc.namelist()}
+            items["def/cargo/carga24.sui"]=(
+                b"cargo_data : cargo.carga24 {\n body_types[]: alta\n}\n")
+            mod24=fixture.root/"mod_real_24.scs"
+            with zipfile.ZipFile(mod24,"w") as arc:
+                for k,data in items.items():
+                    arc.writestr(k,data)
+            cargostxt=fixture.root/"24_cargas.txt"
+            cargostxt.write_text(audittxt.read_text(encoding="utf-8")+
+                                 "\ncarga24 = Coco\n",encoding="utf-8")
+            delivered=fixture.root/"exe_finalizacao_offline"
+            cmd=[str(Path(exe_path).resolve()),"--cli","--finalize-offline",
+                 "--mod",str(mod24),
+                 "--def1",str(fixture.fixture.inp["def1"]),
+                 "--def2",str(fixture.fixture.inp["def2"]),
+                 "--txt",str(cargostxt),
+                 "--minas",str(fixture.baseline),
+                 "--eldorado",str(fixture.baseline),
+                 "--rbr",str(fixture.baseline),
+                 "--existing-minas",str(fixture.existing),
+                 "--existing-eldorado",str(fixture.existing),
+                 "--existing-rbr",str(fixture.existing),
+                 "--output",str(delivered)]
+            called=subprocess.run(cmd,timeout=180,check=False)
+            if called.returncode:
+                raise RuntimeError("EXE falhou ao finalizar offline tres SCS")
+            result=json.loads((delivered/"RESULTADO_FINALIZACAO_OFFLINE.json")
+                              .read_text(encoding="utf-8"))
+            assert len(result["arquivos_corrigidos"])==3
+            assert result["reescritas_residuais"]==0
+            assert not result["homologado_no_ets2"]
+            print("EXE Windows gerou tres SCS candidatos, reabriu ZIP e reauditorou todos")
         finally:
             fixture.tearDown()
     finally:
