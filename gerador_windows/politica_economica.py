@@ -334,7 +334,16 @@ def decide(company,category,direction,identity=None):
     def forbid(reason):
         return Decision(False,reason,identity.evidence,identity.certainty)
     if role=="desconhecida":
-        return forbid("ramo nao confirmado; carga deve ser revisada, sem preencher automaticamente")
+        # Mesmo sem identificar o ramo ficticio, a DEF ORIGINAL documenta
+        # exatamente esta mercadoria nessa direcao. Converter p.ex. corn
+        # em carga1/carga22 nao significa afirmar que seja uma fazenda.
+        if documentary:
+            return permit("equivalencia de mercadoria IN/OUT declarada na DEF "
+                          "original, sem inferir atividade da empresa",
+                          "categoria E direcao comprovadas na DEF do mapa")
+        return forbid("ramo nao confirmado e nenhum IN/OUT original para "
+                      "esta mercadoria/direcao; nao criar rota")
+
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
     if role=="mineracao_calcario":
