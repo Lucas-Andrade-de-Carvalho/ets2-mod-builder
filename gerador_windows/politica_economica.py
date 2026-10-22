@@ -331,6 +331,15 @@ def classify(company):
     # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
     # quando houver correspondencia inequívoca com UM setor.
     public_name=getattr(company,"display_name","")
+    # RBR "Galo Prod. Agricolas": nao confundir vendedor de ração/adubo
+    # com fazenda so porque o nome publico tem 'agricola'.
+    # O proprio IN/OUT da DEF documenta adubo IN/OUT e racao OUT.
+    evidence_role=infer_by_flow(company)
+    if (evidence_role is not None and
+            evidence_role.role=="agroinsumos" and
+            re.search(r"prod_?agric|produtos_?agr|insumos_?agr",
+                      norm(public_name))):
+        return evidence_role
     if public_name and "@@" not in public_name:
         normalized=norm(public_name)
         candidates={role for role,pattern in ROLES if re.search(pattern,normalized,re.I)}
