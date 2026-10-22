@@ -1404,6 +1404,12 @@ def run_gui():
         except OSError as exc:
             append_log("Aviso: nao consegui salvar os caminhos: "+str(exc))
     def check_paths(action):
+        if action=="finalize" and scope_var.get()!="todos":
+            raise ValueError(
+                "FINALIZAR OFFLINE e uma rotina global dos 3 mapas. "
+                "Para manter o RBR intacto, use 3. AUDITAR/CORRIGIR "
+                "e 4. PRE-HOMOLOGAR com Somente MINAS + ELDORADO. "
+                "Nada foi alterado.")
         # Diagnostico tecnico independe das DEFs dos mapas.
         originals=["mod","def1","def2","txt"]
         maps=(["eldorado"] if scope_var.get()=="eldorado"
@@ -1755,6 +1761,11 @@ def main():
         parser.error("Escolha apenas um dos modos de escopo por mapa")
     if not args.cli:run_gui();return
     if args.finalize_offline:
+        if args.only_mg_eldorado or args.only_eldorado or args.only_rbr:
+            parser.error("--finalize-offline exige escopo global explicito; "
+                         "para manter RBR intacto use --audit-existing "
+                         "--only-mg-eldorado e --preflight-real "
+                         "--only-mg-eldorado")
         from finalizacao_offline import run as offline_finish
         required=("mod","def1","def2","txt","minas","eldorado","rbr",
                   "existing_minas","existing_eldorado","existing_rbr","output")
