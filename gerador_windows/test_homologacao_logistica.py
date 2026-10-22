@@ -11,7 +11,9 @@ def company(name, in_cargos=(), out_cargos=(), editor=False):
     c.old_in=set(in_cargos)
     c.old_out=set(out_cargos)
     if editor:
-        c.editor_files={"def/company/"+name+"/editor/test.sii":b"SiiNunit {}"}
+        c.editor_files={"def/company/"+name+"/editor/test.sii":(
+            b"SiiNunit\n{\ncompany_def : .fixture {\n"
+            b" city: fixture_city\n prefab: fixture_prefab\n}\n}\n")}
     return c
 
 
@@ -43,6 +45,23 @@ class LogisticsCertificateTests(unittest.TestCase):
         self.assertEqual(cargo["status"],"CANDIDATA_TESTE_ETS2")
         self.assertFalse(cargo["homologado_no_ets2"])
         self.assertEqual(cert["cargas_homologadas_no_ets2"],0)
+
+    def test_empty_editor_files_do_not_fake_testable_freight(self):
+        origin=company("ambev",out_cargos={"beer"})
+        destination=company("supermercado_centro",in_cargos={"beer"})
+        origin.editor_files={"def/company/ambev/editor/fake.sii":b"SiiNunit {}"}
+        destination.editor_files={
+            "def/company/supermercado_centro/editor/fake.sii":
+                b"SiiNunit {}"}
+        proof=self.assessment(
+            {"ambev":origin,"supermercado_centro":destination},
+            state(origins=["ambev"],destinations=["supermercado_centro"])
+        )
+        item=proof["cargas"]["carga12"]
+        self.assertEqual(item["pares_economicos_distintos"],1)
+        self.assertEqual(item["pares_com_editor_em_ambas_empresas"],0)
+        self.assertEqual(item["status"],"ECONOMIA_SEM_EDITOR_VALIDADO")
+        self.assertFalse(item["homologado_no_ets2"])
 
     def test_unknown_economy_in_scs_does_not_get_certified(self):
         companies={"desconhecida007":company("desconhecida007",editor=True),
