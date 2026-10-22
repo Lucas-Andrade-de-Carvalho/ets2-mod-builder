@@ -94,8 +94,9 @@ def assess(companies,territory,final_active,manifest,quality):
     for unit in territory["instancias_cidade"]:
         city=unit["cidade"]
         company_id=unit["empresa"]
-        company=companies[company_id]
-        role=company.role
+        # A auditoria territorial deve usar a mesma identidade documental
+        # da matriz por empresa; company.role e apenas um cache mutavel.
+        role=docs[company_id]["atividade"]
         bucket=by_city.setdefault(city,{
             "cidade":city,"instancias":0,"empresas":set(),
             "compativeis":set(),"compativeis_cobertas":set(),
