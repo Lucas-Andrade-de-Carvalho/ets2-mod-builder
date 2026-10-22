@@ -699,7 +699,8 @@ def regional_approved_decision(company,category,direction,map_name,identity=None
     # podem agrupar a safra; não enviar para obras, postos ou siderúrgicas.
     if category=="algodao":
         warehouse_name=bool(re.search(
-            r"(?:armazem|armazens|warehouse|galpao|deposito_agric)",
+            r"(?:armazem|armazens|warehouse|galpao|deposito_agric|"
+            r"beneficiadora_?algodao|cotton_?gin|algodoeira)",
             candidate))
         cotton=(role in REGIONAL_COTTON_RECEIVERS or
                 (role=="desconhecida" and warehouse_name))
