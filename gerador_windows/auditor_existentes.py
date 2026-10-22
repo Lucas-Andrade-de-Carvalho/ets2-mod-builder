@@ -543,12 +543,12 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     len(pending),",".join(ins),",".join(outs),
                     len(comp.editor_files) if comp else 0,"NAO",
                     "Confirmar atividade e cargas na DEF original antes de aprovar"])
-        if professional and name=="RBR" and territory is not None:
-            rbr_coverage=cobertura_maxima_rbr.assess(
+        if professional and territory is not None:
+            map_coverage=cobertura_maxima_rbr.assess(
                 baseline,territory,final_active,manifest,homologation)
             summary["cobertura_maxima_empresas"]={
-                k:v for k,v in rbr_coverage.items() if k!="empresas"}
-            cobertura_maxima_rbr.write(out,rbr_coverage)
+                k:v for k,v in map_coverage.items() if k!="empresas"}
+            cobertura_maxima_rbr.write(out,map_coverage,name)
         outbase=out/("AUDITORIA_"+name.upper())
         outbase.with_suffix(".json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),
                                                  encoding="utf-8")
