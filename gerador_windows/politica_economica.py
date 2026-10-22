@@ -144,12 +144,17 @@ AGRICULTURE_INCOMPATIBLE={
 }
 RETAIL_FOOD={"cerveja","batata","laranja","coco"}
 
-def infer_by_flow(company):
-    """Cruza direcao IN/OUT e tipo de produto sem usar nomes inventados.
+def _any_evidence(tokens, pattern):
+    """Reconhece itens fora das 24 cargas, mas apenas como indício do setor."""
+    return any(re.fullmatch(pattern, norm(value)) for value in tokens)
 
-    A inferencia so se torna automatica quando sinais independentes
-    concordam e nenhum segmento conflitante foi documentado.
-    Cargas sem especie identificada nao autorizam novo OUT.
+
+def infer_by_flow(company):
+    """Analisa cada empresa ficticia pela RELACAO DIRECIONAL IN/OUT da DEF.
+
+    Nunca consulta empresas reais. Preferir o fluxo de materiais (insumo ->
+    atividade -> produto), sem inventar especie de grao, fruta ou mineral.
+    Sinais contraditorios impedem uma classificacao automatica.
     """
     incoming=cargo_categories(company.old_in)
     outgoing=cargo_categories(company.old_out)
@@ -160,6 +165,64 @@ def infer_by_flow(company):
     grain_generic_out=any(GENERIC_GRAIN.fullmatch(t) for t in out_names)
     grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
     other_out=outgoing - CROP_CLASSES
+
+    # Cadeias industriais: materia-prima recebida E produto expedido.
+    # Identificador ficticio (empresa_x7) nao impede inferencia.
+    if ("racao" in outgoing and grains_in and
+            "racao" not in incoming and not (other_out - {"racao"})):
+        return Identity("fabrica_racao_inferida","alta",
+                        "fluxo industrial: cereais no IN e racao no OUT da DEF")
+    if ("cimento" in outgoing and
+            _any_evidence(in_names,r"(?:calcario|limestone|clinker|argila_calcaria)")
+            and not (other_out - {"cimento"})):
+        return Identity("cimenteira_inferida","alta",
+                        "fluxo industrial: calcario/clinker no IN e cimento no OUT")
+    if ("tijolo" in outgoing and
+            _any_evidence(in_names,r"(?:argila|clay|barro|ceramic_clay)")
+            and not (other_out - {"tijolo"})):
+        return Identity("ceramica_inferida","alta",
+                        "fluxo industrial: argila no IN e tijolo no OUT")
+    if ("laranja" in incoming and
+            _any_evidence(out_names,r"(?:suco_?laranja|orange_juice|juice_orange)")
+            and not (outgoing - {"laranja"})):
+        return Identity("processadora_citricos","alta",
+                        "fluxo industrial: laranja no IN e suco no OUT")
+    if ("madeira" in incoming and
+            _any_evidence(out_names,r"(?:moveis?|furniture|furniture_items)")
+            and not (outgoing - {"madeira"})):
+        return Identity("fabrica_moveis","alta",
+                        "fluxo industrial: madeira no IN e moveis no OUT")
+    if ("algodao" in incoming and
+            _any_evidence(out_names,r"(?:tecido|tecidos|fabric|fabrics|fio|fios|yarn)")
+            and not (outgoing - {"algodao"})):
+        return Identity("textil","alta",
+                        "fluxo industrial: algodao no IN e tecido/fio no OUT")
+    if ("racao" in incoming and
+            _any_evidence(out_names,r"(?:gado|boi|bois|cattle|suino|suinos|pig|pigs|porco|porcos|livestock)")
+            and not (outgoing - {"racao"})):
+        return Identity("pecuaria","alta",
+                        "fluxo agropecuario: racao no IN e animais no OUT")
+
+    # Compra e revenda de material de construcao documentados.
+    # Loja inferida NAO gera cargas fora das especies que constam na DEF.
+    materials_in=incoming & BUILDING_CLASSES
+    materials_out=outgoing & BUILDING_CLASSES
+    if (len(materials_in & materials_out)>=2 and
+            not (incoming - BUILDING_CLASSES) and
+            not (outgoing - BUILDING_CLASSES)):
+        return Identity("comercio_materiais_inferido","alta",
+                        "comercio: dois ou mais materiais da construcao "
+                        "documentados nos dois sentidos da DEF")
+    # Local que recebe diversos materiais sem revender: pode ser obra,
+    # reforma ou industria; reconhecer somente a funcao de recebedor.
+    if (len(materials_in)>=2 and not outgoing and
+            not (incoming - BUILDING_CLASSES)):
+        return Identity("consumidor_materiais_inferido","alta",
+                        "unidade recebedora de materiais da construcao no IN, "
+                        "sem evidencia de revenda ou fabricacao")
+
+    # Fazenda: grãos OUT + adubo IN e sem abastecimento de outros graos.
+    # Se OUT apenas 'graos', nao inventar milho nem soja.
     if ("adubo" in incoming and (grains_out or grain_generic_out)
             and not (grains_in or grain_generic_in)
             and not (other_out or
@@ -171,8 +234,8 @@ def infer_by_flow(company):
             " no OUT original, sem entrada de graos nem fluxo industrial; "
             "somente culturas nomeadas no OUT autorizam expedir carga"
         )
-    # Grao que entra e sai: papel LOGISTICO de comercializacao/armazenagem;
-    # nao classificar como fazenda nem alegar que produziu a colheita.
+    # IN+OUT de cereais identificados indica comercio/armazenagem;
+    # nao permite afirmar que a empresa produz a colheita.
     if (grains_out and grains_in and grains_out & grains_in
             and "adubo" not in incoming and
             not (outgoing - GRAIN_CLASSES)):
@@ -181,8 +244,6 @@ def infer_by_flow(company):
             "inferencia de comercio/armazenagem: mesmas especies de graos "
             "documentadas no IN e OUT; nao comprova producao agricola"
         )
-    # Produtos recebidos e expedidos como mercadoria: fornecimento de
-    # fertilizantes, e nao necessariamente fabricacao.
     if ("adubo" in incoming and "adubo" in outgoing
             and not (outgoing - {"adubo"})):
         return Identity(
@@ -190,9 +251,7 @@ def infer_by_flow(company):
             "fertilizante registrado em IN e OUT; transacao comercial "
             "demonstrada, sem atribuir fabricacao"
         )
-    # A atividade exata de supermercado/atacadista nao e deduzida
-    # de cerveja e fruta: poderia ser distribuidora. So autorizar as
-    # categorias explicitamente registradas no lado correto.
+    # Empresa alimenticia ficticia: sem afirmar que e supermercado.
     if (len(incoming & RETAIL_FOOD)>=3 and
             not (outgoing - RETAIL_FOOD) and
             not (incoming & (AGRICULTURE_INCOMPATIBLE-RETAIL_FOOD))):
@@ -302,6 +361,26 @@ def decide(company,category,direction,identity=None):
             return permit("mercadoria alimentar explicitamente registrada "
                           "nesta direcao da DEF", "IN/OUT original")
         return forbid("fluxo alimentar nao comprova este produto/direcao")
+    if role in {"fabrica_racao_inferida","cimenteira_inferida",
+                "ceramica_inferida","comercio_materiais_inferido",
+                "consumidor_materiais_inferido"}:
+        if role=="fabrica_racao_inferida":
+            allowed=(category=="racao" and direction=="out" and category in old_out or
+                     category in GRAIN_CLASSES and direction=="in" and category in old_in)
+        elif role=="cimenteira_inferida":
+            allowed=category=="cimento" and direction=="out" and category in old_out
+        elif role=="ceramica_inferida":
+            allowed=category=="tijolo" and direction=="out" and category in old_out
+        elif role=="comercio_materiais_inferido":
+            allowed=(category in BUILDING_CLASSES and
+                     category in (old_in if direction=="in" else old_out))
+        else:
+            allowed=(direction=="in" and category in BUILDING_CLASSES and
+                     category in old_in)
+        if allowed:
+            return permit("produto/direcao compatível com fluxo economico da DEF",
+                          "IN/OUT e atividade inferida da empresa ficticia")
+        return forbid("nao existe evidencia desse produto/direcao na DEF original")
     if role=="processadora_citricos":
         if category=="laranja" and direction=="in":
             return permit("industria de suco recebe fruta para processamento")
