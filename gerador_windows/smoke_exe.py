@@ -89,6 +89,26 @@ def main(exe_path):
         assert mg.read_bytes()==b"MINAS_CLIENTE_NAO_MODIFICAR"
         assert rbr.read_bytes()==b"RBR_CLIENTE_NAO_MODIFICAR"
         print("EXE Windows BLOQUEOU corretamente Eldorado incompleto; MG e RBR intactos")
+        # Modo RBR isolado: os outros mapas NAO sao obrigatorios.
+        rbr_out=case.root/"rbr_only_exe"
+        rbr_out.mkdir()
+        mg_keep=rbr_out/"Company_MG_cliente.scs"
+        eld_keep=rbr_out/"Company_Eldorado_cliente.scs"
+        mg_keep.write_bytes(b"MINAS_ORIGINAL_PRESERVAR")
+        eld_keep.write_bytes(b"ELDORADO_ORIGINAL_PRESERVAR")
+        rbr_cmd=[str(Path(exe_path).resolve()),"--cli","--only-rbr",
+                 "--mod",str(p["mod"]),"--def1",str(p["def1"]),
+                 "--def2",str(p["def2"]),
+                 "--txt",str(case.root/"cargas.txt"),
+                 "--rbr",str(p["maps"]["RBR"]),
+                 "--output",str(rbr_out)]
+        rbr_proc=subprocess.run(rbr_cmd,timeout=120,check=False)
+        if rbr_proc.returncode==0:
+            raise RuntimeError("EXE permitiu publicar RBR com cadeias incompletas")
+        assert mg_keep.read_bytes()==b"MINAS_ORIGINAL_PRESERVAR"
+        assert eld_keep.read_bytes()==b"ELDORADO_ORIGINAL_PRESERVAR"
+        assert (rbr_out/"RBR_COBERTURA_23_CARGAS.json").exists()
+        print("EXE Windows: modo --only-rbr sem MG/Eldorado funciona com bloqueios seguros")
         # Auditar e corrigir SCS JA EXISTENTE. A executavel precisa
         # importar o modulo de auditoria em ambiente PyInstaller isolado.
         from test_auditor_existentes import AuditorSCSRegression
@@ -147,6 +167,22 @@ def main(exe_path):
                 encoding="utf-8"))
             assert audit_json["permissoes_removidas"]>=3
             print("EXE Windows auditou SCS existente, corrigiu rotas e preservou original")
+            # RBR sozinho deve produzir SCS corrigido SEM exigir DEF MG/Eldorado.
+            rbr_single=fixture.root/"rbr_only_audit"
+            cmd_rbr=[str(Path(exe_path).resolve()),"--cli",
+                     "--audit-existing","--only-rbr",
+                     "--existing-rbr",str(fixture.existing),
+                     "--rbr",str(fixture.baseline),
+                     "--mod",str(fixture.fixture.inp["mod"]),
+                     "--def1",str(fixture.fixture.inp["def1"]),
+                     "--def2",str(fixture.fixture.inp["def2"]),
+                     "--txt",str(audittxt),"--output",str(rbr_single)]
+            ran_rbr=subprocess.run(cmd_rbr,timeout=120,check=False)
+            if ran_rbr.returncode:
+                raise RuntimeError("Auditoria EXE somente RBR falhou")
+            assert len(list(rbr_single.glob("ETS2_RBR_AUDITADA_V25_*.scs")))==1
+            assert (rbr_single/"AUDITORIA_RBR.json").exists()
+            print("EXE auditou RBR independentemente, preservando outros mapas")
             # Compilado de verdade: 24 cargas + 3 mapas ->
             # SCS candidatos somente apos segunda auditoria sem mutacoes.
             with zipfile.ZipFile(fixture.fixture.inp["mod"]) as arc:
