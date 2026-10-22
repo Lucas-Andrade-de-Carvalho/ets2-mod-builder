@@ -333,6 +333,105 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertFalse(result["status"]=="AUDITORIA_ESTRUTURAL_CONCLUÍDA")
 
 
+    def test_minas_eldorado_cotton_coconut_regional_scs_without_changing_rbr(self):
+        """Excecao de pluma/coco gera cargas novas nos dois mapas mas
+        RBR permanece byte a byte idêntico e nao é aberto."""
+        from gerador import MANIFEST
+        # O mod sintetico de base tem 23 cargas; adicionar a vigesima quarta
+        # no mesmo formato do cargo_data, preservando as 23 primeiras.
+        mod=self.fixture.inp["mod"]
+        with zipfile.ZipFile(mod) as z:
+            items={name:z.read(name) for name in z.namelist()}
+        items["def/cargo/carga24.sui"]=(
+            b"cargo_data : cargo.carga24 {\n body_types[]: alta\n}\n")
+        zip_write(mod,items)
+        txt=self.root/"cargas_regionais_24.txt"
+        txt.write_text(
+            "\n".join("carga"+str(n)+" = "+title
+                      for n,(_cat,title) in MANIFEST.items())+
+            "\ncarga24 = Coco\n",encoding="utf-8")
+        map_base={
+            "fazenda_milho/in/fertilizer.sii":old("fertilizer"),
+            "fazenda_milho/out/corn.sii":old("corn"),
+            "fazenda_batata/out/potatoes.sii":old("potatoes"),
+            "silo_central/in/corn.sii":old("corn"),
+            "cooperativa_vale/in/soybeans.sii":old("soybeans"),
+            "martminas/in/potatoes.sii":old("potatoes"),
+            "mercearia_jardim/in/beer.sii":old("beer"),
+            "ceasa_centro/in/oranges.sii":old("oranges"),
+            "construcao_01/in/bricks.sii":old("bricks"),
+            "posto_combustivel/in/diesel.sii":old("diesel"),
+        }
+        defs={}
+        companies={}
+        for region in ("Minas_Gerais","Eldorado"):
+            map_file=self.root/(region+"_regional_def.zip")
+            zip_write(map_file,map_base)
+            comp_file=self.root/(region+"_regional_company.scs")
+            zip_write(comp_file,{"ReadMe.txt":b"ORIGINAL PRESERVADO"})
+            defs[region]={"existing":comp_file,"map_def":map_file}
+            companies[region]=comp_file.read_bytes()
+        out=self.root/"saida_pluma_coco_so_minas_eldorado"
+        out.mkdir()
+        untouched_rbr=out/"ETS2_RBR_AUDITADA_ANTERIOR.scs"
+        untouched_rbr.write_bytes(b"RBR_NAO_ALTERAR_NUNCA")
+        inputs={k:self.fixture.inp[k] for k in ("mod","def1","def2")}
+        inputs["txt"]=txt
+        reports=audit.run(g,defs,out,professional=True,source_files=inputs)
+        self.assertEqual({x["mapa"] for x in reports},{"Minas_Gerais","Eldorado"})
+        self.assertEqual(untouched_rbr.read_bytes(),b"RBR_NAO_ALTERAR_NUNCA")
+        self.assertFalse((out/"AUDITORIA_RBR.json").exists())
+        for report in reports:
+            with self.subTest(map=report["mapa"]):
+                region=report["mapa"]
+                self.assertEqual(defs[region]["existing"].read_bytes(),
+                                 companies[region])
+                self.assertGreater(report["permissoes_adaptacao_regional_adicionadas"],0)
+                cotton=report["rotas_depois"]["carga5"]
+                coconut=report["rotas_depois"]["carga24"]
+                self.assertGreater(cotton["pares_distintos"],0)
+                self.assertGreater(coconut["pares_distintos"],0)
+                with zipfile.ZipFile(out/report["arquivo_corrigido"]) as z:
+                    members=set(z.namelist())
+                    self.assertIsNone(z.testzip())
+                    for farm in ("fazenda_milho","fazenda_batata"):
+                        for cargo in ("carga5","carga24"):
+                            self.assertIn(
+                                f"def/company/{farm}/out/audit_{cargo}.sii",members)
+                    for dst in ("silo_central","cooperativa_vale"):
+                        self.assertIn(
+                            f"def/company/{dst}/in/audit_carga5.sii",members)
+                        self.assertNotIn(
+                            f"def/company/{dst}/in/audit_carga24.sii",members)
+                    for dst in ("martminas","mercearia_jardim","ceasa_centro"):
+                        self.assertIn(
+                            f"def/company/{dst}/in/audit_carga24.sii",members)
+                        self.assertNotIn(
+                            f"def/company/{dst}/in/audit_carga5.sii",members)
+                    for bad in ("construcao_01","posto_combustivel"):
+                        for cargo in ("carga5","carga24"):
+                            self.assertNotIn(
+                                f"def/company/{bad}/in/audit_{cargo}.sii",members)
+                            self.assertNotIn(
+                                f"def/company/{bad}/out/audit_{cargo}.sii",members)
+                    self.assertEqual(z.read("ReadMe.txt"),
+                                     b"ORIGINAL PRESERVADO")
+                quality=report["qualidade_logistica"]
+                self.assertGreater(
+                    quality["cargas"]["carga5"]["pares_simulacao_regional"],0)
+                self.assertGreater(
+                    quality["cargas"]["carga24"]["pares_simulacao_regional"],0)
+                self.assertEqual(
+                    quality["cargas"]["carga24"]["pares_economicos_distintos"],0)
+                decisions=[d for d in report["decisoes"]
+                           if d["acao"]=="ADICIONAR_ADAPTACAO_REGIONAL"]
+                self.assertTrue(decisions)
+                self.assertEqual(
+                    {d["carga"] for d in decisions},{"carga5","carga24"})
+                self.assertTrue(all(
+                    d["fonte"]=="SIMULACAO_ECONOMICA_REGIONAL_AUTORIZADA"
+                    for d in decisions))
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
