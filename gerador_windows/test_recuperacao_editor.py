@@ -77,6 +77,42 @@ class RecoverEditorTests(unittest.TestCase):
         self.assertEqual(result["editor_recuperado_company_existente"],0)
 
 
+class RealAuditorRecoveryRegression(unittest.TestCase):
+    def test_professional_audit_uses_existing_and_optional_editor_without_new_prefabs(self):
+        import zipfile
+        import auditor_existentes as audit
+        from test_auditor_existentes import AuditorSCSRegression
+        fixture=AuditorSCSRegression()
+        fixture.setUp()
+        try:
+            with zipfile.ZipFile(fixture.existing) as z:
+                payload={name:z.read(name) for name in z.namelist()}
+            payload["def/company/ambev/editor/itumbiara.sii"]=editor(
+                "itumbiara","cerveja_yard")
+            zip_write(fixture.existing,payload)
+            additional=fixture.root/"editor_suplementar_mg.zip"
+            zip_write(additional,{
+                "def/company/gerdau/editor/setelagoas.sii":
+                    editor("setelagoas","sidyard")
+            })
+            result=audit.run(g,{
+                "Minas_Gerais":{"existing":fixture.existing,
+                                "map_def":fixture.baseline,
+                                "editor_source":additional}
+            },fixture.root/"audit_editor",mode="auditar",professional=True,
+                 source_files={k:fixture.fixture.inp[k]
+                               for k in ("mod","def1","def2")})[0]
+            evidence=result["recuperacao_editor"]
+            self.assertEqual(evidence["editor_recuperado_company_existente"],1)
+            self.assertEqual(evidence["editor_recuperado_fonte_adicional"],1)
+            self.assertEqual(evidence["total_editor_depois"],2)
+            self.assertEqual(result["matriz_empresa_cidade"]["total_instancias_editor"],2)
+            self.assertEqual(len(result["unidades_cidade_compativeis_esquecidas"]),0)
+            self.assertTrue(result["nenhum_scs_gerado"])
+        finally:
+            fixture.tearDown()
+
+
 class EldoradoEconomicIdentifiers(unittest.TestCase):
     def test_mosaic_and_cement_industry_are_specific_producers(self):
         for id in ("mosaico","mosaico2"):
