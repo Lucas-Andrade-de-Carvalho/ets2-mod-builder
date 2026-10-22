@@ -1487,50 +1487,38 @@ def run_gui():
                 (x.get("qualidade_logistica") or {}).get(
                     "cargas_candidatas_teste_ets2",0) for x in results)
             total_cargos=sum(x["total_cargas_catalogo"] for x in results)
-            msg=(str(len(results))+" Company(s) examinada(s). "+
-                 str(review)+" revisoes pontuais; "+
-                 str(companies)+" empresas com classificacao pendente e permissoes herdadas; "+
-                 str(entire_def_unknown)+" empresas sem atividade identificada na DEF inteira ("+
-                 str(unverified)+" permissoes antigas preservadas). "+
-                 str(editor_instances)+" instancias de empresa identificadas em editor; "+
-                 ("mapas sem dados editor: "+", ".join(missing_editor_maps)+". "
-                  if missing_editor_maps else "")+
-                 str(route_gaps)+" cadeias sem par registrado. "+
-                 str(economical)+"/"+str(total_cargos)+
-                 " cadeias com justificativa economica; "+
-                 str(playable_candidates)+"/"+str(total_cargos)+
-                 " candidatas a teste no ETS2. "+
-                 ("Novos SCS exportados SEM homologacao; originais intactos. "
-                  if mode=="corrigir" else "Nenhum SCS gerado. ")+
-                 "Veja RESUMO_VALIDACAO_*.txt e PENDENCIAS_CLASSIFICACAO_*.csv. "+
-                 "Nao entregar ao cliente sem validar DEF e ETS2.")
-            coverages=[
-                (row["mapa"],row.get("cobertura_maxima_empresas") or {})
-                for row in results
-                if row.get("cobertura_maxima_empresas")
+            summary_lines=[
+                str(len(results))+" Company(s) examinadas; "+
+                ("novos SCS exportados SEM HOMOLOGACAO ETS2."
+                 if mode=="corrigir" else "auditoria sem gerar SCS."),
+                "Cadeias: "+str(total_cargos-route_gaps)+"/"+str(total_cargos)+
+                " com algum par IN/OUT; "+str(economical)+"/"+
+                str(total_cargos)+" com atividade economica identificada; "+
+                str(playable_candidates)+"/"+str(total_cargos)+
+                " com ambas empresas documentadas no editor.",
+                str(review)+" revisoes pontuais; "+str(entire_def_unknown)+
+                " empresas sem setor definido; "+str(unverified)+
+                " permissoes antigas preservadas sem comprovacao.",
+                "COBERTURA ENTRE EMPRESAS RECONHECIDAS (NAO sobre toda a DEF):"
             ]
-            if coverages:
-                report_parts=[]
-                for map_name,coverage in coverages:
-                    report_parts.append(
-                        map_name+": "+
-                        str(coverage["empresas_reconhecidas_totalmente_contempladas"])+"/"+
-                        str(coverage["empresas_reconhecidas_com_ao_menos_uma_carga"])+
-                        " empresas reconhecidas compativeis com IN/OUT completos; "+
-                        str(coverage["empresas_sem_classificacao"])+
-                        " nao classificadas ("+
-                        str(coverage["desconhecidas_com_sinais_de_carga_a_investigar"])+
-                        " com indicios para investigar); "+
-                        str(coverage["instancias_editor_detectadas"])+
-                        " unidades editor."
-                    )
-                msg+=(
-                    " COBERTURA POR EMPRESA/CIDADE: "+
-                    " | ".join(report_parts)+
-                    " Confira COBERTURA_MAXIMA_<MAPA>.csv e "+
-                    "<MAPA>_REVISAO_ECONOMICA_PRIORIZADA.csv. "+
-                    "Nao equivale a 100% de cobertura comprovada ou frete homologado."
-                )
+            for entry in results:
+                cover=entry.get("cobertura_maxima_empresas") or {}
+                missing=entry.get("cargas_sem_rota_validada",[])
+                gaps=", ".join(missing) if missing else "nenhuma"
+                summary_lines.append(
+                    entry["mapa"]+": "+
+                    str(cover.get("empresas_reconhecidas_totalmente_contempladas",0))+
+                    "/"+str(cover.get("empresas_reconhecidas_com_ao_menos_uma_carga",0))+
+                    " compativeis atendidas; "+
+                    str(cover.get("empresas_sem_classificacao",0))+
+                    " sem classificacao; "+
+                    str(cover.get("instancias_editor_detectadas",0))+
+                    " editor; sem par: "+gaps+".")
+            summary_lines.append(
+                "Veja PAINEL_GERAL_LOGISTICA_V3.txt e "+
+                "COBERTURA_MAXIMA_<MAPA>.csv. 100% das conhecidas NAO e "+
+                "100% do mapa, nem homologacao de fretes no ETS2.")
+            msg="\\n".join(summary_lines)
             work_queue.put(("success",msg))
         except Exception as exc:
             work_queue.put(("error",str(exc)))
