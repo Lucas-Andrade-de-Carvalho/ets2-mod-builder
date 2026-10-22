@@ -132,6 +132,41 @@ class RBRCoverageReport(unittest.TestCase):
             self.assertEqual(len(review_rows),1)
             self.assertEqual(review_rows[0]["empresa"],"agro_duvidoso")
 
+    def test_same_company_coverage_contract_for_all_three_maps(self):
+        companies,territory,active=self.fake()
+        quality={"cargas_com_par_economico_comprovavel":24,
+                 "cargas_candidatas_teste_ets2":24}
+        cargo_manifest={i:("laranja","Sacos de Laranja") for i in range(24)}
+        result=coverage.assess(companies,territory,active,cargo_manifest,quality)
+        self.assertEqual(result["empresas_sem_editor"],4)
+        self.assertEqual(result["cidades_identificadas"],0)
+        self.assertFalse(result["cobertura_100_por_cento_comprovada"])
+        with tempfile.TemporaryDirectory() as temp:
+            for name in ("RBR","ELDORADO","MINAS_GERAIS"):
+                coverage.write(temp,result,name)
+                self.assertTrue((Path(temp)/("COBERTURA_MAXIMA_"+name+".json")).exists())
+                self.assertTrue((Path(temp)/("COBERTURA_MAXIMA_"+name+".csv")).exists())
+                self.assertTrue((Path(temp)/(name+"_REVISAO_ECONOMICA_PRIORIZADA.csv")).exists())
+                loaded=json.loads((Path(temp)/("COBERTURA_MAXIMA_"+name+".json")).read_text())
+                self.assertEqual(loaded["total_empresas_def"],4)
+                self.assertEqual(loaded["empresas_sem_classificacao"],1)
+            self.assertEqual(
+                len(list(Path(temp).glob("COBERTURA_MAXIMA_*.json"))),3)
+            with self.assertRaises(ValueError):
+                coverage.write(temp,result,"MAPA_INEXISTENTE")
+
+    def test_no_editor_never_implies_city_homologation(self):
+        companies,territory,active=self.fake()
+        for key in companies:
+            territory["instancias_cidade"].append({
+                "empresa":key,"cidade":"divinopolis"})
+        data=coverage.assess(companies,territory,active,
+                            {i:("laranja","Sacos de Laranja") for i in range(24)},
+                            {"cargas_com_par_economico_comprovavel":24,
+                             "cargas_candidatas_teste_ets2":0})
+        self.assertEqual(data["cargas_candidatas_teste"],0)
+        self.assertFalse(data["cobertura_100_por_cento_comprovada"])
+
     def test_missing_known_company_is_reported_separately_from_24_cargos(self):
         companies,territory,active=self.fake()
         active["frucamp"]["in"].clear()
