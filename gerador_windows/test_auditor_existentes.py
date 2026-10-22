@@ -183,6 +183,51 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertNotEqual(reports[0]["status"],"AUDITORIA_ESTRUTURAL_CONCLUÍDA")
 
 
+    def test_three_map_dashboard_never_uses_documentary_100_as_game_100(self):
+        items=[]
+        for map_name in ("Minas_Gerais","Eldorado","RBR"):
+            items.append({
+                "mapa":map_name,"empresas_na_def":7,
+                "total_cargas_catalogo":24,"pendencias_revisao":0,
+                "cobertura_maxima_empresas":{
+                    "empresas_sem_classificacao":1,
+                    "empresas_sem_editor":1,
+                    "empresas_compativeis_sem_editor_valido":1,
+                    "cidades_identificadas":0,
+                    "permissoes_justificadas":24,
+                    "permissoes_justificadas_atendidas":24,
+                    "cobertura_permissoes_justificadas_pct":100.0},
+                "qualidade_logistica":{
+                    "cargas_com_par_cadastrado":24,
+                    "cargas_com_par_evidencia_inout":24,
+                    "cargas_com_par_economico_comprovavel":23,
+                    "cargas_candidatas_documentais_teste":0,
+                    "cargas_candidatas_teste_ets2":0,
+                    "cargas":{"carga"+str(i):{
+                        "pares_economicos_distintos":1 if i<24 else 0,
+                        "pares_com_evidencia_inout_distintos":1,
+                        "pares_com_editor_em_ambas_empresas":0
+                        } for i in range(1,25)}})
+        path=self.root/"dashboard_only"
+        summary=audit._write_three_map_dashboard(path,items,simulated=True)
+        self.assertEqual(summary["mapas_analisados"],3)
+        self.assertTrue(summary["simulacao_sem_escrita_scs"])
+        self.assertFalse(summary["homologado_no_ets2"])
+        self.assertEqual(len(summary["mapas"]),3)
+        for report in summary["mapas"]:
+            self.assertEqual(report["pct_permissoes_justificadas"],100.0)
+            self.assertEqual(report["cargas_com_par_documental"],24)
+            self.assertEqual(report["cargas_com_par_economico"],23)
+            self.assertIn("carga24",report["cargas_sem_par_economico"])
+            self.assertEqual(report["status"],"ANALISE_PENDENTE")
+            self.assertFalse(report["homologado_no_ets2"])
+        self.assertTrue((path/"PAINEL_GERAL_LOGISTICA_V3.json").exists())
+        txt=(path/"PAINEL_GERAL_LOGISTICA_V3.txt").read_text(
+            encoding="utf-8")
+        self.assertIn("24/24 cargas",txt)
+        self.assertIn("23/24 cargas",txt)
+        self.assertIn("SIMULACAO",txt)
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
