@@ -104,7 +104,16 @@ def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
     why=safe_reason(g,c,cat,direction,map_name,professional=professional,spec=spec)
     explicit_custom=(spec is not None and
                      professional_policy.norm(c.name) in spec.get(direction+"_companies", ()))
-    if not why or not (explicit_confidence(c) or explicit_custom):return None
+    if not why:return None
+    if professional and c.role=="desconhecida" and spec is None:
+        # Uma empresa ficticia nao precisa ter ramo conhecido para usar
+        # uma das variantes Librelato da MESMA mercadoria do IN/OUT original.
+        # Nao permite nova categoria nem troca de direcao sem evidencia.
+        original=(c.old_in if direction=="in" else c.old_out)
+        if cat in professional_policy.cargo_categories(original):
+            return "equivalencia comprovada pelo IN/OUT da DEF: "+why
+        return None
+    if not (explicit_confidence(c) or explicit_custom):return None
     if professional:
         # A politica moderna JA valida as restricoes por ramo, produto
         # e evidencia dos IN/OUT originais.
