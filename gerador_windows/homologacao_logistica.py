@@ -46,10 +46,22 @@ def assess(baseline, active, manifest, extras, policy, catalog):
                     reasons[direction+":"+name]=verdict.reason
         potential_in=accepted["in"]
         potential_out=accepted["out"]
-        pairs={(src,dst) for src in potential_out for dst in potential_in if src!=dst}
-        editor_pairs={(src,dst) for src,dst in pairs
-                      if evaluated[src]["editor"] and evaluated[dst]["editor"]}
-        all_pairs=sum(src!=dst for src in all_out for dst in all_in)
+        # Contar sem construir todas as combinacoes na memoria.
+        # Um mapa com milhares de empresas pode gerar milhoes de pares.
+        pairs=len(potential_out)*len(potential_in)-len(potential_out & potential_in)
+        editor_out={src for src in potential_out if evaluated[src]["editor"]}
+        editor_in={dst for dst in potential_in if evaluated[dst]["editor"]}
+        editor_pairs=len(editor_out)*len(editor_in)-len(editor_out & editor_in)
+        all_pairs=len(all_out)*len(all_in)-len(all_out & all_in)
+        candidates=[]
+        for src in sorted(editor_out):
+            for dst in sorted(editor_in):
+                if src==dst:continue
+                candidates.append({"origem":src,"destino":dst,
+                                   "motivo_origem":reasons["out:"+src],
+                                   "motivo_destino":reasons["in:"+dst]})
+                if len(candidates)>=30:break
+            if len(candidates)>=30:break
         blockers=[]
         if not all_pairs:
             blockers.append("Sem par IN/OUT cadastrado entre empresas distintas")
@@ -71,13 +83,10 @@ def assess(baseline, active, manifest, extras, policy, catalog):
             "origens_ativas":len(all_out),"destinos_ativos":len(all_in),
             "origens_com_evidencia":sorted(potential_out),
             "destinos_com_evidencia":sorted(potential_in),
-            "pares_economicos_distintos":len(pairs),
-            "pares_com_editor_em_ambas_empresas":len(editor_pairs),
-            "candidatos_para_teste":[{"origem":src,"destino":dst,
-                                      "motivo_origem":reasons["out:"+src],
-                                      "motivo_destino":reasons["in:"+dst]}
-                                     for src,dst in sorted(editor_pairs)[:30]],
-            "candidatos_truncados":max(0,len(editor_pairs)-30),
+            "pares_economicos_distintos":pairs,
+            "pares_com_editor_em_ambas_empresas":editor_pairs,
+            "candidatos_para_teste":candidates,
+            "candidatos_truncados":max(0,editor_pairs-30),
             "bloqueios":blockers,
             "homologado_no_ets2":False,
         }
