@@ -196,6 +196,34 @@ def main(exe_path):
             cargostxt=fixture.root/"24_cargas.txt"
             cargostxt.write_text(audittxt.read_text(encoding="utf-8")+
                                  "\ncarga24 = Coco\n",encoding="utf-8")
+            # Preflight REAL de 24 tipos de carga para RBR isolado.
+            # Nao deve exigir MG/Eldorado, inventar entregas nem aprovar
+            # os mapas sinteticos que carecem de cadeia economica.
+            rbr_preflight=fixture.root/"rbr_24_preflight_exe"
+            pre_rbr=[str(Path(exe_path).resolve()),"--cli",
+                     "--preflight-real","--only-rbr",
+                     "--mod",str(mod24),
+                     "--def1",str(fixture.fixture.inp["def1"]),
+                     "--def2",str(fixture.fixture.inp["def2"]),
+                     "--txt",str(cargostxt),
+                     "--rbr",str(fixture.baseline),
+                     "--existing-rbr",str(fixture.existing),
+                     "--output",str(rbr_preflight)]
+            pre_rbr_result=subprocess.run(pre_rbr,timeout=180,check=False)
+            if pre_rbr_result.returncode==0:
+                raise RuntimeError("Preflight RBR concedeu homologacao indevida")
+            one=json.loads((rbr_preflight/"RESULTADO_PRE_HOMOLOGACAO.json"
+                           ).read_text(encoding="utf-8"))
+            assert one["preflight_isolado"]
+            assert one["mapas_esperados"]==["RBR"]
+            assert one["ensaios_de_jogo_planejados"]==24
+            assert not one["homologado_no_ets2"]
+            assert not (rbr_preflight/"02_MAPAS"/"AUDITORIA_ELDORADO.json").exists()
+            import csv
+            with (rbr_preflight/"MATRIZ_ENSAIOS_ETS2.csv").open(
+                    newline="",encoding="utf-8-sig") as fp:
+                assert len(list(csv.DictReader(fp,delimiter=";")))==24
+            print("EXE RBR preflight gerou checklist 24/24 e nao exigiu MG/Eldorado")
             delivered=fixture.root/"exe_finalizacao_offline"
             cmd=[str(Path(exe_path).resolve()),"--cli","--finalize-offline",
                  "--mod",str(mod24),
