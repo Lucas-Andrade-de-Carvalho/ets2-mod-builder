@@ -269,6 +269,61 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertEqual(z.read("Info.txt"),b"KEEP ORIGINAL")
         self.assertGreater(original.stat().st_size,0)
 
+    def test_rbr_real_sector_corrections_preserve_crop_rotation_as_hypothesis(self):
+        """Auditoria binaria: remove fretes minerais/combustivel falsos e
+        mantem sorghum em fazenda/silo SOMENTE quando herdado e plausivel."""
+        map_def=self.root/"rbr_correcao_final_evidencias.zip"
+        zip_write(map_def,{
+            "faz_milho/in/fertilizante.sii":old("fertilizante"),
+            "faz_milho/out/milho_a.sii":old("milho_a"),
+            "acs_armazem/in/milho_a.sii":old("milho_a"),
+            "acs_armazem/out/milho_a.sii":old("milho_a"),
+            "mineracao1/out/brita.sii":old("brita"),
+            "mineracao1/out/minerio.sii":old("minerio"),
+            "go_petrobras/in/gasolina.sii":old("gasolina"),
+            "go_petrobras/out/tanqvazio.sii":old("tanqvazio"),
+            "extracao1/in/troncos.sii":old("troncos"),
+            "extracao1/out/moveis.sii":old("moveis")
+        })
+        original=self.root/"rbr_company_herdada.scs"
+        keep={
+            "def/company/faz_milho/out/carga23.sii":g.cargo_sii("carga23"),
+            "def/company/acs_armazem/in/carga23.sii":g.cargo_sii("carga23"),
+            "def/company/mineracao1/out/carga2.sii":g.cargo_sii("carga2"),
+            "def/company/go_petrobras/in/carga1.sii":g.cargo_sii("carga1"),
+            "def/company/extracao1/out/carga8.sii":g.cargo_sii("carga8"),
+            "note.txt":b"PRESERVAR"
+        }
+        zip_write(original,keep)
+        backup=original.read_bytes()
+        path=self.root/"rbr_qualidade_final"
+        src=self.fixture.inp
+        reports=audit.run(g,{"RBR":{"existing":original,"map_def":map_def}},
+                          path,professional=True,source_files={
+                              n:src[n] for n in ("mod","def1","def2")})
+        self.assertEqual(original.read_bytes(),backup)
+        result=reports[0]
+        self.assertGreaterEqual(result["permissoes_plausiveis_sem_evidencia_def"],2)
+        hyp=[d for d in result["decisoes"] if d["acao"]=="MANTER_PLAUSIVEL"]
+        self.assertIn(("faz_milho","carga23"),
+                      [(x["empresa"],x["carga"]) for x in hyp])
+        self.assertIn(("acs_armazem","carga23"),
+                      [(x["empresa"],x["carga"]) for x in hyp])
+        with zipfile.ZipFile(path/result["arquivo_corrigido"]) as z:
+            self.assertIsNone(z.testzip())
+            self.assertEqual(z.read("note.txt"),b"PRESERVAR")
+            for file in (
+                "def/company/faz_milho/out/carga23.sii",
+                "def/company/acs_armazem/in/carga23.sii"):
+                self.assertIn("carga23",g.read_sii(z.read(file)))
+            for file in (
+                "def/company/mineracao1/out/carga2.sii",
+                "def/company/go_petrobras/in/carga1.sii",
+                "def/company/extracao1/out/carga8.sii"):
+                self.assertEqual(g.cargo_tokens(z.read(file)),set())
+        self.assertFalse(result["status"]=="AUDITORIA_ESTRUTURAL_CONCLUÍDA")
+
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
