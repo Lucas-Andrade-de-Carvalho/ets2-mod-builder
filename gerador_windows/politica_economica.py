@@ -36,7 +36,8 @@ ROLES=(
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
     ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
     ("madeireira",r"madeireira|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
-    ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro"),
+    ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro|^nutrition$|^trouw_nutrition$"),
+    ("revenda_racao",r"^raguife$|(?:^|_)racoes(?:_|$)|feed_store|loja_racao"),
     ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo|^cimoagro$"),
     ("silo",r"silo|armazem|armazens|armz|grain_elevator|grain_storage|cerealista|caramuru"),
     ("cooperativa",r"cooper|coamo|^coop|camda|comigo"),
@@ -200,6 +201,8 @@ def decide(company,category,direction,identity=None):
             return permit("madeireira fornece paletes")
         if role=="agroinsumos" and category in {"adubo","racao","sorgo"}:
             return permit("agropecuaria fornece insumo ou alimento animal solicitado pelo comprador")
+        if role=="revenda_racao" and category=="racao":
+            return permit("comercio especializado revende racao animal")
         if role=="beneficiadora_algodao" and category=="algodao":
             return permit("algodoeira expede pluma beneficiada")
         if role=="comercio_graos" and category in GRAIN_CLASSES and category in old:
@@ -237,6 +240,8 @@ def decide(company,category,direction,identity=None):
         return permit("industria alimenticia usa materia-prima documentada","IN original")
     if role=="agroinsumos" and category in {"adubo","racao","sorgo"}:
         return permit("agropecuaria reabastece mercadoria para revenda")
+    if role=="revenda_racao" and category=="racao":
+        return permit("comercio de racoes recebe mercadoria para revenda")
     if role=="fabrica_racao" and category in GRAIN_CLASSES:
         return permit("fabrica de racao compra materia-prima para fabricar alimento animal")
     if role in {"silo","cooperativa"} and category in GRAIN_CLASSES and category in old:
