@@ -135,6 +135,15 @@ class Identity:
 
 def classify(company):
     identifier=norm(company.name)
+    # Empresas MG com identificadores abreviados: confirmar a especie
+    # pela carga original antes de classificar. Nunca inventar colheita.
+    if identifier=="batatfazpgra" and "batata" in cargo_categories(company.old_out):
+        return Identity("fazenda_batata","alta",
+                        "fazenda produtora + OUT batata documentado na DEF")
+    if identifier=="araragrao" and (
+            GRAIN_CLASSES & cargo_categories(company.old_in|company.old_out)):
+        return Identity("comercio_graos","alta",
+                        "comercio de graos + especie documentada na DEF")
     # Eldorado: rocasoja aparece expedindo soja na DEF original.
     # Sem OUT documental, nao presumir propriedade/colheita pelo ID.
     if identifier=="rocasoja" and "soja" in cargo_categories(company.old_out):
