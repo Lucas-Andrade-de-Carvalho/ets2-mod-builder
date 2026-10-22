@@ -165,30 +165,49 @@ def product_types(tokens):
     return out
 
 def zip_members(path, wanted=None):
-    """Le ZIPs e .scs ZIP; nunca altera os originais."""
+    """Ler SOMENTE as defs necessarias, sem descompactar texturas/modelos.
+
+    MOD de centenas de MB pode ter milhares de texturas. Verificar o
+    caminho ANTES de chamar ZipFile.read e preserva memoria/tempo.
+    Para defs grandes demais ou corruptas, falhar explicitamente.
+    """
     path=Path(path)
+    output={}
+    def acceptable(original):
+        canonical=canonical_path(original)
+        if not canonical or (wanted is not None and not wanted(canonical)):
+            return None
+        return canonical
+    def remember(canonical,raw):
+        if canonical in output and output[canonical]!=raw:
+            raise ValueError("Colisao de caminhos no mesmo arquivo: "+
+                             canonical+" em "+path.name)
+        output[canonical]=raw
+    max_def_bytes=8_000_000
     if path.is_dir():
-        entries=((str(p.relative_to(path)).replace("\\","/"),p.read_bytes()) for p in path.rglob("*") if p.is_file())
+        for item in sorted(path.rglob("*")):
+            if not item.is_file():continue
+            c=acceptable(str(item.relative_to(path)).replace("\\","/"))
+            if c is None:continue
+            if item.stat().st_size>=max_def_bytes:
+                raise ValueError("Definicao acima de 8 MB: "+c)
+            remember(c,item.read_bytes())
     else:
         if not zipfile.is_zipfile(path):
-            raise ValueError(f"'{path.name}' nao e arquivo ZIP/SCS ZIP legivel. Extraia previamente com o SCS Extractor oficial e selecione a pasta extraida.")
-        zf=zipfile.ZipFile(path)
-        infos=[x for x in zf.infolist() if not x.is_dir()]
-        if len(infos)>80000 or sum(x.file_size for x in infos)>1_400_000_000:
-            zf.close();raise ValueError(f"Arquivo excessivo ou suspeito: {path.name}")
-        entries=((x.filename,zf.read(x)) for x in infos if x.file_size<8_000_000)
-    out={}
-    try:
-        for name,data in entries:
-            c=canonical_path(name)
-            if c and (wanted is None or wanted(c)):
-                if c in out and out[c]!=data:
-                    raise ValueError(f"Colisao de caminhos no mesmo arquivo: {c} em {path.name}")
-                out[c]=data
-    finally:
-        if not path.is_dir():zf.close()
-    return out
-
+            raise ValueError(f"'{path.name}' nao e arquivo ZIP/SCS ZIP legivel. "
+                             "Extraia previamente com o SCS Extractor oficial "
+                             "e selecione a pasta extraida.")
+        with zipfile.ZipFile(path) as zf:
+            infos=[x for x in zf.infolist() if not x.is_dir()]
+            if len(infos)>80000 or sum(x.file_size for x in infos)>1_400_000_000:
+                raise ValueError("Arquivo excessivo ou suspeito: "+path.name)
+            for info in infos:
+                c=acceptable(info.filename)
+                if c is None:continue
+                if info.file_size>=max_def_bytes:
+                    raise ValueError("Definicao acima de 8 MB: "+c)
+                remember(c,zf.read(info))
+    return output
 
 def describe_archive(path, limit=50):
     """Diagnostico independente do extrator; funciona ate para ZIPs desconhecidos."""
