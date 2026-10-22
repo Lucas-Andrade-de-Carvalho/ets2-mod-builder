@@ -207,7 +207,7 @@ class AuditorSCSRegression(unittest.TestCase):
                         "pares_economicos_distintos":1 if i<24 else 0,
                         "pares_com_evidencia_inout_distintos":1,
                         "pares_com_editor_em_ambas_empresas":0
-                        } for i in range(1,25)}})
+                        } for i in range(1,25)}}})
         path=self.root/"dashboard_only"
         summary=audit._write_three_map_dashboard(path,items,simulated=True)
         self.assertEqual(summary["mapas_analisados"],3)
