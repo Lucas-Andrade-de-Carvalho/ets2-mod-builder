@@ -12,6 +12,70 @@ from pathlib import Path
 import catalogo_fontes as catalogo
 
 
+def model_loading_evidence(g, sources, records, manifest):
+    """Evidencia 1.54+: modelo, metodo de carga e carroceria real.
+
+    A falta de dados nao e tratada como incompatibilidade comprovada:
+    arquivos base do jogo e mods externos podem suprir dependencias.
+    """
+    body_methods=defaultdict(set)
+    model_units=defaultdict(list)
+    known_files=set()
+    for label,archive in sources:
+        known_files.update(archive)
+        for path,raw in archive.items():
+            if path.startswith("def/vehicle/trailer_owned/") and "/body/" in path:
+                text=g.read_sii(raw)
+                bodies=set(g.RE_TRAILER_BODY.findall(text))
+                methods=set(re.findall(
+                    r"(?im)^\s*cargo_loading_methods(?:\[\s*\d*\s*\])?\s*:\s*([a-z0-9_]+)",
+                    text))
+                for body in bodies:
+                    body_methods[body].update(methods)
+            if not re.fullmatch(r"def/vehicle/cargo/[a-z0-9_]+/[^/]+\.(?:sii|sui)",
+                                path):
+                continue
+            text=g.read_sii(raw)
+            if not re.search(r"\bcargo_model_match\s*:",text,re.I):
+                continue
+            cid=path.split("/")[3]
+            methods=set(re.findall(
+                r"(?im)^\s*loading_method\s*:\s*([a-z0-9_]+)",text))
+            refs=re.findall(
+                r"""(?im)^\s*data_path(?:\[\s*\d*\s*\])?\s*:\s*['"]?(/def/vehicle/cargo/[a-z0-9_./-]+)""",
+                text)
+            model_units[cid].append({
+                "arquivo":path,
+                "fonte":label,
+                "loading_methods":sorted(methods),
+                "accessories_referenciados":sorted(set(x.lstrip("/") for x in refs))
+            })
+    result={}
+    for key in manifest:
+        cid=g.catalogo_cargas.cargo_id(key)
+        required_bodies=set(records[cid]["body"])
+        allowed_methods=set().union(
+            *(body_methods[b] for b in required_bodies)) if required_bodies else set()
+        units=model_units.get(cid,[])
+        actual_methods={x for unit in units for x in unit["loading_methods"]}
+        refs={x for unit in units for x in unit["accessories_referenciados"]}
+        missing=sorted(refs-known_files)
+        explicit_mismatch=(bool(actual_methods and allowed_methods) and
+                           not bool(actual_methods & allowed_methods))
+        result[cid]={
+            "cargo_model_match_nas_fontes":units,
+            "metodos_do_modelo":sorted(actual_methods),
+            "metodos_das_carrocerias":sorted(allowed_methods),
+            "modelos_referenciados_ausentes_nas_fontes":missing,
+            "incompatibilidade_explicita_de_metodos":explicit_mismatch,
+            "status":("CONFLITO_DE_METODO" if explicit_mismatch else
+                      "MODELO_ENCONTRADO" if units else
+                      "SEM_MODELO_NAS_TRES_FONTES"),
+            "alerta":"Nao prova disponibilidade no ETS2. Dados podem depender do jogo base/terceiros."
+        }
+    return result
+
+
 def inspect(g, source_files, txt_path, output):
     sources=[]
     fingerprints=[]
@@ -94,6 +158,15 @@ def inspect(g, source_files, txt_path, output):
             "ocorrencias_originais":definitions.get(cid,[]),
             "validado_no_ets2":False,
         })
+    modern_models=model_loading_evidence(g,sources,records,manifest) if manifest else {}
+    for cid,data in modern_models.items():
+        if data["incompatibilidade_explicita_de_metodos"]:
+            warnings.append(cid+": metodo de carga do modelo nao coincide com "
+                            "cargo_loading_methods das carrocerias declaradas; "
+                            "revisar arquivos 1.54+.")
+        if data["modelos_referenciados_ausentes_nas_fontes"]:
+            warnings.append(cid+": accessory_cargo_data nao encontrado nos "
+                            "tres arquivos; verificar dependencias externas.")
     report={
         "resultado":"BLOQUEADO" if errors else
                     ("REVISAO_NECESSARIA" if warnings else "TECNICAMENTE_COHERENTE"),
@@ -104,6 +177,7 @@ def inspect(g, source_files, txt_path, output):
         "cargas_adicionais":sorted(extras,key=catalogo.sort_key),
         "carrocerias_encontradas":sorted(owned),
         "trailer_defs_encontrados":sorted(ownable_defs),
+        "carga_modelo_154":modern_models,
         "totais_tecnicos":totals,
         "cargas":cargos,
         "definicoes_duplicadas_ou_divergentes":conflicts,
