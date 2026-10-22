@@ -451,6 +451,61 @@ class RBRCoverageReport(unittest.TestCase):
         active["frucamp"]["in"].add("carga8")
         return objs,{"empresas":labels,"instancias_cidade":[]},active
 
+    def test_fictional_company_documentary_coverage_measured_separately_from_game(self):
+        # Empresa ficticia sem ramo identificavel; os quatro direitos
+        # derivam apenas de IN corn e OUT cement, nao do nome.
+        company=g.Company("ficcao_157",old_in={"corn"},old_out={"cement"})
+        companies={company.name:company}
+        manifest={1:("milho","Milho"),22:("milho","Milho alto"),
+                  6:("cimento","Cimento"),10:("cimento","Cimento pallet")}
+        territory=p.coverage(companies,manifest)
+        from collections import defaultdict
+        active=defaultdict(lambda:{"in":set(),"out":set()})
+        active[company.name]["in"].add("carga1")
+        active[company.name]["out"].add("carga6")
+        q={"cargas_com_par_economico_comprovavel":4,
+           "cargas_candidatas_teste_ets2":4}
+        incomplete=coverage.assess(companies,territory,active,manifest,q)
+        self.assertEqual(incomplete["permissoes_justificadas"],4)
+        self.assertEqual(incomplete["permissoes_justificadas_atendidas"],2)
+        self.assertEqual(incomplete["cobertura_permissoes_justificadas_pct"],50.0)
+        row=incomplete["empresas"][0]
+        self.assertEqual(row["status"],"SETOR_PENDENTE_PERMISSOES_INCOMPLETAS")
+        self.assertEqual(row["in_faltantes"],["carga22"])
+        self.assertEqual(row["out_faltantes"],["carga10"])
+        self.assertEqual(row["in_originais_def"],["corn"])
+        self.assertEqual(row["out_originais_def"],["cement"])
+        active[company.name]["in"].add("carga22")
+        active[company.name]["out"].add("carga10")
+        complete=coverage.assess(companies,territory,active,manifest,q)
+        self.assertEqual(complete["cobertura_permissoes_justificadas_pct"],100.0)
+        self.assertEqual(complete["empresas_sem_classificacao"],1)
+        self.assertEqual(complete["empresas"][0]["status"],
+                         "SETOR_PENDENTE_PERMISSOES_DOCUMENTADAS")
+        self.assertFalse(complete["cobertura_100_por_cento_comprovada"])
+        with tempfile.TemporaryDirectory() as tmp:
+            coverage.write(tmp,complete,"RBR")
+            import csv
+            with (Path(tmp)/"COBERTURA_MAXIMA_RBR.csv").open(
+                    encoding="utf-8-sig",newline="") as fp:
+                saved=list(csv.DictReader(fp,delimiter=";"))
+            self.assertEqual(saved[0]["in_originais_def"],"corn")
+            self.assertEqual(saved[0]["out_originais_def"],"cement")
+            self.assertEqual(saved[0]["permissoes_justificadas"],"4")
+            self.assertEqual(saved[0]["permissoes_justificadas_atendidas"],"4")
+            self.assertTrue((Path(tmp)/"RBR_REVISAO_ECONOMICA_PRIORIZADA.csv").exists())
+
+    def test_empty_documented_denominator_never_claims_100(self):
+        companies,territory,active=self.fake()
+        territory["empresas"]=[
+            {**row,"in_esperados":[],"out_esperados":[]}
+            for row in territory["empresas"]]
+        r=coverage.assess(companies,territory,active,{1:("milho","Milho")},{
+            "cargas_com_par_economico_comprovavel":1,
+            "cargas_candidatas_teste_ets2":1})
+        self.assertIsNone(r["cobertura_permissoes_justificadas_pct"])
+        self.assertFalse(r["cobertura_100_por_cento_comprovada"])
+
     def test_unknown_counts_use_same_documentary_role_as_territorial_matrix(self):
         companies,territory,active=self.fake()
         # Regressao: a classificacao guardada em c.role pode estar
