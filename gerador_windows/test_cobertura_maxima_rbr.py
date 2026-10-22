@@ -379,8 +379,32 @@ class FictionalCompanySectorInference(unittest.TestCase):
         for c in cases:
             with self.subTest(company=c.name):
                 self.assertEqual(p.classify(c).role,"desconhecida")
-                self.assertFalse(p.decide(c,"milho","out").allowed)
+                # Apenas o milho REALMENTE declarado no OUT vira cargo.
+                self.assertEqual(p.decide(c,"milho","out").allowed,
+                                 c.name=="x_mixed")
+                self.assertFalse(p.decide(c,"soja","out").allowed)
                 self.assertFalse(p.decide(c,"cimento","in").allowed)
+
+    def test_one_original_cargo_yields_exact_sister_variants_without_sector(self):
+        comp=g.Company("empresa_ficticia_82",old_in={"corn"},
+                       old_out={"cement"})
+        self.assertEqual(p.classify(comp).role,"desconhecida")
+        row=p.coverage({comp.name:comp},g.MANIFEST)["empresas"][0]
+        self.assertEqual(set(row["in_esperados"]),{"carga1","carga22"})
+        self.assertEqual(set(row["out_esperados"]),{"carga6","carga10","carga11"})
+        self.assertEqual(row["metodo_classificacao"],"pendente_evidencia")
+        self.assertEqual(row["categorias_in_originais"],["milho"])
+        self.assertEqual(row["categorias_out_originais"],["cimento"])
+        self.assertFalse(p.decide(comp,"soja","in").allowed)
+        self.assertFalse(p.decide(comp,"milho","out").allowed)
+        self.assertFalse(p.decide(comp,"cimento","in").allowed)
+        from auditor_existentes import can_add
+        comp.role="desconhecida"
+        comp.explicit_role=False
+        self.assertTrue(can_add(g,comp,"milho","in","RBR",professional=True))
+        self.assertTrue(can_add(g,comp,"cimento","out","RBR",professional=True))
+        self.assertFalse(can_add(g,comp,"soja","in","RBR",professional=True))
+        self.assertFalse(can_add(g,comp,"milho","out","RBR",professional=True))
 
     def test_audit_matrix_contains_every_fictional_company(self):
         examples={
