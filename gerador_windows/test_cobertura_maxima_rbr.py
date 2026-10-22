@@ -289,7 +289,8 @@ class DirectionalINOUTInference(unittest.TestCase):
     def test_martminas_store_gets_all_proven_grocery_categories(self):
         market=g.Company("MartMinas")
         self.assertEqual(p.classify(market).role,"supermercado")
-        row=p.coverage({market.name:market},g.MANIFEST)["empresas"][0]
+        manifest={**g.MANIFEST,24:("coco","Coco")}
+        row=p.coverage({market.name:market},manifest)["empresas"][0]
         self.assertEqual(set(row["in_esperados"]),
                          {"carga7","carga8","carga12","carga24"})
         self.assertEqual(row["out_esperados"],[])
