@@ -122,6 +122,24 @@ class EvidenceFromRealDEF(unittest.TestCase):
         self.assertFalse(p.decide(silo,"soja","in").allowed)
         self.assertFalse(p.decide(silo,"milho","out").allowed)
 
+    def test_city_requires_documented_city_and_prefab_not_filename(self):
+        comp=g.Company("constdivi")
+        comp.editor_files={
+            "def/company/constdivi/editor/cidade_inventada.sii":
+                b"SiiNunit\\n{}\\n",
+            "def/company/constdivi/editor/divinopolis.sii":
+                b"SiiNunit\\n{\\ncompany_def : .divinopolis {\\n"
+                b" city: divinopolis\\n prefab: mg_prefab_01\\n}\\n}\\n",
+        }
+        refs=p.city_references(comp)
+        self.assertEqual(len(refs),1)
+        self.assertEqual(refs[0]["cidade"],"divinopolis")
+        self.assertEqual(refs[0]["prefab_declarado"],"mg_prefab_01")
+        self.assertFalse(refs[0]["prefab_confirmado"])
+        coverage=p.coverage({comp.name:comp},{6:("cimento","Cimento")})
+        self.assertEqual(coverage["total_instancias_editor"],1)
+        self.assertEqual(coverage["instancias_cidade"][0]["cidade"],"divinopolis")
+
     def test_real_map_economic_roles_without_overgeneralizing(self):
         roles={"abcconstru":"obras","constdivi":"obras",
                "constjuatub2":"obras","construai2":"obras",
