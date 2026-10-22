@@ -9,7 +9,7 @@
 | `carga5` — pluma de algodão | Fazendas do próprio mapa, mesmo que a DEF não registre algodão | Silos, armazéns/galpões, cooperativas, beneficiadoras de algodão, indústrias têxteis e distribuidores com atividade coerente |
 | `carga24` — coco | Fazendas do próprio mapa, mesmo sem registro de coco | Supermercados, mercearias, mercadinhos, quitandas, CEASAs e hortifrutis |
 
-O algoritmo não cria empresa, cidade ou prefab; aplica permissões `.sii` somente a empresas **presentes na DEF original**. **Obras, postos de combustível, transportadoras, siderúrgicas e outras unidades incompatíveis não recebem essas cargas.**
+O algoritmo não cria empresa, cidade ou prefab; aplica permissões `.sii` somente a empresas **presentes na DEF original**. **Obras, postos de combustível, transportadoras, siderúrgicas e outras unidades incompatíveis não recebem essas cargas.** Se uma Company antiga já contiver `carga5` ou `carga24` em IN/OUT de obras, postos ou indústrias claramente incompatíveis, o auditor **neutraliza** essas permissões antigas somente nos dois mapas autorizados, preservando o arquivo original.
 
 ## Regra autorizada versus prova original
 
