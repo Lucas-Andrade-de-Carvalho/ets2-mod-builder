@@ -96,7 +96,7 @@ ALIASES={
     "granito":r"granito|granite",
     "bobina":r"bobina|bobinas|steel_coil|steel_coils|steel_roll|coil_steel",
     "cerveja":r"cerveja|cervejas|beer|beers|lager|ale|amstel|brahma|budweiser|devassa|heineken|schin|skol|itaipava",
-    "palete":r"palete|paletes|pallet|pallets|wooden_pallets",
+    "palete":r"palete|paletes|pallet|pallets|wooden_pallets|empty_palet|empty_palets|empty_pallet|empty_pallets|supaletes",
     "racao":r"racao|animal_feed|livestock_feed|feedmeal|compound_feed|xerem",
 }
 # IDs das 24 mercadorias ORIGINAIS, usados somente como evidencia
@@ -361,6 +361,22 @@ def decide(company,category,direction,identity=None):
 
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
+    # Mapa Eldorado: empty_palet em IN/OUT de spani e madereira,
+    # e empty_palet em OUT de kaarfor2. Mapa MG: supaletes em OUT
+    # de abcatacado. Mercadoria concreta, apenas MESMA direcao.
+    # Entradas representam compra/retorno de paletes para armazenagem;
+    # saidas representam reposicao, retorno ou reciclagem.
+    if category=="palete" and documentary and role in {
+        "supermercado","distribuidor","revenda_madeiras","madeireira",
+        "materiais","comercio_materiais_inferido","hortifruti",
+        "silo","cooperativa","entreposto_hortigraos","revenda_racao",
+        "revenda_fertilizante","agroinsumos","fabrica_racao",
+        "cervejaria","alimentos","fabrica_moveis","cimenteira",
+        "ceramica","metalurgica","automotiva_fabrica"}:
+        return permit("paletes vazios/reutilizaveis documentados em "+
+                      direction.upper()+" na DEF original da empresa",
+                      "somente empty_palet/supaletes/palete na direcao registrada")
+
     if role=="mineracao_calcario":
         return forbid("Unidade CSN Arcos expede calcario/brita na DEF; nao e comprovada fonte de bobina nem de granito nas 24 cargas")
     if role=="revenda_agricola_documentada":
