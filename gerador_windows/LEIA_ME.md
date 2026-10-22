@@ -404,3 +404,36 @@ a partir de arquivos SII ou do GitHub Actions.
 Se o computador do cliente não estiver acessível, reportar
 `HOMOLOGACAO_PENDENTE_DE_TESTE_REAL` e não apresentar resultados
 como comprovados.
+
+
+## Finalizacao offline completa (tres mapas)
+
+Novo botao **5. FINALIZAR OFFLINE / REAUDITAR**. Selecionar MOD, DEF1 e DEF2
+do Librelato, TXT de 24 cargas, DEF e Company existente de cada mapa
+(Minas Gerais, Eldorado e RBR), alem da pasta de saida.
+
+Para linha de comando use --cli --finalize-offline, com os mesmos parametros
+--mod, --def1, --def2, --txt, --minas, --eldorado, --rbr,
+--existing-minas, --existing-eldorado, --existing-rbr, --output.
+
+Procedimento:
+1. Diagnostica os 3 SCS do trailer e as 24 mercadorias, body_types e hashes.
+2. Executa auditoria economica e territorial usando as 3 DEFs e Companies reais.
+3. Se os insumos tecnicos forem coerentes, produz as Companies em pasta temporaria.
+4. Reabre cada SCS, verifica ZIP, estrutura, integridade e SHA-256.
+5. Faz uma segunda auditoria. Exige ZERO inclusoes, alteracoes e remocoes
+   residuais, mesmas rotas IN/OUT e hashes de origem imutaveis.
+6. So depois publica juntos em 02_CANDIDATAS_PARA_JOGO/01_SCS_AUDITADOS/.
+   Escreve RESULTADO_FINALIZACAO_OFFLINE.json e duas trilhas de auditoria.
+
+Estados:
+- PRONTO_PARA_TESTE_NO_ETS2: 24 cadeias com evidencia economica e candidatos
+  territoriais por mapa. Ainda NAO prova visibilidade ou entrega no jogo.
+- CANDIDATAS_COM_LACUNAS_DOCUMENTADAS: SCS reaudidados, mas classificacoes
+  e/ou rotas continuam sem comprovacao. Nao e entrega comercial homologada.
+- BLOQUEADO_SEM_ENTREGA ou BLOQUEADO_REAUDITORIA: jamais publicar
+  pacotes parciais; consultar relatorio do bloqueio.
+
+Arquivos com nomes ambiguos nao viram produtores ou compradores ficticios.
+Somente o ETS2 instalado comprova a aparicao do frete, a coleta, a carga
+visual e a entrega; uma compilacao aprovada nao substitui essa prova.
