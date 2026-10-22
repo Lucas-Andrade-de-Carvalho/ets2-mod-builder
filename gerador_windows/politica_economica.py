@@ -45,12 +45,12 @@ ROLES=(
     ("premoldados",r"carmoprem|premold|pre_mold|precast|concrete_products"),
     ("cervejaria",r"ambev|heineken|brahma|cervejaria|brewery|brewing|beer_factory|^grupo_petropolis$|^grupo_p2?$|^cercrystal$|^cerveja_crystal$"),
     ("reciclagem",r"recicl|sucata|sucatao|ferro_velho|ferrovelho|scrapyard|recycling_yard"),
-    ("ceramica",r"ceramica|olaria|brickyard|brick_factory|tijolaria"),
+    ("ceramica",r"ceramica|^ceramfazpgra$|^cerami_para2?$|olaria|brickyard|brick_factory|tijolaria"),
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
-    ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
-    ("madeireira",r"madeireira|^madereira$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$|^extr_rio_p2$|^extracao2$|^extracao_sc$"),
+    ("marmoraria",r"marmoraria|^marmolider$|marmor|granito|granite_shop|stoneworks"),
+    ("madeireira",r"madeireira|^madereira$|^araraserr$|^extrmadserr$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$|^extr_rio_p2$|^extracao2$|^extracao_sc$"),
     ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro|^nutrition$|^trouw_nutrition$"),
-    ("revenda_racao",r"^raguife$|(?:^|_)racoes(?:_|$)|feed_store|loja_racao"),
+    ("revenda_racao",r"^raguife$|^curralracoes$|(?:^|_)racoes(?:_|$)|feed_store|loja_racao"),
     ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo|^cimoagro$"),
     ("silo",r"silo|armazem|armazens|armz|grain_elevator|grain_storage|cerealista|caramuru"),
     ("cooperativa",r"cooper|coamo|^coop|camda|comigo"),
@@ -59,7 +59,7 @@ ROLES=(
     ("textil",r"textil|tecel|fiacao|cotton_mill|textile|spinning_mill"),
     ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem|^itcc2?$|^marcegaglia$"),
     ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|^material(?:ber|se1)$|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_|^leroy_merlin$|^pinheiralvo$|^depo_(?:bh|cacu)$"),
-    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$|^sanbuilders2?$|^konstnr(?:_hs)?2?$|^eldconst2?$|^cons_rbr$|^const_c_g$|^coluna_ma$"),
+    ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^abcconstru$|^construai2$|^const(?:bd|carmopo|divi|juatub[12]|oliveir|pains|pminas|postoju)$|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$|^sanbuilders2?$|^konstnr(?:_hs)?2?$|^eldconst2?$|^cons_rbr$|^const_c_g$|^coluna_ma$"),
     ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^kaarfor2?$|^sellplan2?$|^pr_samsclub$|^mt_mer_reti$|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
     ("alimentos",r"industria_alim|food_processing|cannery|conservas|^arcor"),
@@ -93,6 +93,19 @@ ALIASES={
     "palete":r"palete|paletes|pallet|pallets|wooden_pallets",
     "racao":r"racao|animal_feed|livestock_feed|feedmeal|compound_feed|xerem",
 }
+# IDs das 24 mercadorias ORIGINAIS, usados somente como evidencia
+# quando ja constam em IN/OUT da DEF autentica da empresa.
+# A categoria nao e inferida pelo nome ambiguo (ex.: carga17 nao e laranja).
+LIBRELATO_ID_CATEGORIES={
+    "carga1":"milho", "carga2":"soja", "carga3":"adubo",
+    "carga4":"madeira", "carga5":"algodao", "carga6":"cimento",
+    "carga7":"batata", "carga8":"laranja", "carga9":"bobina",
+    "carga10":"cimento", "carga11":"cimento", "carga12":"cerveja",
+    "carga13":"tijolo", "carga14":"granito", "carga15":"granito",
+    "carga16":"palete", "carga17":"racao", "carga18":"racao",
+    "carga19":"racao", "carga20":"racao", "carga21":"soja",
+    "carga22":"milho", "carga23":"sorgo", "carga24":"coco",
+}
 def norm(v):
     return "".join(ch for ch in unicodedata.normalize("NFKD",str(v).lower())
                    if not unicodedata.combining(ch)).replace("-","_").replace(" ","_")
@@ -100,6 +113,9 @@ def cargo_categories(tokens):
     found=set()
     for tok in tokens:
         tok=norm(tok)
+        if tok in LIBRELATO_ID_CATEGORIES:
+            found.add(LIBRELATO_ID_CATEGORIES[tok])
+            continue
         for category,pattern in ALIASES.items():
             if re.fullmatch(r"(?:rbr_|ros_|cs_)?(?:"+pattern+r")(?:_[ab])?",tok):
                 found.add(category)
