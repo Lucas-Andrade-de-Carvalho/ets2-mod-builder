@@ -64,6 +64,22 @@ class RBRRolePolicy(unittest.TestCase):
         self.assertFalse(p.decide(c,"sorgo","in").allowed)
         self.assertFalse(p.decide(c,"bobina","out").allowed)
 
+    def test_eldorado_cargo_receivers_from_real_company_ids(self):
+        for id in ("eldconst","eldconst2"):
+            with self.subTest(id=id):
+                c=g.Company(id)
+                self.assertEqual(p.classify(c).role,"obras")
+                for cat in ("cimento","tijolo","madeira","granito"):
+                    self.assertTrue(p.decide(c,cat,"in").allowed)
+                    self.assertFalse(p.decide(c,cat,"out").allowed)
+                self.assertFalse(p.decide(c,"cerveja","in").allowed)
+        seller=g.Company("itaacos")
+        self.assertEqual(p.classify(seller).role,"revenda_aco")
+        self.assertFalse(p.decide(seller,"bobina","in").allowed)
+        seller.old_in.add("steel_coil")
+        self.assertTrue(p.decide(seller,"bobina","in").allowed)
+        self.assertFalse(p.decide(seller,"bobina","out").allowed)
+
     def test_resell_steel_coils_only_with_original_def_proof(self):
         c=g.Company("br_ferro")
         self.assertEqual(p.classify(c).role,"revenda_aco")
