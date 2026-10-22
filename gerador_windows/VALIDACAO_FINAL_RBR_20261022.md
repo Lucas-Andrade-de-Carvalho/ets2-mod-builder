@@ -21,7 +21,7 @@ Este protocolo é a **última etapa técnica documentada antes de homologar no E
 5. Na opção **Quais Companies deseja atualizar?**, marque **Somente RBR**.
 6. Clique **3. AUDITAR / CORRIGIR SCS EXISTENTE**.
 7. Confira `AUDITORIA_RBR.json`, `RESUMO_VALIDACAO_RBR.txt`, `QUALIDADE_LOGISTICA_RBR.json`, `COBERTURA_MAXIMA_RBR.csv`, `PENDENCIAS_CLASSIFICACAO_RBR.csv` e o arquivo `ETS2_RBR_AUDITADA_*.scs`.
-8. Clique **4. PRE-HOMOLOGAR MAPAS SELECIONADOS** (ainda com **Somente RBR**). Esta ação é somente leitura, pode receber o `game.log.txt` e gera `MATRIZ_ENSAIOS_ETS2.csv` **com 24 linhas** para o RBR. A auditoria também cria `MATRIZ_ENSAIOS_ETS2_RBR.csv`.
+8. **Antes de pré-homologar, altere o campo Company RBR EXISTENTE para o `.scs` CORRIGIDO que acabou de gerar.** Caso contrário, a auditoria conferirá de novo o arquivo antigo. Clique **4. PRE-HOMOLOGAR MAPAS SELECIONADOS** (ainda com **Somente RBR**). Esta ação é somente leitura, pode receber o `game.log.txt` e gera `MATRIZ_ENSAIOS_ETS2.csv` **com 24 linhas** para o RBR. A auditoria também cria `MATRIZ_ENSAIOS_ETS2_RBR.csv`.
 
 As rotas da linha de comando também permitem validar só o RBR, com `--cli --audit-existing --only-rbr` ou `--cli --preflight-real --only-rbr`. Para esses modos basta fornecer `--mod`, `--def1`, `--def2`, `--txt`, `--rbr`, `--existing-rbr` e `--output`.
 
