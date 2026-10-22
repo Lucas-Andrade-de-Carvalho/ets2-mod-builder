@@ -101,11 +101,11 @@ def assess(companies,territory,final_active,manifest,quality):
         bucket["empresas"].add(company_id)
         if role=="desconhecida":
             bucket["desconhecidas"].add(company_id)
-        elif unit["in_esperados"] or unit["out_esperados"]:
+        elif unit.get("in_esperados",[]) or unit.get("out_esperados",[]):
             bucket["compativeis"].add(company_id)
             actual=final_active[company_id]
-            if (set(unit["in_esperados"])-set(actual["in"]) or
-                    set(unit["out_esperados"])-set(actual["out"])):
+            if (set(unit.get("in_esperados",[]))-set(actual["in"]) or
+                    set(unit.get("out_esperados",[]))-set(actual["out"])):
                 bucket["compativeis_incompletas"].add(company_id)
             else:
                 bucket["compativeis_cobertas"].add(company_id)
