@@ -406,7 +406,10 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         classification_pending={d["empresa"] for d in preserved}
         routes_without_pair=[
             cargo for cargo,row in after.items() if row["pares_distintos"]==0]
-        additional_without_policy=sorted(extras,key=catalogo_cargas.sort_key)
+        additional_without_policy=sorted(
+            (cid for cid,spec in extras.items()
+             if spec.get("categoria") not in professional_policy.CATEGORIES),
+            key=catalogo_cargas.sort_key)
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
         summary={"versao":"3.0.0" if professional else "2.5.0",
             "economia_profissional":professional,
@@ -433,7 +436,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "politica_cargas_adicionais":{
                 cid:{"categoria":spec["categoria"],"nome":spec["nome"],
                      "body_types":spec["body_types"],
-                     "situacao":"pendente de validacao economica com DEF/TXT originais"}
+                     "situacao":("regra_definida_pendente_teste_ETS2"
+                                if spec["categoria"] in professional_policy.CATEGORIES
+                                else "regra_economica_pendente")}
                 for cid,spec in extras.items()},
             "total_cargas_catalogo":len(manifest),
             "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
