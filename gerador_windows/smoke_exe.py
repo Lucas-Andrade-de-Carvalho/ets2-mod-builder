@@ -99,7 +99,7 @@ def main(exe_path):
             audittxt=fixture.root/"auditoria_cargas.txt"
             from gerador import MANIFEST
             audittxt.write_text(
-                "\\n".join(f"carga{n} = {title}"
+                "\n".join(f"carga{n} = {title}"
                           for n,(_category,title) in MANIFEST.items()),
                 encoding="utf-8")
             command=[str(Path(exe_path).resolve()),"--cli","--audit-existing",
