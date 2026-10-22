@@ -128,22 +128,66 @@ def _run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
                 json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
             return result
 
-        missing_economic=any(
-            (r.get("qualidade_logistica") or {}).get(
-                "cargas_com_par_economico_comprovavel",0)!=24
-            for r in verified)
-        missing_editor=any(
-            (r.get("qualidade_logistica") or {}).get(
-                "cargas_candidatas_teste_ets2",0)!=24
-            for r in verified)
-        residual_review=any(
-            r["pendencias_revisao"] or r["empresas_classificacao_pendente"]
-            or r["cargas_sem_rota_validada"] for r in verified)
-        is_complete=(preflight_status=="PRONTO_PARA_TESTES_NO_JOGO" and
-                     not missing_economic and not missing_editor and
-                     not residual_review)
-        final_status=("PRONTO_PARA_TESTE_NO_ETS2" if is_complete else
-                      "CANDIDATAS_COM_LACUNAS_DOCUMENTADAS")
+        # ENTREGA DEFINITIVA exige 24 cadeias comprovaveis nos tres mapas.
+        # Uma empresa preservada com atividade desconhecida NAO aprova
+        # automaticamente o mercado de fretes. Isso deve BLOQUEAR os SCS,
+        # nunca resultar em arquivo candidato apresentado como pronto.
+        economic_problems=[]
+        quality_by_map={}
+        for report in verified:
+            name=report["mapa"]
+            quality=report.get("qualidade_logistica") or {}
+            quality_by_map[name]=quality
+            if len(quality.get("cargas",{}))!=24:
+                economic_problems.append(name+": catalogo economico incompleto")
+            economic_count=quality.get("cargas_com_par_economico_comprovavel",0)
+            if economic_count!=24:
+                economic_problems.append(
+                    name+": apenas "+str(economic_count)+"/24 cargas com pares economicos")
+            editor_count=quality.get("cargas_candidatas_teste_ets2",0)
+            if editor_count!=24:
+                economic_problems.append(
+                    name+": apenas "+str(editor_count)+"/24 cargas com origem/destino editor")
+            if report["pendencias_revisao"]:
+                economic_problems.append(name+": "+
+                    str(report["pendencias_revisao"])+" revisoes pontuais")
+            if report["empresas_classificacao_pendente"]:
+                economic_problems.append(name+": "+
+                    str(report["empresas_classificacao_pendente"])+
+                    " empresas com papel economico pendente")
+            if report["cargas_sem_rota_validada"]:
+                economic_problems.append(name+": cadeias sem par registrado: "+
+                    ", ".join(report["cargas_sem_rota_validada"]))
+            if report.get("status")!="AUDITORIA_ESTRUTURAL_CONCLUÍDA":
+                economic_problems.append(name+": auditoria estrutural/economica pendente")
+        if economic_problems:
+            result={
+                "status":"BLOQUEADO_ECONOMIA_REAL",
+                "homologado_no_ets2":False,
+                "nenhum_scs_publicado":True,
+                "preflight_status":preflight_status,
+                "originais_preservados":hashes_after==hashes_before,
+                "arquivos_corrigidos":[],
+                "cargas_esperadas":24,
+                "mapas_reauditados":sorted(second_by_name),
+                "reescritas_residuais":0,
+                "motivos":economic_problems,
+                "qualidade_por_mapa":{
+                    name:{
+                        "cargas_com_par_economico_comprovavel":
+                            q.get("cargas_com_par_economico_comprovavel",0),
+                        "cargas_candidatas_teste_ets2":
+                            q.get("cargas_candidatas_teste_ets2",0)
+                    }
+                    for name,q in quality_by_map.items()},
+                "aviso":"Nenhuma Company comercial sera publicada com "
+                        "cadeias incompletas ou nao classificadas. "
+                        "O teste no ETS2 nao foi executado."
+            }
+            (out/"RESULTADO_FINALIZACAO_OFFLINE.json").write_text(
+                json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
+            return result
+        final_status="PRONTO_PARA_TESTE_NO_ETS2"
         result={
             "status":final_status,
             "homologado_no_ets2":False,
