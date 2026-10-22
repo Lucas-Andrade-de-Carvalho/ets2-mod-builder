@@ -1361,7 +1361,7 @@ def run_gui():
             value=saved.get(k,"")
             if value and Path(value).exists():widgets[k].set(value)
     except (OSError,ValueError,TypeError):pass
-    scope_var=tk.StringVar(value="todos")
+    scope_var=tk.StringVar(value="minas_eldorado")
     scope_row=ttk.LabelFrame(content,text="Quais Companies deseja atualizar?",padding=8)
     scope_row.pack(fill="x",pady=(8,4))
     ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
