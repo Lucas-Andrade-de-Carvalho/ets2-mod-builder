@@ -312,6 +312,10 @@ def extract_map(path):
         # Definicoes legadas no arquivo permanente sao ACRESCENTADAS pelo
         # ETS2. Apenas limpar in/out nao as neutraliza (SCS Wiki).
         if re.fullmatch(r'def/company/[a-z0-9_]+\.(?:sii|sui)',p,re.I):
+            # Uma company_permanent pode existir sem qualquer IN/OUT.
+            # Ela ainda pertence a DEF e deve participar da cobertura.
+            identifier=p.rsplit("/",1)[-1].rsplit(".",1)[0].lower()
+            companies.setdefault(identifier,Company(identifier))
             txt=read_sii(raw)
             if re.search(r'(?m)^\s*(?:in_cargo|out_cargo)(?:\[\s*\d*\s*\])?\s*:',txt,re.I):
                 legacy.append(p)
