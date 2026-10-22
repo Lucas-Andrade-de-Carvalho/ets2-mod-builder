@@ -844,6 +844,14 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
                 quality.get("cargas_com_par_evidencia_inout",0),
             "cargas_com_par_economico":
                 quality.get("cargas_com_par_economico_comprovavel",0),
+            "cargas_com_par_adaptacao_regional":
+                quality.get("cargas_com_par_simulacao_regional",0),
+            "cargas_candidatas_adaptacao_regional":
+                quality.get("cargas_candidatas_simulacao_regional_teste",0),
+            "adaptacoes_regionais_novas":
+                report.get("permissoes_adaptacao_regional_adicionadas",0),
+            "adaptacoes_regionais_preservadas":
+                report.get("permissoes_adaptacao_regional_herdadas",0),
             "cargas_com_par_editor_documental":
                 quality.get("cargas_candidatas_documentais_teste",0),
             "cargas_candidatas_no_editor":
@@ -892,6 +900,11 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
                 "Pares com setor conhecido: "+
                 str(item["cargas_com_par_economico"])+"/"+
                 str(item["total_cargas_catalogo"])+" cargas",
+                "Pares por ADAPTACAO REGIONAL (nao comprovados no IN/OUT): "+
+                str(item["cargas_com_par_adaptacao_regional"])+"/"+
+                str(item["total_cargas_catalogo"])+" cargas",
+                "Novas permissoes regionais: "+
+                str(item["adaptacoes_regionais_novas"]),
                 "Pares com editor: "+
                 str(item["cargas_candidatas_no_editor"])+"/"+
                 str(item["total_cargas_catalogo"])+" cargas",
