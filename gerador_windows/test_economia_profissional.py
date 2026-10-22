@@ -143,6 +143,51 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertTrue(policy.decide(farm,"racao","in").allowed)
 
 
+    def test_reported_rbr_industries_receive_only_economic_goods(self):
+        examples=[
+            ("ms_alg_ib","Algodoeira Irmãos Bürgel","beneficiadora_algodao",
+             "algodao","out"),
+            ("bechara","Moveis Bechara","fabrica_moveis","madeira","in"),
+            ("moveis1","Modelo Móveis","fabrica_moveis","madeira","in"),
+            ("marcenaria1","Marcenaria Água Clara","fabrica_moveis","madeira","in"),
+            ("polimix1","Polimix","concreteira","cimento","in"),
+            ("cercrystal","Cerveja Crystal","cervejaria","cerveja","out"),
+            ("grupo_p","Grupo Petrópolis","cervejaria","cerveja","out"),
+            ("leroy_merlin","Leroy Merlin","materiais","tijolo","out"),
+            ("guarezi_m","Guarezi Material de Construção","materiais",
+             "cimento","out"),
+            ("compre_bem","Compre Bem","supermercado","cerveja","in"),
+            ("mer_bh_itabi","Super Mercado BH","supermercado","cerveja","in"),
+            ("martinmina","MartMinas","supermercado","cerveja","in"),
+        ]
+        for identifier,label,role,cargo,direction in examples:
+            with self.subTest(identifier=identifier):
+                c=g.Company(identifier,display_name=label)
+                self.assertEqual(policy.classify(c).role,role)
+                self.assertTrue(policy.decide(c,cargo,direction).allowed)
+        self.assertFalse(policy.decide(g.Company(
+            "bechara",display_name="Moveis Bechara"),"madeira","out").allowed)
+        self.assertFalse(policy.decide(g.Company(
+            "polimix1",display_name="Polimix"),"cimento","out").allowed)
+        self.assertFalse(policy.decide(g.Company(
+            "ms_alg_ib",display_name="Algodoeira Irmãos Bürgel"),"algodao","in").allowed)
+
+    def test_grain_traders_require_original_cargo_evidence(self):
+        for company,label in [
+                ("g_cereal_rv","Grupo Cereal"),
+                ("go_graos","Rio Verde Grãos"),
+                ("ms_graos","Ms Grãos"),
+                ("pr_anaconda","Anaconda Grãos"),
+                ("amaggi","AMAGGI")]:
+            with self.subTest(name=company):
+                c=g.Company(company,display_name=label,old_in={"corn"})
+                self.assertEqual(policy.classify(c).role,"comercio_graos")
+                self.assertTrue(policy.decide(c,"milho","in").allowed)
+                self.assertTrue(policy.decide(c,"milho","out").allowed)
+                self.assertFalse(policy.decide(c,"soja","out").allowed)
+                self.assertFalse(policy.decide(c,"sorgo","in").allowed)
+                self.assertFalse(policy.decide(c,"adubo","out").allowed)
+
     def test_sorgo_animal_feed_chain_is_supported_without_fake_crops(self):
         agropecuaria=g.Company("agropecuaria_centro")
         pecuaria=g.Company("pecuaria_gado")
