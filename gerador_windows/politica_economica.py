@@ -13,6 +13,11 @@ from pathlib import Path
 
 VERSION="3.0"
 ROLES=(
+    # Atividades verificaveis pelo nome da unidade e pelos fluxos originais:
+    # Posto de combustivel e mineracao de brita/calcario nao sao silos
+    # produtores de milho, algodao ou coco.
+    ("posto_combustivel",r"petrobras|posto_?combust|fuel_station|gas_station|^posto_?ipiranga$"),
+    ("mineracao_minerios",r"mineracao|mineradora|^minerita|mine_ore|iron_ore_mine"),
     ("usina_acucar",r"usina_?acucar|sugar_mill|sugar_plant|engenho_?acucar"),
     ("transportadora",r"transport|transpor|transp|logistic|logistica|logist|freight|carrier|haulage|brasilog|braslog|rasador|avant|cmm_transport|cmm_transp|ttr_?log|^trame2$|^trade2$|^stokes2$|^posped2$|(?:^|_)translov|(?:^|_)multlog$|(?:^|_)jampalog$|(?:^|_)tvslog$|^go_alfa_tr$"),
     ("bananal",r"bananal|banana_farm|banana_plantation|fazenda_banana|^eldorado_bananas$|^bana_farm"),
@@ -90,13 +95,13 @@ ALIASES={
     "laranja":r"laranja|laranjas|orange|oranges|citrus",
     "coco":r"coco|cocos|coconut|coconuts",
     "algodao":r"algodao|cotton|cotton_bales|pluma",
-    "madeira":r"madeira|wood|wooden_planks|logs|timber|lumber",
+    "madeira":r"madeira|madeirase|madeirase_b|troncos|wood|wooden_planks|logs|timber|lumber",
     "cimento":r"cimento|cement|cement_bags|bagged_cement",
     "tijolo":r"tijolo|tijolos|brick|bricks|clay_bricks",
     "granito":r"granito|granite",
     "bobina":r"bobina|bobinas|steel_coil|steel_coils|steel_roll|coil_steel",
     "cerveja":r"cerveja|cervejas|beer|beers|lager|ale|amstel|brahma|budweiser|devassa|heineken|schin|skol|itaipava",
-    "palete":r"palete|paletes|pallet|pallets|wooden_pallets|empty_palet|empty_palets|empty_pallet|empty_pallets|supaletes",
+    "palete":r"palete|paletes|paletev|paletesv|pallet|pallets|wooden_pallets|empty_palet|empty_palets|empty_pallet|empty_pallets|supaletes",
     "racao":r"racao|animal_feed|livestock_feed|feedmeal|compound_feed|xerem",
 }
 # IDs das 24 mercadorias ORIGINAIS, usados somente como evidencia
@@ -167,6 +172,32 @@ def infer_by_flow(company):
     grain_generic_out=any(GENERIC_GRAIN.fullmatch(t) for t in out_names)
     grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
     other_out=outgoing - CROP_CLASSES
+
+    # Industria madeireira/extração de madeira: receber troncos, expedir
+    # moveis. Um nome ficticio "extracao1" NAO indica cultivo de graos.
+    if (("madeira" in incoming or
+         _any_evidence(in_names,r"(?:troncos|madeirase(?:_b)?|logs|timber)"))
+         and _any_evidence(out_names,r"(?:moveis?|furniture|furniture_items)")
+         and not outgoing):
+        return Identity("fabrica_moveis","alta",
+                        "troncos/madeira no IN e moveis no OUT documentados")
+
+    # Extracao mineral: carregadeiras, escavadeiras, brita, areia, minério.
+    # Minerio nao equivale a bobina e brita nao equivale a granito.
+    if (_any_evidence(out_names,
+                      r"(?:rbr_)?(?:brita|calcario|cascalho|areia|minerio|ore|gravel|limestone)")
+        and not (outgoing & CATEGORIES)):
+        return Identity("mineracao_minerios","alta",
+                        "minerais brutos documentados no OUT, sem carga "
+                        "granito ou bobina comprovada")
+
+    # Reposição agrícola e comércio: IN/OUT adubo e expedição de ração,
+    # sem colheita. Não classificar como lavoura só por "agrícola".
+    if ({"adubo"} <= incoming and {"adubo","racao"} <= outgoing
+            and not (outgoing & CROP_CLASSES)):
+        return Identity("agroinsumos","alta",
+                        "adubo em IN/OUT, racao no OUT e nenhuma colheita "
+                        "documentada: atividade de comercializacao")
 
     # Cadeias industriais: materia-prima recebida E produto expedido.
     # Identificador ficticio (empresa_x7) nao impede inferencia.
@@ -361,6 +392,10 @@ def decide(company,category,direction,identity=None):
 
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
+    if role in {"posto_combustivel","mineracao_minerios"}:
+        return forbid("posto de combustivel/mineracao de materia-prima nao "
+                      "e produtor ou consumidor demonstrado desta carga "
+                      "do Librelato; exigir empresa realmente compatível")
     # Mapa Eldorado: empty_palet em IN/OUT de spani e madereira,
     # e empty_palet em OUT de kaarfor2. Mapa MG: supaletes em OUT
     # de abcatacado. Mercadoria concreta, apenas MESMA direcao.
@@ -591,6 +626,54 @@ def decide(company,category,direction,identity=None):
         return permit("unidade recebe paletes para retorno documentado",
                       "IN especifico de paletes na DEF do mapa")
     return forbid("empresa nao demonstrou necessidade de receber "+category)
+
+def legacy_plausible(company,category,direction):
+    """Só avaliar permissões JÁ existentes; nunca gerar novas por hipótese.
+
+    Retorna uma justificativa ECONOMICAMENTE PLAUSÍVEL com confianca MEDIA.
+    Nao equivale à categoria original documentada no IN/OUT e nao cria
+    'comprovacao' territorial ou ensaio dentro do ETS2.
+    """
+    if direction not in {"in","out"} or category not in CATEGORIES:
+        return None
+    identity=classify(company)
+    role=identity.role
+    in_cats=cargo_categories(company.old_in)
+    out_cats=cargo_categories(company.old_out)
+    orig=in_cats if direction=="in" else out_cats
+    if category in orig:
+        return None  # A permissao literal fica para a politica forte.
+    # Armazens/cooperativas com pelo menos uma especie de cereal movimentada
+    # no MESMO sentido podem plausivelmente receber/expedir sorgo a granel.
+    if (role in {"silo","cooperativa","comercio_graos"} and
+            category=="sorgo" and (orig & GRAIN_CLASSES)):
+        return ("POSSIVEL movimentacao sazonal de sorgo em unidade que "
+                "ja movimenta outros graos no mesmo sentido; permissao "
+                "herdada nao comprova variedade")
+    # Fazenda com colheita de graos no OUT pode plantar sorgo em rotacao.
+    # Nao inventar soja, algodao, coco ou batata para qualquer fazenda.
+    if (role=="fazenda" and direction=="out" and category=="sorgo"
+            and (out_cats & GRAIN_CLASSES)
+            and not (in_cats & GRAIN_CLASSES)):
+        return ("POSSIVEL cultivo alternado de sorgo em fazenda de graos; "
+                "permissao antiga sujeita a confirmacao no jogo/mapa")
+    # Paletes de apoio para empresas que realmente trabalham com produtos
+    # embalados ou madeira. Sem a carga no IN/OUT ela fica apenas plausivel.
+    if category=="palete" and role in {
+        "materiais","revenda_madeiras","madeireira","fabrica_moveis",
+        "comercio_materiais_inferido","distribuidor","supermercado",
+        "cervejaria","cimenteira","revenda_racao","agroinsumos"
+    }:
+        if direction=="in" and (in_cats & (BUILDING_CLASSES | RETAIL_FOOD |
+                                           {"madeira","racao","adubo"})):
+            return ("POSSIVEL recebimento de paletes para reposicao e "
+                    "retorno de embalagens; nao consta palete na DEF original")
+        if direction=="out" and (out_cats & (BUILDING_CLASSES | RETAIL_FOOD |
+                                             {"madeira","racao","adubo"})):
+            return ("POSSIVEL expedicao de paletes vazios ou embalagens "
+                    "retornaveis; permissao herdada sem prova original")
+    return None
+
 
 def city_references(company):
     """Somente company_def com CITY e PREFAB reais entra na matriz territorial.
