@@ -133,6 +133,76 @@ class Identity:
     certainty:str
     evidence:str
 
+# Inferencia conservadora de ATIVIDADE por fluxo documental (DEF original).
+# "Graos" genericos ajudam a reconhecer agricultura, mas nao comprovam
+# que a cultura seja milho, soja ou sorgo: OUT dessas cargas exige especie.
+GENERIC_GRAIN=re.compile(
+    r"^(?:grao|graos|cereal|cereais|grain|grains|bulk_grain|bulk_grains)$"
+)
+AGRICULTURE_INCOMPATIBLE={
+    "cimento","bobina","cerveja","tijolo","granito","madeira","palete"
+}
+RETAIL_FOOD={"cerveja","batata","laranja","coco"}
+
+def infer_by_flow(company):
+    """Cruza direcao IN/OUT e tipo de produto sem usar nomes inventados.
+
+    A inferencia so se torna automatica quando sinais independentes
+    concordam e nenhum segmento conflitante foi documentado.
+    Cargas sem especie identificada nao autorizam novo OUT.
+    """
+    incoming=cargo_categories(company.old_in)
+    outgoing=cargo_categories(company.old_out)
+    in_names={norm(x) for x in company.old_in}
+    out_names={norm(x) for x in company.old_out}
+    grains_out=outgoing & GRAIN_CLASSES
+    grains_in=incoming & GRAIN_CLASSES
+    grain_generic_out=any(GENERIC_GRAIN.fullmatch(t) for t in out_names)
+    grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
+    other_out=outgoing - CROP_CLASSES
+    if ("adubo" in incoming and (grains_out or grain_generic_out)
+            and not (grains_in or grain_generic_in)
+            and not (other_out or
+                     (incoming & AGRICULTURE_INCOMPATIBLE))):
+        detail=", ".join(sorted(grains_out)) or "graos sem especie"
+        return Identity(
+            "fazenda","alta",
+            "inferencia economica: adubo no IN + "+detail+
+            " no OUT original, sem entrada de graos nem fluxo industrial; "
+            "somente culturas nomeadas no OUT autorizam expedir carga"
+        )
+    # Grao que entra e sai: papel LOGISTICO de comercializacao/armazenagem;
+    # nao classificar como fazenda nem alegar que produziu a colheita.
+    if (grains_out and grains_in and grains_out & grains_in
+            and "adubo" not in incoming and
+            not (outgoing - GRAIN_CLASSES)):
+        return Identity(
+            "comercio_graos","alta",
+            "inferencia de comercio/armazenagem: mesmas especies de graos "
+            "documentadas no IN e OUT; nao comprova producao agricola"
+        )
+    # Produtos recebidos e expedidos como mercadoria: fornecimento de
+    # fertilizantes, e nao necessariamente fabricacao.
+    if ("adubo" in incoming and "adubo" in outgoing
+            and not (outgoing - {"adubo"})):
+        return Identity(
+            "revenda_fertilizante","alta",
+            "fertilizante registrado em IN e OUT; transacao comercial "
+            "demonstrada, sem atribuir fabricacao"
+        )
+    # A atividade exata de supermercado/atacadista nao e deduzida
+    # de cerveja e fruta: poderia ser distribuidora. So autorizar as
+    # categorias explicitamente registradas no lado correto.
+    if (len(incoming & RETAIL_FOOD)>=3 and
+            not (outgoing - RETAIL_FOOD) and
+            not (incoming & AGRICULTURE_INCOMPATIBLE)):
+        return Identity(
+            "comercio_alimentos_inferido","alta",
+            "fluxo alimentar diversificado documentado na DEF, sem prova "
+            "de que seja supermercado ou produtor"
+        )
+    return None
+
 def classify(company):
     identifier=norm(company.name)
     # Empresas MG com identificadores abreviados: confirmar a especie
@@ -175,11 +245,13 @@ def classify(company):
             found=next(iter(candidates))
             return Identity(found,"alta",
                             "atividade pelo name da company_permanent: "+public_name)
-    # A DEF pode conter registros confiaveis de movimento de mercadorias;
-    # porem OUT nao e demonstracao da INDUSTRIA. Os nao reconhecidos ficam
-    # em revisao em vez de criar fornecedor ficticio.
+    # Usar o fluxo quando identificador e nome publico nao revelam o ramo.
+    # Regras economicas respeitam a direcao da carga na DEF ORIGINAL.
+    inferred=infer_by_flow(company)
+    if inferred is not None:
+        return inferred
     return Identity("desconhecida","indeterminada",
-                    "identificador nao permite afirmar atividade; IN/OUT exige revisao")
+                    "nome/IN/OUT insuficientes para inferencia economica segura")
 
 @dataclass(frozen=True)
 class Decision:
@@ -224,6 +296,12 @@ def decide(company,category,direction,identity=None):
         if category=="adubo":
             return permit("atacadista identificado comercializa adubo/fertilizante")
         return forbid("comercio de fertilizante nao comprova racao, sorgo nem outras cargas")
+    if role=="comercio_alimentos_inferido":
+        available=old_in if direction=="in" else old_out
+        if category in RETAIL_FOOD and category in available:
+            return permit("mercadoria alimentar explicitamente registrada "
+                          "nesta direcao da DEF", "IN/OUT original")
+        return forbid("fluxo alimentar nao comprova este produto/direcao")
     if role=="processadora_citricos":
         if category=="laranja" and direction=="in":
             return permit("industria de suco recebe fruta para processamento")
