@@ -548,6 +548,37 @@ class RBRCoverageReport(unittest.TestCase):
         self.assertIsNone(r["cobertura_permissoes_justificadas_pct"])
         self.assertFalse(r["cobertura_100_por_cento_comprovada"])
 
+    def test_unknown_company_with_unrelated_def_cargo_is_not_a_24_cargo_hint(self):
+        from collections import defaultdict
+        obj=g.Company("empresa_x991",old_in={"bananas","diesel"},
+                      old_out={"electronics"})
+        docs=p.coverage({obj.name:obj},{12:("cerveja","Cerveja")})
+        active=defaultdict(lambda:{"in":set(),"out":set()})
+        report=coverage.assess({obj.name:obj},docs,active,
+                               {12:("cerveja","Cerveja")},
+                               {"cargas_com_par_economico_comprovavel":0,
+                                "cargas_candidatas_teste_ets2":0})
+        self.assertEqual(report["empresas_sem_classificacao"],1)
+        self.assertEqual(report["desconhecidas_com_sinais_de_carga_a_investigar"],0)
+        row=report["empresas"][0]
+        self.assertFalse(row["sinal_mercadoria_entre_24"])
+        self.assertFalse(row["sinal_permissao_herdada"])
+        self.assertEqual(row["status"],"ATIVIDADE_SEM_PROVA")
+
+    def test_unknown_company_documenting_beer_is_review_priority(self):
+        from collections import defaultdict
+        obj=g.Company("empresa_x992",old_in={"beer"})
+        docs=p.coverage({obj.name:obj},{12:("cerveja","Cerveja")})
+        active=defaultdict(lambda:{"in":set(),"out":set()})
+        report=coverage.assess({obj.name:obj},docs,active,
+                               {12:("cerveja","Cerveja")},
+                               {"cargas_com_par_economico_comprovavel":0,
+                                "cargas_candidatas_teste_ets2":0})
+        row=report["empresas"][0]
+        self.assertTrue(row["sinal_mercadoria_entre_24"])
+        self.assertEqual(row["status"],"SETOR_PENDENTE_PERMISSOES_INCOMPLETAS")
+        self.assertEqual(row["in_faltantes"],["carga12"])
+
     def test_unknown_counts_use_same_documentary_role_as_territorial_matrix(self):
         companies,territory,active=self.fake()
         # Regressao: a classificacao guardada em c.role pode estar
