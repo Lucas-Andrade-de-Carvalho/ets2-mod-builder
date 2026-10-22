@@ -124,6 +124,13 @@ class RBRCoverageReport(unittest.TestCase):
             result=json.loads((Path(t)/"COBERTURA_MAXIMA_RBR.json").read_text())
             self.assertEqual(len(result["empresas"]),4)
             self.assertTrue((Path(t)/"COBERTURA_MAXIMA_RBR.csv").is_file())
+            review=Path(t)/"RBR_REVISAO_ECONOMICA_PRIORIZADA.csv"
+            self.assertTrue(review.is_file())
+            import csv
+            with review.open(encoding="utf-8-sig",newline="") as source:
+                review_rows=list(csv.DictReader(source,delimiter=";"))
+            self.assertEqual(len(review_rows),1)
+            self.assertEqual(review_rows[0]["empresa"],"agro_duvidoso")
 
     def test_missing_known_company_is_reported_separately_from_24_cargos(self):
         companies,territory,active=self.fake()
