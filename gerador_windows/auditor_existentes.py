@@ -763,6 +763,8 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
             blockers.append("Empresas compativeis sem company_def cidade+prefab")
         if report.get("pendencias_revisao",0):
             blockers.append("Decisoes economicas exigem revisao")
+        if report.get("permissoes_plausiveis_sem_evidencia_def",0):
+            blockers.append("Cargas herdadas plausiveis sem prova do produto na DEF")
         if missing_economic:
             blockers.append("Cargas sem par economicamente justificado")
         if missing_editors:
@@ -792,6 +794,8 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
             "cargas_sem_par_economico":missing_economic,
             "cargas_sem_par_editor":missing_editors,
             "pendencias_revisao":report.get("pendencias_revisao",0),
+            "permissoes_legadas_plausiveis":
+                report.get("permissoes_plausiveis_sem_evidencia_def",0),
             "bloqueios":blockers,
             "hash_company_original":report.get("sha256_entrada",""),
             "hash_def_original":report.get("sha256_def",""),
@@ -835,6 +839,8 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
                 str(item["total_cargas_catalogo"])+" cargas",
                 "Empresas nao classificadas: "+
                 str(item["empresas_nao_classificadas"]),
+                "Legadas economicamente plausiveis, nao documentadas: "+
+                str(item["permissoes_legadas_plausiveis"]),
                 "Bloqueios: "+"; ".join(item["bloqueios"] or
                                         ["Testes reais no jogo pendentes"])]
     (folder/"PAINEL_GERAL_LOGISTICA_V3.txt").write_text(
