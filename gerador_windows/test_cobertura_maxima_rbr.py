@@ -184,6 +184,19 @@ class ProvenEconomicExpansion(unittest.TestCase):
                 for product in ("bobina","granito","cimento"):
                     self.assertFalse(p.decide(c,product,"out").allowed)
 
+    def test_abbreviated_mg_crop_and_grain_ids_require_original_evidence(self):
+        farm=g.Company("batatfazpgra",old_out={"batata"})
+        self.assertEqual(p.classify(farm).role,"fazenda_batata")
+        self.assertTrue(p.decide(farm,"batata","out").allowed)
+        self.assertFalse(p.decide(farm,"soja","out").allowed)
+        self.assertEqual(p.classify(g.Company("batatfazpgra")).role,"desconhecida")
+        broker=g.Company("araragrao",old_in={"corn"},old_out={"corn"})
+        self.assertEqual(p.classify(broker).role,"comercio_graos")
+        self.assertTrue(p.decide(broker,"milho","in").allowed)
+        self.assertTrue(p.decide(broker,"milho","out").allowed)
+        self.assertFalse(p.decide(broker,"soja","out").allowed)
+        self.assertEqual(p.classify(g.Company("araragrao")).role,"desconhecida")
+
     def test_real_mg_batata_store_in_out_cargo_ids_need_evidence(self):
         c=g.Company("casabatata",old_in={"batata","milho","racao"},
                     old_out={"batata","milho","racao"})
