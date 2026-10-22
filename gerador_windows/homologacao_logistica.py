@@ -32,25 +32,48 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         all_in={name for name,perm in active.items() if cid in perm["in"]}
         all_out={name for name,perm in active.items() if cid in perm["out"]}
         accepted={"in":set(),"out":set()}
+        documented={"in":set(),"out":set()}
         reasons={}
+        documentary_reasons={}
         for direction,names in (("in",all_in),("out",all_out)):
             for name in names:
                 entry=evaluated.get(name)
-                if not entry or not entry["explicit"]:
+                if not entry:
                     continue
                 comp=entry["company"]
                 if cid in extras:
                     verdict=catalog.evaluate(comp,extras[cid],direction,entry["identity"])
                 else:
                     verdict=policy.decide(comp,category,direction,entry["identity"])
-                if verdict.allowed:
+                if not verdict.allowed:
+                    continue
+                key=direction+":"+name
+                if entry["explicit"]:
                     accepted[direction].add(name)
-                    reasons[direction+":"+name]=verdict.reason
+                    reasons[key]=verdict.reason
+                    documented[direction].add(name)
+                    documentary_reasons[key]=verdict.reason
+                elif (entry["identity"].role=="desconhecida" and
+                      category in policy.cargo_categories(
+                          comp.old_in if direction=="in" else comp.old_out)):
+                    # Grupo de mercadorias EXATAMENTE declarado no IN/OUT.
+                    # Nao transformar em industria/setor confirmado.
+                    documented[direction].add(name)
+                    documentary_reasons[key]=(
+                        "mercadoria comprovada na direcao original da DEF; "
+                        "atividade da empresa nao identificada")
         potential_in=accepted["in"]
         potential_out=accepted["out"]
         # Contar sem construir todas as combinacoes na memoria.
         # Um mapa com milhares de empresas pode gerar milhoes de pares.
         pairs=len(potential_out)*len(potential_in)-len(potential_out & potential_in)
+        doc_in=documented["in"]
+        doc_out=documented["out"]
+        doc_pairs=len(doc_out)*len(doc_in)-len(doc_out & doc_in)
+        editor_doc_out={src for src in doc_out if evaluated[src]["editor"]}
+        editor_doc_in={dst for dst in doc_in if evaluated[dst]["editor"]}
+        doc_editor_pairs=(len(editor_doc_out)*len(editor_doc_in)-
+                          len(editor_doc_out & editor_doc_in))
         editor_out={src for src in potential_out if evaluated[src]["editor"]}
         editor_in={dst for dst in potential_in if evaluated[dst]["editor"]}
         editor_pairs=len(editor_out)*len(editor_in)-len(editor_out & editor_in)
@@ -64,6 +87,18 @@ def assess(baseline, active, manifest, extras, policy, catalog):
                                    "motivo_destino":reasons["in:"+dst]})
                 if len(candidates)>=30:break
             if len(candidates)>=30:break
+        documented_candidates=[]
+        for src in sorted(editor_doc_out):
+            for dst in sorted(editor_doc_in):
+                if src==dst:continue
+                documented_candidates.append({
+                    "origem":src,"destino":dst,
+                    "evidencia_origem":documentary_reasons["out:"+src],
+                    "evidencia_destino":documentary_reasons["in:"+dst],
+                    "setores_ambos_confirmados":(
+                        src in potential_out and dst in potential_in)})
+                if len(documented_candidates)>=30:break
+            if len(documented_candidates)>=30:break
         blockers=[]
         if not all_pairs:
             blockers.append("Sem par IN/OUT cadastrado entre empresas distintas")
@@ -77,6 +112,8 @@ def assess(baseline, active, manifest, extras, policy, catalog):
             blockers.append("Company possui empresa inexistente na DEF do mapa")
         status=("CANDIDATA_TESTE_ETS2" if editor_pairs else
                 "ECONOMIA_SEM_EDITOR_VALIDADO" if pairs else
+                "CANDIDATA_TESTE_COM_DOCUMENTO_INOUT" if doc_editor_pairs else
+                "INOUT_DOCUMENTADO_SEM_EDITOR" if doc_pairs else
                 "SEM_EVIDENCIA_ECONOMICA" if all_pairs else
                 "SEM_PAR_CADASTRADO")
         result[cid]={
@@ -86,6 +123,11 @@ def assess(baseline, active, manifest, extras, policy, catalog):
             "origens_com_evidencia":sorted(potential_out),
             "destinos_com_evidencia":sorted(potential_in),
             "pares_economicos_distintos":pairs,
+            "pares_com_evidencia_inout_distintos":doc_pairs,
+            "pares_com_editor_evidencia_inout":doc_editor_pairs,
+            "origens_documentadas":sorted(doc_out),
+            "destinos_documentados":sorted(doc_in),
+            "candidatos_documentados_para_teste":documented_candidates,
             "pares_com_editor_em_ambas_empresas":editor_pairs,
             "candidatos_para_teste":candidates,
             "candidatos_truncados":max(0,editor_pairs-30),
@@ -96,6 +138,8 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         "cargas":result,
         "cargas_com_par_cadastrado":sum(x["total_pares_no_scs"]>0 for x in result.values()),
         "cargas_com_par_economico_comprovavel":sum(x["pares_economicos_distintos"]>0 for x in result.values()),
+        "cargas_com_par_evidencia_inout":sum(x["pares_com_evidencia_inout_distintos"]>0 for x in result.values()),
+        "cargas_candidatas_documentais_teste":sum(x["pares_com_editor_evidencia_inout"]>0 for x in result.values()),
         "cargas_candidatas_teste_ets2":sum(x["pares_com_editor_em_ambas_empresas"]>0 for x in result.values()),
         "cargas_homologadas_no_ets2":0,
         "aviso":"Candidato no editor nao prova cidade/prefab acessivel, peso, mercado ou frete jogavel."
