@@ -167,6 +167,37 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertGreaterEqual(row["pares_economicos_distintos"],
                                     row["pares_com_editor_em_ambas_empresas"])
 
+    def test_three_maps_write_independent_comprehensive_company_coverage(self):
+        out=self.root/"tres_coberturas"
+        files=self.fixture.inp
+        cases={
+            map_name:{"existing":self.existing,"map_def":self.baseline}
+            for map_name in ("Minas_Gerais","Eldorado","RBR")
+        }
+        original=self.existing.read_bytes()
+        report=audit.run(g,cases,out,mode="auditar",professional=True,
+                         source_files={k:files[k] for k in ("mod","def1","def2")})
+        self.assertEqual(len(report),3)
+        self.assertEqual(self.existing.read_bytes(),original)
+        self.assertFalse(list(out.glob("*.scs")))
+        for r in report:
+            map_name=r["mapa"]
+            prefix=map_name.upper()
+            summary=r["cobertura_maxima_empresas"]
+            self.assertEqual(summary["total_empresas_def"],11)
+            self.assertEqual(summary["empresas_reconhecidas_com_lacunas"],
+                             len(r["empresas_compativeis_esquecidas"]))
+            self.assertFalse(summary["cobertura_100_por_cento_comprovada"])
+            path=out/("COBERTURA_MAXIMA_"+prefix+".json")
+            self.assertTrue(path.exists(),str(path))
+            full=json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(full["total_empresas_def"],11)
+            self.assertEqual(len(full["empresas"]),11)
+            self.assertTrue((out/("COBERTURA_MAXIMA_"+prefix+".csv")).exists())
+            self.assertTrue((out/(prefix+"_REVISAO_ECONOMICA_PRIORIZADA.csv")).exists())
+            self.assertEqual(full["cargas_candidatas_teste"],
+                             r["qualidade_logistica"]["cargas_candidatas_teste_ets2"])
+
     def test_reauditing_corrected_scs_is_idempotent(self):
         """Executar a mesma correção de novo não deve inventar mudanças."""
         first=self.invoke(out=self.root/"primeira")[0]
