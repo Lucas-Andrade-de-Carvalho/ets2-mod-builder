@@ -360,3 +360,47 @@ mas elas nao entram nos totais de pares economicamente comprovados.
 equivale a `scs` do cliente homologado. Para fechar MG, Eldorado e RBR
 comprove os hashes do MOD/DEF1/DEF2 e TXT, as DEFs dos tres mapas,
 as Companies geradas, o `game.log.txt` e a aparicao dos fretes no jogo.
+
+
+## Pré-homologação dos arquivos reais (3 mapas, 24 cargas)
+
+Clique em **4. PRE-HOMOLOGAR OS 3 MAPAS** com os seguintes caminhos:
+MOD principal, DEF Company 1, DEF Company 2, TXT de 24 mercadorias,
+DEF de Minas Gerais, DEF de Eldorado, DEF de RBR, e as respectivas
+Companies EXISTENTES. Informe game.log.txt se disponível e selecione
+a pasta de saída.
+
+Alternativamente, use `--cli --preflight-real` com os argumentos
+`--mod`, `--def1`, `--def2`, `--txt`,
+`--minas`, `--eldorado`, `--rbr`,
+`--existing-minas`, `--existing-eldorado`,
+`--existing-rbr`, `--output` e opcionalmente `--game-log`.
+
+A verificação é **não destrutiva**: não sobrescreve os mods
+e só audita as Companies existentes com `mode=auditar`.
+
+A pasta de saída recebe:
+- `01_LIBRELATO/DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json`,
+  com identificações, hashes, cargo_data, body_types e conflitos.
+- `02_MAPAS/AUDITORIA_*.json` e relatórios econômicos,
+  um conjunto para cada mapa.
+- `RESULTADO_PRE_HOMOLOGACAO.json`: RESUMO UNIFICADO. Bloqueia
+  catálogo diferente de 24 cargas, empresas pendentes, ausência de
+  rota economicamente fundamentada e ausência de candidatos com editor.
+- `MATRIZ_ENSAIOS_ETS2.csv`: 72 linhas (3 mapas × 24 cargas)
+  para registrar mercado, coleta, entrega, modelo visível e evidências.
+- `COMO_HOMOLOGAR_NO_JOGO.txt`: procedimento de testes no jogo.
+
+`PRONTO_PARA_TESTES_NO_JOGO` significa que a análise estática
+passou, **não** que o mod está homologado. `game.log.txt` sem erros
+também NÃO comprova que um frete apareceu ou foi concluído.
+
+**Condição de homologação:** instalar a configuração do mod no ETS2
+na versão exata do cliente, verificar IN/OUT válidos, conferir rota
+acessível, frete disponível, carga visível, coleta, transporte e entrega,
+com evidências e logs em cada mapa. Não há como realizar esses ensaios
+a partir de arquivos SII ou do GitHub Actions.
+
+Se o computador do cliente não estiver acessível, reportar
+`HOMOLOGACAO_PENDENTE_DE_TESTE_REAL` e não apresentar resultados
+como comprovados.
