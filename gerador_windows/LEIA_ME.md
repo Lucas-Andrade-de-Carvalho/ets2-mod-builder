@@ -607,3 +607,34 @@ Para conferir o resultado, executar '3. AUDITAR / CORRIGIR SCS'
 com todos os 3 mapas e comparar os tres CSVs de cobertura.
 
 **Este programa ainda nao comprova entrega e coleta dentro do ETS2.**
+
+
+### Relatorios de COBERTURA POR CIDADE (todos os tres mapas)
+
+A matriz por empresa foi complementada por COBERTURA_CIDADES_RBR.csv/json,
+COBERTURA_CIDADES_ELDORADO.csv/json e
+COBERTURA_CIDADES_MINAS_GERAIS.csv/json.
+
+Cada linha de cidade vinda de DEF/editor mostra total de unidades,
+quantas empresas distintas foram encontradas, quais sao compativeis
+com ao menos uma das 24 cargas, quais estao cobertas, quais tem IN/OUT
+faltando, quais estao sem classificacao e quantas legitimamente nao
+trabalham com nenhuma carga do Librelato.
+
+Cidades que contem apenas estabelecimentos incompativeis NAO precisam
+receber frete artificioso. Cidades cujo company_def/editor nao foi
+encontrado nao aparecem na matriz, e isto e registrado separadamente
+como falta de evidencia territorial, nao como cidade sem empresa.
+
+Status de cada cidade:
+- COMPATIVEIS_COBERTAS: empresas compativeis identificadas com IN/OUT
+  conforme as regras, mas funcionamento do prefab ainda nao homologado;
+- INCOMPLETA: ao menos uma empresa compativel conhecida com permissao
+  faltando;
+- REVISAO_COMPATIBILIDADE: ao menos uma empresa desconhecida na cidade;
+- SEM_EMPRESA_COMPATIVEL_CONFIRMADA: as unidades identificadas nao
+  demonstram nenhuma das 24 mercadorias, sem fabricacao de fretes.
+
+As tres auditorias devem ser reexecutadas com os arquivos reais
+para quantificar a nova cobertura. Os testes automatizados usam
+fixtures e nao comprovam mercado de fretes dentro do ETS2.
