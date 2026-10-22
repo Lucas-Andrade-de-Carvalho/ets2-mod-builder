@@ -175,6 +175,11 @@ class ProfessionalEconomyTests(unittest.TestCase):
         c.old_in.add("cement")
         self.assertTrue(policy.decide(c,"cimento","in").allowed)
         self.assertFalse(policy.decide(c,"cimento","out").allowed)
+        from auditor_existentes import proven_incompatibility
+        c.role="metalurgica"
+        self.assertIsNotNone(proven_incompatibility(c,"tijolo","out"))
+        self.assertIsNone(proven_incompatibility(c,"tijolo","in"))
+        self.assertIsNone(proven_incompatibility(c,"bobina","in"))
         # Prefixos inventados e IDs parecidos nao entram.
         for name in ("kaarfor_destruida","sellplan_falso","itcc_extra",
                      "sanbuilder_inexistente"):
