@@ -320,7 +320,7 @@ class AuditorSCSRegression(unittest.TestCase):
                 "def/company/mineracao1/out/carga2.sii",
                 "def/company/go_petrobras/in/carga1.sii",
                 "def/company/extracao1/out/carga8.sii"):
-                self.assertEqual(g.cargo_tokens(z.read(file)),set())
+                self.assertEqual(audit.file_active_ids(g,z.read(file)),[])
         self.assertFalse(result["status"]=="AUDITORIA_ESTRUTURAL_CONCLUÍDA")
 
 
