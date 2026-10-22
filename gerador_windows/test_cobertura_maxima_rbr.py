@@ -383,7 +383,10 @@ class FictionalCompanySectorInference(unittest.TestCase):
                 self.assertEqual(p.decide(c,"milho","out").allowed,
                                  c.name=="x_mixed")
                 self.assertFalse(p.decide(c,"soja","out").allowed)
-                self.assertFalse(p.decide(c,"cimento","in").allowed)
+                # A existencia documental de cimento no IN nao autoriza
+                # classificar como obra, mas autoriza a mesma mercadoria.
+                self.assertEqual(p.decide(c,"cimento","in").allowed,
+                                 c.name=="x_builder")
 
     def test_one_original_cargo_yields_exact_sister_variants_without_sector(self):
         comp=g.Company("empresa_ficticia_82",old_in={"corn"},
