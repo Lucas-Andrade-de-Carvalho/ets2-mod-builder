@@ -22,7 +22,9 @@ def assess(baseline, active, manifest, extras, policy, catalog):
             "company":c,"identity":identity,
             "explicit":identity.certainty=="alta" and
                        identity.role not in {"desconhecida","hub_generico","atacadista"},
-            "editor":bool(c.editor_files)
+            # Apenas company_def com cidade + prefab documentalmente existente
+            # e candidato territorial. Arquivos editor vazios nao contam.
+            "editor":bool(policy.city_references(c))
         }
     result={}
     for key,(category,title) in manifest.items():
@@ -68,7 +70,7 @@ def assess(baseline, active, manifest, extras, policy, catalog):
         if not pairs:
             blockers.append("Nao existe cadeia com setores e produto comprovados na DEF")
         if not editor_pairs:
-            blockers.append("Nenhum par economico com editor nas duas empresas")
+            blockers.append("Nenhum par economico com company_def (cidade + prefab) valido nas duas empresas")
         if cid in extras and extras[cid].get("categoria") not in policy.CATEGORIES:
             blockers.append("Mercadoria nova sem regra economica homologada")
         if any(name not in baseline for name in all_in|all_out):
