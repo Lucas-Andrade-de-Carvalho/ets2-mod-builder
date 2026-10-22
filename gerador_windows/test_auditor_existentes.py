@@ -97,6 +97,54 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(reports[0]["cobertura_maxima_empresas"][
             "empresas_reconhecidas_com_lacunas"],0)
 
+    def test_unnamed_fictional_industries_generate_real_in_out_in_scs(self):
+        """Sem marcas reais: empresas ficticias sao analisadas por fluxo."""
+        original=self.root/"mapa_ficticio_original.scs"
+        zip_write(original,{
+            "company_z_feed/in/corn.sii":old("corn"),
+            "company_z_feed/out/animal_feed.sii":old("animal_feed"),
+            "company_z_store/in/cement.sii":old("cement"),
+            "company_z_store/in/bricks.sii":old("bricks"),
+            "company_z_store/out/cement.sii":old("cement"),
+            "company_z_store/out/bricks.sii":old("bricks"),
+            "company_z_build/in/cement.sii":old("cement"),
+            "company_z_build/in/bricks.sii":old("bricks"),
+        })
+        existing=self.root/"company_ficticia_existente.scs"
+        zip_write(existing,{"Info.txt":b"EMPRESAS FICTICIAS INTACTAS"})
+        src=self.fixture.inp
+        dest=self.root/"saida_empresas_ficticias"
+        output=audit.run(
+            g,{"RBR":{"existing":existing,"map_def":original}},dest,
+            professional=True,source_files={key:src[key] for key in ("mod","def1","def2")})
+        self.assertEqual(output[0]["arquivos_modificados"],0)
+        with zipfile.ZipFile(dest/output[0]["arquivo_corrigido"]) as final:
+            names=set(final.namelist())
+            self.assertIsNone(final.testzip())
+            for id in (1,22):
+                self.assertIn(f"def/company/company_z_feed/in/audit_carga{id}.sii",names)
+            for id in (17,18,19,20):
+                self.assertIn(f"def/company/company_z_feed/out/audit_carga{id}.sii",names)
+            for id in (6,10,11,13):
+                self.assertIn(f"def/company/company_z_store/in/audit_carga{id}.sii",names)
+                self.assertIn(f"def/company/company_z_store/out/audit_carga{id}.sii",names)
+                self.assertIn(f"def/company/company_z_build/in/audit_carga{id}.sii",names)
+                self.assertNotIn(f"def/company/company_z_build/out/audit_carga{id}.sii",names)
+            self.assertNotIn("def/company/company_z_feed/in/audit_carga23.sii",names)
+            self.assertNotIn("def/company/company_z_store/out/audit_carga4.sii",names)
+            self.assertEqual(final.read("Info.txt"),b"EMPRESAS FICTICIAS INTACTAS")
+        import json
+        audit_data=json.loads(
+            (dest/"AUDITORIA_RBR.json").read_text(encoding="utf-8"))
+        matrix={x["empresa"]:x for x in audit_data["matriz_empresa_cidade"]["empresas"]}
+        self.assertEqual(set(matrix),{"company_z_feed","company_z_store","company_z_build"})
+        self.assertEqual(matrix["company_z_feed"]["atividade"],"fabrica_racao_inferida")
+        self.assertEqual(matrix["company_z_store"]["atividade"],"comercio_materiais_inferido")
+        self.assertEqual(matrix["company_z_build"]["atividade"],"consumidor_materiais_inferido")
+        self.assertIn("corn",matrix["company_z_feed"]["in_originais_def"])
+        self.assertIn("bricks",matrix["company_z_build"]["in_originais_def"])
+
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
