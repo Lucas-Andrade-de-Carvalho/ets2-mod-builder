@@ -91,7 +91,8 @@ def _run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
                     raise ValueError(name+": entrada ZIP corrompida")
                 if not any(p.startswith("def/company/") for p in archive.namelist()):
                     raise ValueError(name+": Company nao contem def/company")
-            corrected[name]={"existing":path,"map_def":entries[name]["map_def"]}
+            corrected[name]={"existing":path,"map_def":entries[name]["map_def"],
+                             "editor_source":entries[name].get("editor_source")}
             output_hashes[name]=g.hash_source(path)
 
         log("Reauditando as Companies geradas, sem modificar os originais...")
