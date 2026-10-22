@@ -142,10 +142,15 @@ def assess(companies,territory,final_active,manifest,quality):
     total_cargos=len(manifest)
     economic=int(quality.get("cargas_com_par_economico_comprovavel",0))
     with_editor=int(quality.get("cargas_candidatas_teste_ets2",0))
+    # 24/24 pares com editor nao cobre empresas compatíveis sem prova
+    # territorial; cada uma tambem necessita de city + prefab documental.
+    compatible_no_editor=sum(
+        bool(r["in_esperados"] or r["out_esperados"]) and
+        not unit_counts.get(r["empresa"],0) for r in rows)
     complete=(
         known_incomplete==0 and potential_unknown==0 and
         unclassified==0 and economic==total_cargos and
-        with_editor==total_cargos
+        with_editor==total_cargos and compatible_no_editor==0
     )
     return {
         "total_empresas_def":len(rows),
@@ -169,6 +174,7 @@ def assess(companies,territory,final_active,manifest,quality):
         "cidades_com_compativeis_reconhecidas_cobertas":sum(
             row["situacao"]=="COMPATIVEIS_COBERTAS" for row in cities_report),
         "empresas_sem_editor":sum(not unit_counts.get(id,0) for id in companies),
+        "empresas_compativeis_sem_editor_valido":compatible_no_editor,
         "total_cargas":total_cargos,
         "cobertura_100_por_cento_comprovada":bool(complete),
         "aviso":"Percentual se limita a empresas JA classificadas. "
