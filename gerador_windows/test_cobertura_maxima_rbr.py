@@ -110,6 +110,7 @@ class RBRCoverageReport(unittest.TestCase):
             c.role=p.classify(c).role
         labels=[{
                 "empresa":id,
+                "atividade":c.role,
                 "in_esperados":(["carga8"] if c.role=="processadora_citricos" else []),
                 "out_esperados":[],
             } for id,c in objs.items()]
@@ -118,6 +119,26 @@ class RBRCoverageReport(unittest.TestCase):
         active["citrosuco1"]["in"].add("carga8")
         active["frucamp"]["in"].add("carga8")
         return objs,{"empresas":labels,"instancias_cidade":[]},active
+
+    def test_unknown_counts_use_same_documentary_role_as_territorial_matrix(self):
+        companies,territory,active=self.fake()
+        # Regressao: a classificacao guardada em c.role pode estar
+        # desatualizada, mas os dois relatorios devem concordar.
+        companies["frucamp"].role="desconhecida"
+        companies["agro_duvidoso"].role="supermercado"
+        report=coverage.assess(
+            companies,territory,active,
+            {i:("laranja","Sacos de Laranja") for i in range(24)},
+            {"cargas_com_par_economico_comprovavel":24,
+             "cargas_candidatas_teste_ets2":24})
+        self.assertEqual(
+            report["empresas_sem_classificacao"],
+            sum(r["atividade"]=="desconhecida" for r in territory["empresas"]))
+        self.assertEqual(report["empresas_sem_classificacao"],1)
+        rows={r["empresa"]:r for r in report["empresas"]}
+        self.assertEqual(rows["agro_duvidoso"]["status"],
+                         "REVISAR_POSSIVEL_COMPATIBILIDADE")
+        self.assertEqual(rows["frucamp"]["status"],"COMPATIVEL_CONTEMPLADA")
 
     def test_every_company_is_accounted_for_without_fake_completion(self):
         companies,territory,active=self.fake()
