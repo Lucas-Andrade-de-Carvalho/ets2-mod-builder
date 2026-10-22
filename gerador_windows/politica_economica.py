@@ -362,19 +362,26 @@ def decide(company,category,direction,identity=None):
     return forbid("empresa nao demonstrou necessidade de receber "+category)
 
 def city_references(company):
-    """Cada editor/*.sii identifica uma unidade/cidade candidata no mapa.
+    """Somente company_def com CITY e PREFAB reais entra na matriz territorial.
 
-    A confirmacao final de prefab depende de arquivos completos do mapa/ETS2.
+    Nunca confundir nome do arquivo com cidade. Um identificador de prefab
+    declarado continua sem homologacao dentro do ETS2 ate teste em jogo.
     """
+    from recuperacao_editor import CITY, PREFAB, COMPANY_DEF
     refs=[]
     for path,raw in sorted(company.editor_files.items()):
-        city=Path(path).stem
         text=raw.decode("utf-8-sig","replace")
-        m=re.search(r'(?im)^\s*(?:city|city_name)\s*:\s*["'+"']?([a-z0-9_]+)",text)
-        if m:city=m.group(1)
-        refs.append({"cidade":city,"arquivo_editor":path,
-                     "fonte":"campo city" if m else "nome do arquivo editor",
-                     "prefab_confirmado":False})
+        city=CITY.search(text)
+        prefab=PREFAB.search(text)
+        if not (COMPANY_DEF.search(text) and city and prefab):
+            continue
+        refs.append({
+            "cidade":city.group(1),
+            "arquivo_editor":path,
+            "fonte":"company_def: city + prefab",
+            "prefab_declarado":prefab.group(1),
+            "prefab_confirmado":False
+        })
     return refs
 
 def coverage(companies,manifest,decision_fn=None):
