@@ -1402,13 +1402,13 @@ def run_gui():
               else ["minas","eldorado","rbr"])
         all_maps=["minas","eldorado","rbr"]
         all_existing=["existing_minas","existing_eldorado","existing_rbr"]
+        scoped_existing=(["existing_eldorado"] if scope_var.get()=="eldorado" else
+                         ["existing_rbr"] if scope_var.get()=="rbr" else
+                         all_existing)
         required=(originals if action=="diagnostic" else
                   originals+maps if action=="generate" else
-                  originals+all_maps+all_existing if action in {"preflight","finalize"} else
-                  originals+maps+(
-                     ["existing_eldorado"] if scope_var.get()=="eldorado" else
-                     ["existing_rbr"] if scope_var.get()=="rbr" else
-                     all_existing))
+                  originals+all_maps+all_existing if action=="finalize" else
+                  originals+maps+scoped_existing)
         missing=[k for k in required+["output"] if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
         optional=(["minas","eldorado","rbr"] if action=="diagnostic" else
@@ -1532,22 +1532,27 @@ def run_gui():
         except Exception as exc:
             work_queue.put(("error",str(exc)))
 
-    def worker_preflight(snapshot):
+    def worker_preflight(snapshot,scope):
         try:
             from homologacao_final import run as final_preflight
-            entries={
-                "Minas_Gerais":{"existing":snapshot["existing_minas"],
-                               "map_def":snapshot["minas"],
-                               "editor_source":snapshot.get("editor_minas") or None},
-                "Eldorado":{"existing":snapshot["existing_eldorado"],
-                            "map_def":snapshot["eldorado"]},
-                "RBR":{"existing":snapshot["existing_rbr"],
-                       "map_def":snapshot["rbr"]}}
+            entries=({"RBR":{"existing":snapshot["existing_rbr"],
+                             "map_def":snapshot["rbr"]}} if scope=="rbr" else
+                     {"Eldorado":{"existing":snapshot["existing_eldorado"],
+                                  "map_def":snapshot["eldorado"]}}
+                     if scope=="eldorado" else
+                     {"Minas_Gerais":{"existing":snapshot["existing_minas"],
+                                     "map_def":snapshot["minas"],
+                                     "editor_source":snapshot.get("editor_minas") or None},
+                      "Eldorado":{"existing":snapshot["existing_eldorado"],
+                                  "map_def":snapshot["eldorado"]},
+                      "RBR":{"existing":snapshot["existing_rbr"],
+                             "map_def":snapshot["rbr"]}})
             sources={key:snapshot[key] for key in ("mod","def1","def2","txt")}
             report=final_preflight(
                 sys.modules[__name__],sources,entries,snapshot["output"],
                 game_log=snapshot.get("game_log") or None,
-                log=lambda message:work_queue.put(("log",message)))
+                log=lambda message:work_queue.put(("log",message)),
+                expected_maps=tuple(entries))
             status=report["status_pre_homologacao"]
             explanation=("Pré-homologacao: "+status+". "+
                          str(len(report["bloqueios"]))+" bloqueios registrados. "+
@@ -1622,7 +1627,7 @@ def run_gui():
                 args=(snapshot,fix_var.get(),scope_var.get())
             elif action=="preflight":
                 fun=worker_preflight
-                args=(snapshot,)
+                args=(snapshot,scope_var.get())
             elif action=="finalize":
                 fun=worker_finalize
                 args=(snapshot,)
@@ -1644,7 +1649,7 @@ def run_gui():
                     status.set(str(value)[:160])
                 elif event in ("error","success"):
                     change_busy(False)
-                    status.set("Concluido" if event=="success" else "Interrompido sem validar os 3 mapas.")
+                    status.set("Concluido" if event=="success" else "Interrompido; verifique os bloqueios do mapa.")
                     append_log(("CONCLUIDO: " if event=="success" else "ERRO: ")+value)
                     (messagebox.showinfo if event=="success" else messagebox.showerror)(
                         "Processamento concluido" if event=="success" else "Processamento interrompido",
@@ -1661,7 +1666,7 @@ def run_gui():
     btn_audit=ttk.Button(actions,text="3. AUDITAR / CORRIGIR SCS EXISTENTE",
                          command=lambda:run("audit"),style="Main.TButton")
     btn_audit.grid(row=1,column=0,sticky="ew",padx=3,pady=2)
-    btn_verify=ttk.Button(actions,text="4. PRE-HOMOLOGAR OS 3 MAPAS",
+    btn_verify=ttk.Button(actions,text="4. PRE-HOMOLOGAR MAPAS SELECIONADOS",
                          command=lambda:run("preflight"),style="Main.TButton")
     btn_verify.grid(row=2,column=0,sticky="ew",padx=3,pady=2)
     btn_finalize=ttk.Button(actions,text="5. FINALIZAR OFFLINE / REAUDITAR",
