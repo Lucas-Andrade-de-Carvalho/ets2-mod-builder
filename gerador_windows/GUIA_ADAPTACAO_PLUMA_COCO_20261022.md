@@ -29,4 +29,6 @@ Nos relatórios `QUALIDADE_LOGISTICA_*.json`, os pares simulados aparecem em `pa
 
 **Modo CLI equivalente:** `--cli --audit-existing --only-mg-eldorado` mais `--mod`, `--def1`, `--def2`, `--txt`, `--minas`, `--existing-minas`, `--eldorado`, `--existing-eldorado` e `--output`.
 
+**Proteção adicional:** o botão **5. FINALIZAR OFFLINE** é uma rotina global de 3 mapas e fica bloqueado quando você seleciona **Somente MINAS + ELDORADO**. Não mude para **Todos** se sua intenção é preservar o RBR. Para estes dois mapas, use as ações 3 e 4.
+
 **Aviso:** ver um par de empresas no relatório prova apenas o cadastro no SCS e sua plausibilidade econômica, não a exibição/entrega dentro do ETS2. Ausência de editor em Minas pode impedir comprovar a rota territorial sem recursos adicionais reais.
