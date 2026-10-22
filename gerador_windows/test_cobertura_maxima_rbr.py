@@ -175,6 +175,47 @@ class EvidenceFromRealDEF(unittest.TestCase):
         self.assertEqual(p.classify(g.Company("carga_des3")).role,"desconhecida")
 
 
+class ProvenEconomicExpansion(unittest.TestCase):
+    def test_real_csn_arcos_mining_not_steel_or_granite(self):
+        for cid in ("csnarcos","csnarcos2","csnarcos3","csnarcos4"):
+            with self.subTest(cid=cid):
+                c=g.Company(cid,old_out={"calcario","brita"})
+                self.assertEqual(p.classify(c).role,"mineracao_calcario")
+                for product in ("bobina","granito","cimento"):
+                    self.assertFalse(p.decide(c,product,"out").allowed)
+
+    def test_real_mg_batata_store_in_out_cargo_ids_need_evidence(self):
+        c=g.Company("casabatata",old_in={"batata","milho","racao"},
+                    old_out={"batata","milho","racao"})
+        self.assertEqual(p.classify(c).role,"revenda_agricola_documentada")
+        for cat in ("batata","milho","racao"):
+            self.assertTrue(p.decide(c,cat,"in").allowed)
+            self.assertTrue(p.decide(c,cat,"out").allowed)
+        self.assertFalse(p.decide(c,"coco","out").allowed)
+        self.assertFalse(p.decide(c,"soja","in").allowed)
+        unproven=g.Company("casabatata")
+        self.assertFalse(p.decide(unproven,"batata","out").allowed)
+
+    def test_real_mg_beer_distributor_uses_brand_not_generic_bebidas(self):
+        c=g.Company("jmbebidas",old_in={"amstel","brahma","bebidas"},
+                    old_out={"budweiser","skol","refri"})
+        self.assertEqual(p.classify(c).role,"distribuidor_cerveja")
+        self.assertTrue(p.decide(c,"cerveja","in").allowed)
+        self.assertTrue(p.decide(c,"cerveja","out").allowed)
+        unknown=g.Company("jmbebidas",old_out={"bebidas","agua600","refri"})
+        self.assertFalse(p.decide(unknown,"cerveja","out").allowed)
+        self.assertNotIn("cerveja",p.cargo_categories({"bebidas","refri"}))
+
+    def test_recognize_documented_grocery_brands_without_inventing_factory(self):
+        for cid in ("martmix","villefort","hipermax","walmart","spani"):
+            with self.subTest(cid=cid):
+                c=g.Company(cid)
+                self.assertEqual(p.classify(c).role,"supermercado")
+                self.assertTrue(p.decide(c,"cerveja","in").allowed)
+                self.assertFalse(p.decide(c,"cerveja","out").allowed)
+                self.assertFalse(p.decide(c,"bobina","in").allowed)
+
+
 class RBRCoverageReport(unittest.TestCase):
     def fake(self):
         objs={
