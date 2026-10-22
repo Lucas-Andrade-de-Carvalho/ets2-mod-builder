@@ -167,6 +167,30 @@ def main(exe_path):
                 encoding="utf-8"))
             assert audit_json["permissoes_removidas"]>=3
             print("EXE Windows auditou SCS existente, corrigiu rotas e preservou original")
+            # Minas + Eldorado ISOLADOS: nao solicitar --rbr nem
+            # --existing-rbr. Nao abrir/alterar o RBR do cliente.
+            mg_eld_out=fixture.root/"minas_eldorado_only_audit"
+            mg_eld_out.mkdir()
+            rbr_untouched=mg_eld_out/"RBR_CLIENTE_ORIGINAL.scs"
+            rbr_untouched.write_bytes(b"RBR_NAO_MEXER")
+            cmd_mg_eld=[str(Path(exe_path).resolve()),"--cli",
+                        "--audit-existing","--only-mg-eldorado",
+                        "--existing-minas",str(fixture.existing),
+                        "--minas",str(fixture.baseline),
+                        "--existing-eldorado",str(fixture.existing),
+                        "--eldorado",str(fixture.baseline),
+                        "--mod",str(fixture.fixture.inp["mod"]),
+                        "--def1",str(fixture.fixture.inp["def1"]),
+                        "--def2",str(fixture.fixture.inp["def2"]),
+                        "--txt",str(audittxt),"--output",str(mg_eld_out)]
+            ran_mg_eld=subprocess.run(cmd_mg_eld,timeout=180,check=False)
+            if ran_mg_eld.returncode:
+                raise RuntimeError("EXE modo Minas+Eldorado sem RBR falhou")
+            assert (mg_eld_out/"AUDITORIA_MINAS_GERAIS.json").exists()
+            assert (mg_eld_out/"AUDITORIA_ELDORADO.json").exists()
+            assert not (mg_eld_out/"AUDITORIA_RBR.json").exists()
+            assert rbr_untouched.read_bytes()==b"RBR_NAO_MEXER"
+            print("EXE Minas+Eldorado auditou 2 Companies, RBR intocado")
             # RBR sozinho deve produzir SCS corrigido SEM exigir DEF MG/Eldorado.
             rbr_single=fixture.root/"rbr_only_audit"
             cmd_rbr=[str(Path(exe_path).resolve()),"--cli",
