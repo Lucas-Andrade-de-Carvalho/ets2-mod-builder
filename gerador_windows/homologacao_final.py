@@ -70,6 +70,7 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
     rows=[]
     summaries=[]
     blocked=[]
+    audit_error=None
     if diag_result["erros"]:
         blocked.extend(diag_result["erros"])
     if diag_result["total_cargas_catalogo"]!=24:
@@ -77,8 +78,12 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
                        str(diag_result["total_cargas_catalogo"]))
     if not blocked:
         log("Iniciando auditoria dos tres mapas em modo somente leitura...")
-        summaries=audit.run(g,entries,out/"02_MAPAS",mode="auditar",
-                           log=log,professional=True,source_files=sources)
+        try:
+            summaries=audit.run(g,entries,out/"02_MAPAS",mode="auditar",
+                               log=log,professional=True,source_files=sources)
+        except (ValueError, OSError, KeyError, RuntimeError) as exc:
+            audit_error=type(exc).__name__+": "+str(exc)
+            blocked.append("Auditoria dos mapas falhou: "+audit_error)
         for summary in summaries:
             map_name=summary["mapa"]
             quality=summary.get("qualidade_logistica") or {}
@@ -113,12 +118,15 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
                 blocked.append(map_name+": apenas "+
                                str(quality.get("cargas_candidatas_teste_ets2",0))+
                                "/24 cargas com ambas empresas no editor")
-    result=("BLOQUEADO_TECNICO" if diag_result["erros"] or
-            diag_result["total_cargas_catalogo"]!=24 else
-            "BLOQUEADO_ECONOMICO" if blocked else
-            "PRONTO_PARA_TESTES_NO_JOGO")
     if logs["situacao"]=="ERROS_DE_JOGO_ENCONTRADOS":
         blocked.append("game.log.txt possui erros; investigar antes da entrega")
+    result=("BLOQUEADO_TECNICO" if diag_result["erros"] or
+            diag_result["total_cargas_catalogo"]!=24 else
+            "BLOQUEADO_AUDITORIA" if audit_error else
+            "BLOQUEADO_ECONOMICO" if blocked and
+                 logs["situacao"]!="ERROS_DE_JOGO_ENCONTRADOS" else
+            "BLOQUEADO_GAME_LOG" if blocked else
+            "PRONTO_PARA_TESTES_NO_JOGO")
     # NENHUM status de preflight certifica um frete no ETS2.
     cert={
         "versao_protocolo":"1.0",
@@ -145,6 +153,8 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
             "hash_def_original":m["sha256_def"],
         } for m in summaries],
         "game_log":logs,
+        "avisos_tecnicos":diag_result["avisos"],
+        "erro_auditoria":audit_error,
         "bloqueios":blocked,
         "cargas_esperadas_por_mapa":24,
         "ensaios_de_jogo_planejados":len(rows),
