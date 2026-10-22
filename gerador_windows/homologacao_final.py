@@ -44,18 +44,22 @@ def assess_logs(path):
             "observacao":"Log limpo nao prova carga visivel, frete iniciado ou entrega concluida."}
 
 
-def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
-    """Auditar integralmente os insumos sem sobrescrever arquivos do usuario.
+def run(g, sources, entries, out_path, game_log=None,
+        log=lambda message:None, expected_maps=EXPECTED_MAPS):
+    """Auditar insumos sem sobrescrever arquivos de entrada.
 
-    A ausencia de mapas, empresas ou itens do trailer bloqueia a etapa.
-    Exige explicitamente os tres mapas, nao apenas um subconjunto.
+    O preflight por mapa (RBR isolado) NAO substitui homologacao dos 3
+    mapas nem prova frete entregue dentro do ETS2.
     """
     out=Path(out_path);out.mkdir(parents=True,exist_ok=True)
     required={"mod","def1","def2","txt"}
     if required-set(sources):
         raise ValueError("Faltam fontes: "+", ".join(sorted(required-set(sources))))
-    if set(entries)!=set(EXPECTED_MAPS):
-        raise ValueError("Pre-homologacao exige Minas_Gerais, Eldorado e RBR")
+    requested=set(expected_maps)
+    if (not requested or not requested.issubset(set(EXPECTED_MAPS))
+            or set(entries)!=requested):
+        raise ValueError("Pre-homologacao exige exatamente os mapas escolhidos: "+
+                         ", ".join(expected_maps))
     source_paths={name:Path(sources[name]) for name in required}
     for name,path in source_paths.items():
         if not path.exists():raise FileNotFoundError(name+": "+str(path))
@@ -144,6 +148,8 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
                            "sha256":item["sha256"]}
                           for item in diag_result["fontes"]],
         "txt":Path(sources["txt"]).name,
+        "mapas_esperados":list(expected_maps),
+        "preflight_isolado":requested!=set(EXPECTED_MAPS),
         "mapas": [{
             "nome":m["mapa"],"status":m["status"],
             "rotas_registradas":m["rotas_completas_depois"],
@@ -180,13 +186,13 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
         writer.writeheader()
         writer.writerows(rows)
     (out/"COMO_HOMOLOGAR_NO_JOGO.txt").write_text(
-        "1. Habilite os 3 SCS originais e a Company corrigida do mapa em um perfil de testes.\n"
+        "1. Habilite o MOD, DEF1/DEF2 e a Company corrigida do mapa em perfil de teste.\n"
         "2. Confirme compatibilidade de versao, ordem dos mods e ausencia de erro relevante no game.log.txt.\n"
         "3. Para CADA carga do mapa, veja um frete compativel no mercado, pegue o "
         "reboque, inicie o servico e conclua a entrega em empresa distinta.\n"
         "4. Anote empresa de origem/destino, visibilidade da carga e evidencias "
         "individuais na MATRIZ_ENSAIOS_ETS2.csv.\n"
-        "5. Execute em Minas Gerais, Eldorado e RBR. Se a DEF nao tiver "
+        "5. Execute nos mapas selecionados; repita nos demais para homologacao global. Se a DEF nao tiver "
         "produtor/comprador verdadeiro, registre a lacuna: NAO crie um fornecedor ficticio.\n"
         "6. Reanalise game.log.txt ao final. Versao do jogo e mods dependentes "
         "devem estar identificados.\n"
