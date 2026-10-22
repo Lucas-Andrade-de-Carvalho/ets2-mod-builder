@@ -64,6 +64,75 @@ class RealMapPalletGapRegression(unittest.TestCase):
         self.assertFalse(p.decide(c,"coco","out").allowed)
 
 
+class RBRFinalEconomyRegression(unittest.TestCase):
+    """Fixtures derivadas de AUDITORIA_RBR(4).json, nao supostas marcas."""
+
+    def test_real_silo_legacy_sorghum_is_plausible_not_originally_proven(self):
+        c=g.Company("acs_armazem",old_in={"milho_a","soja_a"},
+                    old_out={"milho_b","soja_b"})
+        self.assertEqual(p.classify(c).role,"silo")
+        for direction in ("in","out"):
+            with self.subTest(direction=direction):
+                self.assertIsNotNone(p.legacy_plausible(c,"sorgo",direction))
+                self.assertFalse(p.decide(c,"sorgo",direction).allowed)
+        self.assertIsNone(p.legacy_plausible(c,"coco","out"))
+        row=p.coverage({c.name:c},{23:("sorgo","Sorgo")})["empresas"][0]
+        self.assertEqual(row["in_esperados"],[])
+        self.assertEqual(row["out_esperados"],[])
+
+    def test_real_milho_farm_legacy_sorghum_rotation_only_in_out(self):
+        c=g.Company("faz_milho",old_in={"fertilizante"},
+                    old_out={"milho_a","milho_b"})
+        self.assertEqual(p.classify(c).role,"fazenda")
+        self.assertIsNotNone(p.legacy_plausible(c,"sorgo","out"))
+        self.assertIsNone(p.legacy_plausible(c,"sorgo","in"))
+        self.assertFalse(p.decide(c,"sorgo","out").allowed)
+        self.assertIsNone(p.legacy_plausible(c,"algodao","out"))
+
+    def test_rbr_pallet_returns_under_local_original_paletev_token(self):
+        for cid,originals in {
+            "camda":{"racao","paletev"},
+            "agromecvo":{"adubo","paletev"}
+        }.items():
+            with self.subTest(company=cid):
+                c=g.Company(cid,old_in=originals,old_out=originals)
+                self.assertIn("palete",p.cargo_categories({"paletev"}))
+                self.assertTrue(p.decide(c,"palete","out").allowed)
+                self.assertTrue(p.decide(c,"palete","in").allowed)
+
+    def test_real_mining_company_no_granite_or_coil_without_specific_def(self):
+        c=g.Company("mineracao1",old_in={"cat422"},
+                    old_out={"areia","brita","calcario","minerio"})
+        self.assertEqual(p.classify(c).role,"mineracao_minerios")
+        for name in ("bobina","granito","sorgo","milho","cerveja"):
+            self.assertFalse(p.decide(c,name,"out").allowed)
+            self.assertIsNone(p.legacy_plausible(c,name,"out"))
+
+    def test_real_petrol_station_no_grain_out_of_fuel_in_out(self):
+        c=g.Company("go_petrobras",old_in={"diesell","gasolina"},
+                    old_out={"tanqvazio"})
+        self.assertEqual(p.classify(c).role,"posto_combustivel")
+        self.assertFalse(p.decide(c,"milho","in").allowed)
+        self.assertFalse(p.decide(c,"soja","out").allowed)
+
+    def test_real_timber_furniture_flow_reclassifies_opaque_extraction(self):
+        c=g.Company("extracao1",display_name="Extração",
+                    old_in={"madeirase","troncos","mdf"},
+                    old_out={"moveis","rbr_serrage"})
+        self.assertEqual(p.classify(c).role,"fabrica_moveis")
+        self.assertTrue(p.decide(c,"madeira","in").allowed)
+        self.assertFalse(p.decide(c,"milho","in").allowed)
+
+    def test_real_galo_agro_is_store_not_crop_farm(self):
+        c=g.Company("galo_agro",display_name="Galo Prod. Agrícolas",
+                    old_in={"adubo","fertilizante"},
+                    old_out={"adubo","racao","paletev"})
+        self.assertEqual(p.classify(c).role,"agroinsumos")
+        self.assertTrue(p.decide(c,"racao","out").allowed)
+        self.assertTrue(p.decide(c,"adubo","out").allowed)
+        self.assertFalse(p.decide(c,"sorgo","out").allowed)
+
+
 class RBRRolePolicy(unittest.TestCase):
     def test_important_new_producers_consumers(self):
         cases=[
