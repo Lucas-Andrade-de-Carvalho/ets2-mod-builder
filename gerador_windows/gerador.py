@@ -1359,6 +1359,8 @@ def run_gui():
     scope_row.pack(fill="x",pady=(8,4))
     ttk.Radiobutton(scope_row,text="Somente ELDORADO — manter Minas Gerais e RBR intactos",
                     variable=scope_var,value="eldorado").pack(anchor="w")
+    ttk.Radiobutton(scope_row,text="Somente RBR — validar primeiro o mapa mais completo",
+                    variable=scope_var,value="rbr").pack(anchor="w")
     ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
                     variable=scope_var,value="todos").pack(anchor="w")
     audit_mode=tk.StringVar(value="corrigir")
@@ -1396,6 +1398,7 @@ def run_gui():
         # Diagnostico tecnico independe das DEFs dos mapas.
         originals=["mod","def1","def2","txt"]
         maps=(["eldorado"] if scope_var.get()=="eldorado"
+              else ["rbr"] if scope_var.get()=="rbr"
               else ["minas","eldorado","rbr"])
         all_maps=["minas","eldorado","rbr"]
         all_existing=["existing_minas","existing_eldorado","existing_rbr"]
@@ -1404,6 +1407,7 @@ def run_gui():
                   originals+all_maps+all_existing if action in {"preflight","finalize"} else
                   originals+maps+(
                      ["existing_eldorado"] if scope_var.get()=="eldorado" else
+                     ["existing_rbr"] if scope_var.get()=="rbr" else
                      all_existing))
         missing=[k for k in required+["output"] if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
@@ -1428,6 +1432,9 @@ def run_gui():
             if scope=="eldorado":
                 # MG e RBR nao sao lidos, regenerados nem sobrescritos.
                 maps={"Eldorado":snapshot["eldorado"]}
+            elif scope=="rbr":
+                # MG e Eldorado nao sao lidos, regenerados nem sobrescritos.
+                maps={"RBR":snapshot["rbr"]}
             else:
                 maps={"Minas_Gerais":snapshot["minas"],
                       "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
@@ -1447,6 +1454,8 @@ def run_gui():
             import auditor_existentes
             entries=({"Eldorado":{"existing":snapshot["existing_eldorado"],
                                    "map_def":snapshot["eldorado"]}} if scope=="eldorado" else
+                     {"RBR":{"existing":snapshot["existing_rbr"],
+                             "map_def":snapshot["rbr"]}} if scope=="rbr" else
                      {"Minas_Gerais":{"existing":snapshot["existing_minas"],
                                      "map_def":snapshot["minas"],
                                      "editor_source":snapshot.get("editor_minas") or None},
@@ -1689,6 +1698,8 @@ def main():
     parser.add_argument("--cli",action="store_true")
     parser.add_argument("--only-eldorado",action="store_true",
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
+    parser.add_argument("--only-rbr",action="store_true",
+                        help="Auditar/gerar somente RBR; nao abrir MG/Eldorado")
     parser.add_argument("--finalize-offline",action="store_true",
                         help="Corrigir 3 mapas e reauditar sem alterar originais; ETS2 ainda requer teste")
     parser.add_argument("--preflight-real",action="store_true",
@@ -1705,6 +1716,8 @@ def main():
               "editor-minas","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
+    if args.only_eldorado and args.only_rbr:
+        parser.error("Escolha SOMENTE um dos modos --only-eldorado ou --only-rbr")
     if not args.cli:run_gui();return
     if args.finalize_offline:
         from finalizacao_offline import run as offline_finish
@@ -1761,13 +1774,17 @@ def main():
     if args.audit_existing:
         import auditor_existentes
         needed=(("mod","def1","def2","txt","eldorado","existing_eldorado","output")
-                if args.only_eldorado
+                if args.only_eldorado else
+                ("mod","def1","def2","txt","rbr","existing_rbr","output")
+                if args.only_rbr
                 else ("mod","def1","def2","txt","minas","eldorado","rbr",
                       "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in needed if not getattr(args,k)]
         if missing:parser.error("Auditoria exige: "+", ".join(missing))
         jobs=({"Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado}}
               if args.only_eldorado else
+              {"RBR":{"existing":args.existing_rbr,"map_def":args.rbr}}
+              if args.only_rbr else
               {"Minas_Gerais":{"existing":args.existing_minas,"map_def":args.minas,
                            "editor_source":args.editor_minas},
                "Eldorado":{"existing":args.existing_eldorado,"map_def":args.eldorado},
@@ -1780,6 +1797,7 @@ def main():
                                             "txt":args.txt})
         return
     required=("mod","def1","def2","txt","eldorado","output") if args.only_eldorado else (
+        "mod","def1","def2","txt","rbr","output") if args.only_rbr else (
         "mod","def1","def2","txt","minas","eldorado","rbr","output")
     if any(getattr(args,x) is None for x in required):
         parser.error("Em modo --cli, informe: "+", ".join(required))
@@ -1788,6 +1806,7 @@ def main():
         if catalogo_cargas.cargo_id(n) not in labels:
             parser.error(f"TXT incompleto: falta carga{n}")
     maps=({"Eldorado":args.eldorado} if args.only_eldorado else
+          {"RBR":args.rbr} if args.only_rbr else
           {"Minas_Gerais":args.minas,"Eldorado":args.eldorado,"RBR":args.rbr})
     inp={"mod":args.mod,"def1":args.def1,"def2":args.def2,"maps":maps,
          "txt":args.txt}
