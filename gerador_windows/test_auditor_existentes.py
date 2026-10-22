@@ -145,6 +145,22 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(list(dest.glob("*.scs")),[])
         self.assertTrue((dest/"AUDITORIA_INCOMPLETA.txt").is_file())
 
+    def test_reauditing_corrected_scs_is_idempotent(self):
+        """Executar a mesma correção de novo não deve inventar mudanças."""
+        first=self.invoke(out=self.root/"primeira")[0]
+        before=self.root/"primeira"/first["arquivo_corrigido"]
+        before_bytes=before.read_bytes()
+        dest=self.root/"segunda"
+        again=audit.run(g,{"Eldorado":{"existing":before,
+                                      "map_def":self.baseline}},dest)[0]
+        self.assertEqual(again["arquivos_adicionados"],0)
+        self.assertEqual(again["arquivos_modificados"],0)
+        self.assertEqual(again["permissoes_removidas"],0)
+        self.assertEqual(before.read_bytes(),before_bytes)
+        with zipfile.ZipFile(dest/again["arquivo_corrigido"]) as z:
+            self.assertIsNone(z.testzip())
+        self.assertEqual(first["rotas_depois"],again["rotas_depois"])
+
     def test_audit_only_creates_ledger_not_scs(self):
         out=self.root/"dry_run"
         self.invoke(mode="auditar",out=out)
