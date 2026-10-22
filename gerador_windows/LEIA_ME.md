@@ -292,8 +292,11 @@ nem distribuir cargas aleatoriamente apenas para zerar pendências.
 
 ## Verificacao dos tres SCS originais com TXT (24+ mercadorias)
 
-Ao selecionar MOD principal, DEF1, DEF2, TXT e os mapas e clicar em
-**1. DIAGNOSTICAR OS 3 MAPAS**, o aplicativo gera adicionalmente
+Selecione somente **MOD principal**, **DEF1**, **DEF2**, **TXT atualizado**
+e **pasta de saida**. Clique em **1. DIAGNOSTICAR LIBRELATO / MAPAS**.
+As DEFs de Minas Gerais, Eldorado e RBR agora sao **opcionais apenas
+para o diagnostico tecnico**; se forem informadas, tambem serao
+inspecionadas. O aplicativo gera
 `DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json` na pasta de saida.
 
 O arquivo registra: hashes SHA-256 dos tres SCS, numero de arquivos DEF,
@@ -308,3 +311,21 @@ Body_types divergentes, carga ausente ou TXT incompleto geram resultado
 Esse diagnostico nao verifica sozinho a existencia de prefabs, o mercado
 de fretes ou o comportamento no ETS2. Para completar a auditoria de MG,
 RBR e Eldorado, ainda e necessario fornecer DEFs e Companies de cada mapa.
+
+### Diagnostico independente pelo terminal do Windows
+
+Para conferir os 3 SCS e as 24 cargas **antes** de fornecer as DEFs dos
+mapas, use o executavel compilado em modo CLI:
+
+```powershell
+.\ETS2_Company_Gerador.exe --cli --diagnose-librelato --mod "Librelato tr adson.scs" --def1 "Def Company 1.scs" --def2 "Def Company 2.scs" --txt "cargas reboque limeira.txt" --output "resultado"
+```
+
+A verificacao falha com codigo diferente de zero se houver problemas
+tecnicos conhecidos e deixa o relatorio JSON com os detalhes. Nao tenta
+gerar Companies, nao altera SCS originais e nao exige mapa instalado.
+
+**Gerar e Auditar/Corrigir** continuam a exigir as DEFs dos mapas escolhidos.
+Na auditoria, o TXT e obrigatorio porque a identificacao das cargas
+adicionais depende da especificacao recebida. O diagnostico tecnico
+nao prova fretes jogaveis nem viabilidade economica de empresas.
