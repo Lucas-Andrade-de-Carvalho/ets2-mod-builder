@@ -50,7 +50,7 @@ def run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
     preflight_report=preflight.run(g,source_files,entries,out/"01_PRE_HOMOLOGACAO",
                                   game_log=game_log,log=log)
     preflight_status=preflight_report["status_pre_homologacao"]
-    blocked=("BLOQUEADO_TECNICO","BLOQUEADO_AUDITORIA")
+    blocked=("BLOQUEADO_TECNICO","BLOQUEADO_AUDITORIA","BLOQUEADO_GAME_LOG")
     if preflight_status in blocked or preflight_report["ensaios_de_jogo_planejados"]!=72:
         result={
             "status":"BLOQUEADO_SEM_ENTREGA","preflight_status":preflight_status,
