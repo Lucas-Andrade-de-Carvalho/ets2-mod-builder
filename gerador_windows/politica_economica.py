@@ -24,6 +24,7 @@ ROLES=(
     # RBR: atividades verificadas na DEF e em materiais dos fabricantes.
     # A classificacao nao inclui automaticamente o produto final da
     # industria, que pode nem existir nas 24 cargas disponiveis.
+    ("revenda_fertilizante",r"^agromecvo$"),
     ("processadora_citricos",r"^citrosuco[12]?$|^frucamp$"),
     ("fabrica_paineis",r"^greenplac$"),
     ("fabrica_fibrocimento",r"^eternit$"),
@@ -176,6 +177,10 @@ def decide(company,category,direction,identity=None):
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
     if role=="infra_passageiros":
         return forbid("rodoviaria/infraestrutura de passageiros nao e fabrica, mercado ou recebedora comprovada das 24 cargas")
+    if role=="revenda_fertilizante":
+        if category=="adubo":
+            return permit("atacadista identificado comercializa adubo/fertilizante")
+        return forbid("comercio de fertilizante nao comprova racao, sorgo nem outras cargas")
     if role=="processadora_citricos":
         if category=="laranja" and direction=="in":
             return permit("industria de suco recebe fruta para processamento")
