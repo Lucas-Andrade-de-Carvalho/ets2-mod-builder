@@ -130,7 +130,10 @@ class RBRFinalEconomyRegression(unittest.TestCase):
         self.assertEqual(p.classify(c).role,"agroinsumos")
         self.assertTrue(p.decide(c,"racao","out").allowed)
         self.assertTrue(p.decide(c,"adubo","out").allowed)
-        self.assertFalse(p.decide(c,"sorgo","out").allowed)
+        # Sorgo pode ser comercializado como racao por agroinsumos;
+        # a regra e setorial/plausivel, nao cultivo rural comprovado.
+        self.assertTrue(p.decide(c,"sorgo","out").allowed)
+        self.assertFalse(p.decide(c,"coco","out").allowed)
 
 
 class RBRRolePolicy(unittest.TestCase):
