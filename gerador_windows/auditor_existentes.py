@@ -17,6 +17,7 @@ from pathlib import Path
 import politica_economica as professional_policy
 import catalogo_fontes as catalogo_cargas
 import homologacao_logistica
+import recuperacao_editor
 
 SII_EXT=(".sii",".sui")
 CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:#.*)?$)')
@@ -208,6 +209,8 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         log("Lendo Company EXISTENTE: "+name+" — "+origin.name)
         source=inventory_archive(g,origin)
         baseline,_=g.extract_map(entry["map_def"])
+        editor_recovery=recuperacao_editor.recover(
+            g,baseline,source,entry.get("editor_source"))
         for c in baseline.values():
             if professional:
                 identity=professional_policy.classify(c)
@@ -226,9 +229,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                       c.role in {"hortifruti","fazenda","desconhecida"}):
                     c.role="bananal";c.explicit_role=True
         if not source:raise ValueError(name+": Company existente vazia ou ilegivel")
-        loaded[name]=(source,baseline,entry)
+        loaded[name]=(source,baseline,entry,editor_recovery)
     outputs=[]
-    for name,(contents,baseline,entry) in loaded.items():
+    for name,(contents,baseline,entry,editor_recovery) in loaded.items():
         log("Auditoria "+name+": "+str(len(baseline))+" empresas na DEF; "+
             str(len(contents))+" arquivos no SCS enviado")
         changed=dict(contents)
@@ -412,6 +415,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             key=catalogo_cargas.sort_key)
         removals=[d for d in decisions if d["acao"] in ("REMOVER","REMOVER_DUPLICADO")]
         summary={"versao":"3.0.0" if professional else "2.5.0",
+            "recuperacao_editor":editor_recovery,
             "economia_profissional":professional,
             "alteracoes_sao_simulacao":mode=="auditar",
             "nenhum_scs_gerado":mode=="auditar",
