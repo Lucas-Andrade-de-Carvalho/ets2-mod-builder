@@ -199,11 +199,16 @@ def zip_members(path, wanted=None):
                              "e selecione a pasta extraida.")
         with zipfile.ZipFile(path) as zf:
             infos=[x for x in zf.infolist() if not x.is_dir()]
-            if len(infos)>80000 or sum(x.file_size for x in infos)>1_400_000_000:
-                raise ValueError("Arquivo excessivo ou suspeito: "+path.name)
-            for info in infos:
-                c=acceptable(info.filename)
-                if c is None:continue
+            # A textura do mod nao entra no limite de arquivos DEF: ela
+            # nao sera descompactada. Isso evita rejeitar SCS legitimo de
+            # centenas de MB so pelo tamanho de modelos/sons externos.
+            if len(infos)>120000:
+                raise ValueError("Arquivo com entradas demais: "+path.name)
+            chosen=[(item,acceptable(item.filename)) for item in infos]
+            chosen=[(item,c) for item,c in chosen if c is not None]
+            if sum(item.file_size for item,_ in chosen)>350_000_000:
+                raise ValueError("Conjunto de arquivos DEF acima de 350 MB: "+path.name)
+            for info,c in chosen:
                 if info.file_size>=max_def_bytes:
                     raise ValueError("Definicao acima de 8 MB: "+c)
                 remember(c,zf.read(info))
