@@ -313,6 +313,48 @@ class DirectionalINOUTInference(unittest.TestCase):
         self.assertFalse(p.decide(c,"cerveja","in").allowed)
 
 
+class CompleteCropFlowInference(unittest.TestCase):
+    def test_all_seven_fictional_crop_chains_from_fertilizer_and_harvest(self):
+        manifest={**g.MANIFEST,24:("coco","Coco")}
+        crops=[
+            ("corn",{"carga1","carga22"}),
+            ("soybeans",{"carga2","carga21"}),
+            ("sorghum",{"carga23"}),
+            ("potatoes",{"carga7"}),
+            ("oranges",{"carga8"}),
+            ("cotton",{"carga5"}),
+            ("coconut",{"carga24"}),
+        ]
+        for crop,expected in crops:
+            with self.subTest(crop=crop):
+                comp=g.Company("nome_inventado_991",old_in={"fertilizer"},
+                               old_out={crop})
+                self.assertEqual(p.classify(comp).role,"fazenda")
+                result=p.coverage({comp.name:comp},manifest)["empresas"][0]
+                self.assertEqual(set(result["out_esperados"]),expected)
+                self.assertEqual(set(result["in_esperados"]),{"carga3"})
+                self.assertNotIn("carga12",result["out_esperados"])
+
+    def test_fictional_crop_depot_receives_and_reexports_without_farm_label(self):
+        depot=g.Company("fantasia_001",old_in={"potatoes","coconut"},
+                        old_out={"potatoes","coconut"})
+        self.assertEqual(p.classify(depot).role,"entreposto_agricola_inferido")
+        manifest={**g.MANIFEST,24:("coco","Coco")}
+        row=p.coverage({depot.name:depot},manifest)["empresas"][0]
+        self.assertEqual(set(row["in_esperados"]),{"carga7","carga24"})
+        self.assertEqual(set(row["out_esperados"]),{"carga7","carga24"})
+        self.assertFalse(p.decide(depot,"soja","out").allowed)
+        self.assertFalse(p.decide(depot,"adubo","in").allowed)
+
+    def test_crop_depot_with_contradictory_steel_cannot_claim_industry(self):
+        c=g.Company("ficticia_mix_7",old_in={"potatoes","steel_coils"},
+                    old_out={"potatoes"})
+        self.assertEqual(p.classify(c).role,"desconhecida")
+        self.assertTrue(p.decide(c,"batata","in").allowed)
+        self.assertTrue(p.decide(c,"batata","out").allowed)
+        self.assertFalse(p.decide(c,"coco","out").allowed)
+
+
 class FictionalCompanySectorInference(unittest.TestCase):
     """As 24 cargas devem ser avaliadas SEM tabela de empresas reais."""
 
