@@ -162,6 +162,8 @@ def infer_by_flow(company):
     out_names={norm(x) for x in company.old_out}
     grains_out=outgoing & GRAIN_CLASSES
     grains_in=incoming & GRAIN_CLASSES
+    crops_out=outgoing & CROP_CLASSES
+    crops_in=incoming & CROP_CLASSES
     grain_generic_out=any(GENERIC_GRAIN.fullmatch(t) for t in out_names)
     grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
     other_out=outgoing - CROP_CLASSES
@@ -221,17 +223,19 @@ def infer_by_flow(company):
                         "unidade recebedora de materiais da construcao no IN, "
                         "sem evidencia de revenda ou fabricacao")
 
-    # Fazenda: grãos OUT + adubo IN e sem abastecimento de outros graos.
-    # Se OUT apenas 'graos', nao inventar milho nem soja.
-    if ("adubo" in incoming and (grains_out or grain_generic_out)
-            and not (grains_in or grain_generic_in)
+    # Fazenda ficticia de QUALQUER uma das culturas: milho, soja, sorgo,
+    # batata, laranja, algodao ou coco. Producao exige OUT da especie
+    # + fertilizante no IN e nenhuma entrada da propria colheita.
+    # "graos" nao especifica especie: nao inventa milho/soja.
+    if ("adubo" in incoming and (crops_out or grain_generic_out)
+            and not (crops_in or grain_generic_in)
             and not (other_out or
                      (incoming & AGRICULTURE_INCOMPATIBLE))):
-        detail=", ".join(sorted(grains_out)) or "graos sem especie"
+        detail=", ".join(sorted(crops_out)) or "graos sem especie"
         return Identity(
             "fazenda","alta",
             "inferencia economica: adubo no IN + "+detail+
-            " no OUT original, sem entrada de graos nem fluxo industrial; "
+            " no OUT original, sem entrada da colheita nem fluxo industrial; "
             "somente culturas nomeadas no OUT autorizam expedir carga"
         )
     # IN+OUT de cereais identificados indica comercio/armazenagem;
@@ -243,6 +247,17 @@ def infer_by_flow(company):
             "comercio_graos","alta",
             "inferencia de comercio/armazenagem: mesmas especies de graos "
             "documentadas no IN e OUT; nao comprova producao agricola"
+        )
+    # Frutas, batata, algodao ou coco IN e OUT da mesma unidade:
+    # revenda/entreposto, NAO prova de cultivo da mercadoria.
+    # Restrito aos produtos documentados e a direcao original.
+    if (crops_out & crops_in and
+            not (outgoing - CROP_CLASSES) and
+            not (incoming - CROP_CLASSES)):
+        return Identity(
+            "entreposto_agricola_inferido","alta",
+            "fluxo de comercializacao: cultura identificada em IN e OUT; "
+            "nenhuma evidencia de que a empresa cultive a colheita"
         )
     if ("adubo" in incoming and "adubo" in outgoing
             and not (outgoing - {"adubo"})):
@@ -364,6 +379,13 @@ def decide(company,category,direction,identity=None):
         if category=="adubo":
             return permit("atacadista identificado comercializa adubo/fertilizante")
         return forbid("comercio de fertilizante nao comprova racao, sorgo nem outras cargas")
+    if role=="entreposto_agricola_inferido":
+        declared=old_in if direction=="in" else old_out
+        if category in CROP_CLASSES and category in declared:
+            return permit("produto agropecuario comprovado na direcao original "
+                          "da DEF; sem supor producao propria",
+                          "IN/OUT documental do entreposto")
+        return forbid("entreposto ficticio nao documentou esta cultura/direcao")
     if role=="comercio_alimentos_inferido":
         available=old_in if direction=="in" else old_out
         if category in RETAIL_FOOD and category in available:
