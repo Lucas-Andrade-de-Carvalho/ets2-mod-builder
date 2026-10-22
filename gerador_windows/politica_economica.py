@@ -38,6 +38,12 @@ ROLES=(
     ("fabrica_moveis",r"marcenaria|furniture_factory|furniture_plant|moveis|^bechara$|^brigatto$|^esplane$"),
     ("comercio_graos",r"(?:^|_)graos(?:_|$)|^grupo_cereal$|^g_cereal_(?:rv|stb)$|^pr_anaconda$|^amaggi$"),
     ("concreteira",r"^polimix(?:1|_rib)?$|^concretar$|concreto_usinado|concrete_batch"),
+    # CSN Arcos na DEF MG descreve extracao de calcario/brita, nao
+    # uma unidade expedidora de bobinas nem de granito ornamentado.
+    # Fonte externa: csn.com.br/quem-somos/grupo-csn/unidades-fabris-csn/
+    ("mineracao_calcario",r"^csnarcos(?:[234])?$"),
+    ("revenda_agricola_documentada",r"^casabatata$"),
+    ("distribuidor_cerveja",r"^jmbebidas$"),
     ("siderurgica",r"gerdau|cofer|usiminas|arcelor|^csn(?:_|$)|steel_mill|steelworks|siderurg|sider[ _]"),
     ("automotiva_fabrica",r"^(?:fiat|fca|vw|volkswagen|gm|hyundai|toyota|renault|ford|honda|bmw)(?:_|$)|montadora|automotive_plant|car_factory"),
     ("maquinas",r"^mc_?equip|^mcequip|maquinas|maquinario|machinery|equipment_factory"),
@@ -60,7 +66,7 @@ ROLES=(
     ("metalurgica",r"metalurg|calha|cortedobra|metalworks|sheetmetal|usinagem|^itcc2?$|^marcegaglia$"),
     ("materiais",r"materiais|(?:^|_)(?:material|materiais)(?:_|$)|^material(?:ber|se1)$|mat_constr|material_constr|loja_material|building_supplies|hardware_store|building_materials|construm|construsol|dep_mat|^material_|^leroy_merlin$|^pinheiralvo$|^depo_(?:bh|cacu)$"),
     ("obras",r"construcao|construction_site|building_site|obra_|^obra|canteiro|batisse|^abcconstru$|^construai2$|^const(?:bd|carmopo|divi|juatub[12]|oliveir|pains|pminas|postoju)$|^constru(?:ca|sc|aco|ai|betim|cana|cb|fer|lavra|sar)$|^sanbuilders2?$|^konstnr(?:_hs)?2?$|^eldconst2?$|^cons_rbr$|^const_c_g$|^coluna_ma$"),
-    ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^kaarfor2?$|^sellplan2?$|^pr_samsclub$|^mt_mer_reti$|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
+    ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^martmix$|^villefort$|^hipermax$|^walmart$|^spani$|^shibata_ca$|^kaarfor2?$|^sellplan2?$|^pr_samsclub$|^mt_mer_reti$|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
     ("alimentos",r"industria_alim|food_processing|cannery|conservas|^arcor"),
     ("distribuidor",r"atacad|wholesale|distribuidor|distrib_fruit|distrib_|^distrbebidas$"),
@@ -89,7 +95,7 @@ ALIASES={
     "tijolo":r"tijolo|tijolos|brick|bricks|clay_bricks",
     "granito":r"granito|granite",
     "bobina":r"bobina|bobinas|steel_coil|steel_coils|steel_roll|coil_steel",
-    "cerveja":r"cerveja|cervejas|beer|beers|lager|ale",
+    "cerveja":r"cerveja|cervejas|beer|beers|lager|ale|amstel|brahma|budweiser|devassa|heineken|schin|skol|itaipava",
     "palete":r"palete|paletes|pallet|pallets|wooden_pallets",
     "racao":r"racao|animal_feed|livestock_feed|feedmeal|compound_feed|xerem",
 }
@@ -191,6 +197,18 @@ def decide(company,category,direction,identity=None):
         return forbid("ramo nao confirmado; carga deve ser revisada, sem preencher automaticamente")
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
+    if role=="mineracao_calcario":
+        return forbid("Unidade CSN Arcos expede calcario/brita na DEF; nao e comprovada fonte de bobina nem de granito nas 24 cargas")
+    if role=="revenda_agricola_documentada":
+        if category in {"batata","milho","racao"} and documentary:
+            return permit("comercializacao da carga comprovada pelo IN/OUT da DEF original",
+                          "setor e mercadoria documentados na DEF do mapa")
+        return forbid("mercadoria ou direcao nao comprovada na DEF da revenda agricola")
+    if role=="distribuidor_cerveja":
+        if category=="cerveja" and documentary:
+            return permit("distribuidora de bebidas com marca de cerveja documentada",
+                          "IN/OUT com identificador de cerveja na DEF original")
+        return forbid("bebidas genericas nao comprovam a mercadoria do Librelato")
     if role=="infra_passageiros":
         return forbid("rodoviaria/infraestrutura de passageiros nao e fabrica, mercado ou recebedora comprovada das 24 cargas")
     if role=="revenda_fertilizante":
