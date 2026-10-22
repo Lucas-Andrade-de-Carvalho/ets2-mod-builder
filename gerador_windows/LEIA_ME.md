@@ -492,3 +492,71 @@ continua bloqueada e o auditor NAO inventa empresa, cidade ou prefab.
 Documentacao oficial: https://modding.scssoft.com/wiki/Games/ETS2/Modding_guides/1.4.1
 DEF Company oficial Minas: https://mapaminasets2.com.br/adicionais/
 Fonte adicional nao prova prefab funcionando; ETS2 deve ser testado.
+
+
+## RBR - cobertura maxima de TODAS as empresas compativeis
+
+O RBR ja tem 24/24 cargos com pares economicos candidatos ao ETS2, mas
+isso NAO equivale a 100% das empresas compatíveis. A partir desta versao
+o botao '3. AUDITAR / CORRIGIR SCS EXISTENTE' cria adicionalmente:
+
+- COBERTURA_MAXIMA_RBR.json: uma linha por TODAS as empresas da DEF
+  com setor, cidades, IN/OUT exigidos e existentes e lacunas.
+- COBERTURA_MAXIMA_RBR.csv: mesmo inventario pronto para Excel.
+- RBR_REVISAO_ECONOMICA_PRIORIZADA.csv: empresas reconhecidas com
+  permissoes faltando + atividades ainda nao identificadas que possuem
+  INDICIOS de operar ao menos uma das 24 cargas. O arquivo e ordenado
+  por criticidade e numero de pontos editor no mapa.
+
+O relatorio mostra:
+
+- Quantas empresas sao conhecidas e compativeis com uma/mais das 24;
+- Quantas empresas ja tem TODOS seus IN/OUT compativeis;
+- Quantas precisam de correcoes e quais os cargos exatos;
+- Quantas nao tem nenhuma carga do catalogo e podem ficar sem cargas;
+- Quantas estao sem classificacao documental, incluindo suspeitas de
+  compatibilidade que exigem revisao;
+- Porcentagem APENAS entre empresas compativeis e ja classificadas.
+
+Para evitar falsa certificacao, cobertura_100_por_cento_comprovada fica
+FALSE enquanto houver empresas sem classificacao, empresas conhecidas
+com lacunas, ou mercadorias sem pares economicos/instancias editor.
+A existencia de 24/24 cargos com pares no RBR nao apaga as pendencias
+de classificacao de outras empresas da DEF.
+
+Novas relacoes economicas REAIS comprovadas:
+
+- Citrosuco (citrosuco1/2) e FruCamp: recebem laranjas para suco;
+  NAO produzem a carga de fruta fresca.
+  https://www.citrosuco.com.br/produtos/
+  https://frucamp.com.br/quem-somos
+- Greenplac: recebe madeira para producao de MDF; NAO expede toras
+  de madeira por simplesmente fabricar paineis.
+  https://colparbrasil.com/nossos-negocios/greenplac/
+- Eternit: recebe cimento para fabricar fibrocimento; nao e cimenteira.
+  https://eternit.relato365.com.br/gestao-de-materiais/
+- Marcegaglia: recebe bobinas para industrializacao e tubos;
+  nao produz automaticamente a carga de bobinas do reboque.
+  https://marcegagliadobrasil.com/pt-br/linha-de-producao/
+- Sam's Club e Super Ponto Bom Retiro: recebem alimentos, frutas e cerveja.
+  https://www.samsclub.com.br/colecao/364
+- Agromec Votuporanga: vende/compra adubo; nao recebe automaticamente
+  cargas de sorgo ou racao apenas por trabalhar com agro.
+  https://portaldatransparencia.gov.br/cartoes/cpgf/pessoa-juridica/65637076000178
+- Comercio de madeiras identificado: pode receber e fornecer madeira,
+  mas paletes requerem evidencia especifica na DEF original.
+- Lavouras de cana: recebem adubo; nao produzem milho/soja ficticios.
+- Rodoviarias/PRF/subestacoes nao sao clientes de cargas do reboque;
+  suas antigas permissoes incompatíveis sao neutralizadas quando comprovadas.
+
+Casos AMBIGUOS, sem padronizar de forma arbitraria: portos, deposito
+generico, empresas com ID em siglas ou numeros, Agro Capim,
+fabrica de alimentos nao identificada, e lugares sem ramo comprovado.
+PepsiCo Tres Lagoas, por exemplo, nao deve virar produtora de
+cerveja ou cultivadora de batata pelo nome da marca. Uma unidade
+especifica e seus insumos precisam ser documentados.
+
+Este metodo maximiza as empresas compatíveis **com evidencias**;
+NAO promete 100% absoluto onde faltam dados de atividade ou testes
+reais do ETS2. A classificacao usa identificadores precisos do RBR
+e regras de IN/OUT restritas a produtos corretos.
