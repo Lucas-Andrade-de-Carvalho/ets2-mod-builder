@@ -56,6 +56,36 @@ class DiagnosticTrailerTests(unittest.TestCase):
         self.assertEqual(result["total_cargas_catalogo"],23)
         self.assertFalse(result["erros"])
 
+    def test_cargo_model_154_and_loading_method_crosscheck(self):
+        p=self.input["mod"]
+        with zipfile.ZipFile(p) as archive:
+            content={name:archive.read(name) for name in archive.namelist()}
+        content["def/vehicle/trailer_owned/test/body/grade.sii"]=(
+            b"body_type: alta\\ncargo_loading_methods[]: area\\n")
+        content["def/vehicle/cargo/carga1/model_area.sii"]=(
+            b"cargo_model_match : .area {\\n"
+            b" loading_method: area\\n"
+            b' data_path[]: "/def/vehicle/cargo/carga1/accessory.sii"\\n}')
+        content["def/vehicle/cargo/carga1/accessory.sii"]=(
+            b"accessory_cargo_data: .carga { }")
+        zip_write(p,content)
+        _dest,report=diag.inspect(g,self.input,self.txt,self.root/"models_ok")
+        evidence=report["carga_modelo_154"]["carga1"]
+        self.assertEqual(evidence["status"],"MODELO_ENCONTRADO")
+        self.assertEqual(evidence["metodos_do_modelo"],["area"])
+        self.assertEqual(evidence["metodos_das_carrocerias"],["area"])
+        self.assertEqual(evidence["modelos_referenciados_ausentes_nas_fontes"],[])
+        self.assertFalse(evidence["incompatibilidade_explicita_de_metodos"])
+
+        content["def/vehicle/trailer_owned/test/body/grade.sii"]=(
+            b"body_type: alta\\ncargo_loading_methods[]: bulk\\n")
+        zip_write(p,content)
+        _dest,broken=diag.inspect(g,self.input,self.txt,self.root/"models_mismatch")
+        self.assertTrue(broken["carga_modelo_154"]["carga1"][
+            "incompatibilidade_explicita_de_metodos"])
+        self.assertIn("carga1",str(broken["avisos"]))
+        self.assertNotIn("carga1",str(broken["erros"]))
+
     def test_all_sources_and_sha_are_auditable(self):
         dest,report=diag.inspect(g,self.input,self.txt,self.root/"report")
         self.assertEqual(report["total_cargas_catalogo"],23)
