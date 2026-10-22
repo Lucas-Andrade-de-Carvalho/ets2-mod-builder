@@ -1454,11 +1454,22 @@ def run_gui():
             companies=sum(x.get("empresas_classificacao_pendente",0)
                           for x in results)
             route_gaps=sum(len(x.get("cargas_sem_rota_validada",[])) for x in results)
+            economical=sum(
+                (x.get("qualidade_logistica") or {}).get(
+                    "cargas_com_par_economico_comprovavel",0) for x in results)
+            playable_candidates=sum(
+                (x.get("qualidade_logistica") or {}).get(
+                    "cargas_candidatas_teste_ets2",0) for x in results)
+            total_cargos=sum(x["total_cargas_catalogo"] for x in results)
             msg=(str(len(results))+" Company(s) examinada(s). "+
                  str(review)+" revisoes pontuais; "+
                  str(companies)+" empresas com classificacao pendente ("+
                  str(unverified)+" permissoes antigas preservadas). "+
-                 str(route_gaps)+" cadeias sem rota completa. "+
+                 str(route_gaps)+" cadeias sem par registrado. "+
+                 str(economical)+"/"+str(total_cargos)+
+                 " cadeias com justificativa economica; "+
+                 str(playable_candidates)+"/"+str(total_cargos)+
+                 " candidatas a teste no ETS2. "+
                  ("Novos SCS exportados SEM homologacao; originais intactos. "
                   if mode=="corrigir" else "Nenhum SCS gerado. ")+
                  "Veja RESUMO_VALIDACAO_*.txt e PENDENCIAS_CLASSIFICACAO_*.csv. "+
