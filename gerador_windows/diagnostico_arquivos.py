@@ -170,9 +170,9 @@ def inspect(g, source_files, txt_path, output):
             errors.append("Definicao de modelo/carroceria invalida: "+str(exc))
     for cid,data in modern_models.items():
         if data["incompatibilidade_explicita_de_metodos"]:
-            warnings.append(cid+": metodo de carga do modelo nao coincide com "
-                            "cargo_loading_methods das carrocerias declaradas; "
-                            "revisar arquivos 1.54+.")
+            errors.append(cid+": metodo do cargo_model_match NAO coincide com "
+                          "cargo_loading_methods das carrocerias declaradas. "
+                          "Conflito comprovado; bloquear geracao e corrigir a DEF.")
         if data["modelos_referenciados_ausentes_nas_fontes"]:
             warnings.append(cid+": accessory_cargo_data nao encontrado nos "
                             "tres arquivos; verificar dependencias externas.")
