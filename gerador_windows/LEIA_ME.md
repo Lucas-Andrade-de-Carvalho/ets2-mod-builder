@@ -1,3 +1,12 @@
+> **NOTA DE ENTREGA (22/10/2026):** O documento vigente para a versao
+> candidata final e [GUIA_VERSAO_FINAL_CANDIDATA_20261022.md](GUIA_VERSAO_FINAL_CANDIDATA_20261022.md).
+> Partes historicas abaixo mencionam 23 cargas ou cidade inferida do nome do
+> arquivo. **Essas afirmacoes antigas nao representam o comportamento atual:**
+> sao **24** cargas verificadas na fonte, e cidades exigem `company_def`
+> contendo os campos `city` e `prefab`. Testes automatizados nao
+> equivalem a homologacao no ETS2. Nao ha verificacao em jogo sem
+> evidencias de coleta/entrega real por mapa.
+
 # V3.0 — Cobertura econômica documental (22/10/2026)
 
 ## Estado da homologação
