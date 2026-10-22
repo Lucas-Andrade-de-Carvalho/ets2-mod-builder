@@ -112,6 +112,27 @@ class ProfessionalEconomyTests(unittest.TestCase):
         farm.old_in.add("animal_feed")
         self.assertTrue(policy.decide(farm,"racao","in").allowed)
 
+
+    def test_sorgo_animal_feed_chain_is_supported_without_fake_crops(self):
+        agropecuaria=g.Company("agropecuaria_centro")
+        pecuaria=g.Company("pecuaria_gado")
+        fazenda=g.Company("fazenda_santa_luzia")
+        self.assertTrue(policy.decide(agropecuaria,"sorgo","out").allowed)
+        self.assertTrue(policy.decide(agropecuaria,"sorgo","in").allowed)
+        self.assertTrue(policy.decide(pecuaria,"sorgo","in").allowed)
+        self.assertFalse(policy.decide(pecuaria,"sorgo","out").allowed)
+        # Fazenda sem criacao documentada nao deve receber sorgo
+        # automaticamente nem alegar que o cultivou.
+        self.assertFalse(policy.decide(fazenda,"sorgo","in").allowed)
+        self.assertFalse(policy.decide(fazenda,"sorgo","out").allowed)
+        fazenda.old_in.add("animal_feed")
+        self.assertTrue(policy.decide(fazenda,"sorgo","in").allowed)
+        fazenda.old_out.add("sorghum")
+        self.assertTrue(policy.decide(fazenda,"sorgo","out").allowed)
+        # Transportadora nao vira distribuidor apenas por nome generico.
+        self.assertFalse(policy.decide(g.Company("transportadora_centro"),
+                                       "sorgo","out").allowed)
+
     def test_complete_23_chains_and_company_city_instances(self):
         mapping={
             "fazenda_ouro":{"in":["fertilizer"],"out":["corn","soybeans","cotton","sorghum"]},
