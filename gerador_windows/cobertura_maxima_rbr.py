@@ -25,8 +25,10 @@ def assess(companies,territory,final_active,manifest,quality):
     """Um registro para cada empresa (sem excluir nenhuma do denominador)."""
     docs={x["empresa"]:x for x in territory["empresas"]}
     cities={}
+    unit_counts={}
     for x in territory["instancias_cidade"]:
         cities.setdefault(x["empresa"],set()).add(x["cidade"])
+        unit_counts[x["empresa"]]=unit_counts.get(x["empresa"],0)+1
     rows=[]
     known_with_cargo=known_complete=known_incomplete=outside=unclassified=0
     potential_unknown=0
@@ -76,7 +78,7 @@ def assess(companies,territory,final_active,manifest,quality):
             "setor":role,
             "status":status,
             "cidades":sorted(cities.get(id,[])),
-            "total_instancias_editor":len(c.editor_files),
+            "total_instancias_editor":unit_counts.get(id,0),
             "in_esperados":sorted(planned_in),
             "out_esperados":sorted(planned_out),
             "in_efetivos":sorted(actual_in),
@@ -158,7 +160,7 @@ def assess(companies,territory,final_active,manifest,quality):
             if known_with_cargo else None,
         "cadeias_economicas":economic,
         "cargas_candidatas_teste":with_editor,
-        "instancias_editor_detectadas":sum(len(c.editor_files) for c in companies.values()),
+        "instancias_editor_detectadas":sum(unit_counts.values()),
         "cidades_identificadas":len(cities_report),
         "cidades_com_empresas_compativeis_incompletas":sum(
             bool(row["empresas_compativeis_incompletas"]) for row in cities_report),
@@ -166,7 +168,7 @@ def assess(companies,territory,final_active,manifest,quality):
             bool(row["empresas_sem_atividade_identificada"]) for row in cities_report),
         "cidades_com_compativeis_reconhecidas_cobertas":sum(
             row["situacao"]=="COMPATIVEIS_COBERTAS" for row in cities_report),
-        "empresas_sem_editor":sum(not c.editor_files for c in companies.values()),
+        "empresas_sem_editor":sum(not unit_counts.get(id,0) for id in companies),
         "total_cargas":total_cargos,
         "cobertura_100_por_cento_comprovada":bool(complete),
         "aviso":"Percentual se limita a empresas JA classificadas. "
