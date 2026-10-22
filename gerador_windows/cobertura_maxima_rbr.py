@@ -199,9 +199,12 @@ def assess(companies,territory,final_active,manifest,quality):
             round(100*evidence_covered/evidence_expected,2)
             if evidence_expected else None),
         "denominador_cobertura_justificada":
-            "SOMENTE permissões autorizadas pela atividade ou pelos IN/OUT "
-            "originais; nao inclui compatibilidades nao documentadas, "
-            "empresa nao classificada sem mercadoria nem homologacao em jogo",
+            "Permissoes economicas previstas PELA POLITICA VIGENTE: "
+            "inclui origem/destino de algodao e coco SIMULADOS com "
+            "autorizacao regional do usuario apenas em Minas/Eldorado. "
+            "Essas excecoes NAO sao comprovadas por IN/OUT da DEF original "
+            "nem homologadas no ETS2. Para provas documentais, consultar "
+            "QUALIDADE_LOGISTICA e candidatos documentados.",
         "empresas_reconhecidas_com_ao_menos_uma_carga":known_with_cargo,
         "empresas_reconhecidas_totalmente_contempladas":known_complete,
         "empresas_reconhecidas_com_lacunas":known_incomplete,
