@@ -298,7 +298,9 @@ class ProfessionalEconomyTests(unittest.TestCase):
                     for token in tokens:
                         files[f"{company}/{side}/{token}.sii"]=old(token)
                 for city in ("betim","lavras"):
-                    files[f"{company}/editor/{city}.sii"]="SiiNunit\n{}\n"
+                    files[f"{company}/editor/{city}.sii"]=(
+                        "SiiNunit\n{\ncompany_def : ."+city+" {\n"
+                        " city: "+city+"\n prefab: fixture_prefab\n}\n}\n")
             map_path=self.fixture.root/"realistic_v3_eldorado.zip"
             zip_write(map_path,files)
             companies,_=g.extract_map(map_path)
