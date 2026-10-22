@@ -65,6 +65,30 @@ class EndToEndPreflightTests(unittest.TestCase):
                              ("QUALIDADE_LOGISTICA_"+name.upper()+".json")).exists())
         self.assertEqual(list(target.rglob("*.scs")),[])
 
+    def test_rbr_only_24_cargo_preflight_no_unrelated_map_required(self):
+        with zipfile.ZipFile(self.source["mod"]) as z:
+            contents={p:z.read(p) for p in z.namelist()}
+        contents["def/cargo/carga24.sui"]=(
+            b'cargo_data : cargo.carga24 {\n body_types[]: alta\n}\n')
+        zip_write(self.source["mod"],contents)
+        root=self.root/"preflight_rbr_isolado"
+        report=final.run(g,self.source,{"RBR":self.maps["RBR"]},root,
+                         expected_maps=("RBR",))
+        self.assertTrue(report["preflight_isolado"])
+        self.assertEqual(report["mapas_esperados"],["RBR"])
+        self.assertEqual(report["ensaios_de_jogo_planejados"],24)
+        self.assertEqual([m["nome"] for m in report["mapas"]],["RBR"])
+        self.assertFalse(report["homologado_no_ets2"])
+        with (root/"MATRIZ_ENSAIOS_ETS2.csv").open(
+                newline="",encoding="utf-8-sig") as fp:
+            entries=list(csv.DictReader(fp,delimiter=";"))
+        self.assertEqual(len(entries),24)
+        self.assertEqual({e["mapa"] for e in entries},{"RBR"})
+        self.assertTrue(all(e["entrega_realizada"]=="" for e in entries))
+        self.assertFalse((root/"02_MAPAS"/"AUDITORIA_ELDORADO.json").exists())
+        self.assertFalse((root/"02_MAPAS"/"AUDITORIA_MINAS_GERAIS.json").exists())
+        self.assertEqual(list(root.rglob("*.scs")),[])
+
     def test_log_errors_are_recorded_not_confused_with_gameplay(self):
         log=self.root/"game.log.txt"
         log.write_text("00:00:00 <WARNING> benign\n"
