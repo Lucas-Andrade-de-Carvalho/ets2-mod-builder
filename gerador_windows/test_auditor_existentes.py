@@ -57,6 +57,46 @@ class AuditorSCSRegression(unittest.TestCase):
                                          "map_def":self.baseline}},
                          out or self.root/"audit_output",mode=mode)
 
+    def test_professional_anonymous_farm_flow_generates_real_scs_permissions(self):
+        """A interpretacao IN/OUT tem de alterar o SCS, nao so o JSON."""
+        mapa=self.root/"fluxo_mapa_rbr.zip"
+        zip_write(mapa,{
+            "unidade_anonima/in/fertilizer.sii":old("fertilizer"),
+            "unidade_anonima/out/corn.sii":old("corn"),
+            "unidade_anonima/out/soybeans.sii":old("soybeans"),
+            "martminas/in/beer.sii":old("beer"),
+            "martminas/in/potatoes.sii":old("potatoes"),
+            "ambev/out/beer.sii":old("beer"),
+        })
+        entrada=self.root/"Company_rbr_sem_permissoes.scs"
+        zip_write(entrada,{"ReadMe.txt":b"ORIGINAL INTACTO"})
+        origem=entrada.read_bytes()
+        out=self.root/"fluxo_saida"
+        files=self.fixture.inp
+        reports=audit.run(g,{"RBR":{"existing":entrada,"map_def":mapa}},out,
+                          professional=True,source_files={
+                              key:files[key] for key in ("mod","def1","def2")})
+        self.assertEqual(len(reports),1)
+        self.assertEqual(entrada.read_bytes(),origem)
+        with zipfile.ZipFile(out/reports[0]["arquivo_corrigido"]) as scs:
+            self.assertIsNone(scs.testzip())
+            for n in (1,2,21,22):
+                self.assertIn(
+                    f"def/company/unidade_anonima/out/audit_carga{n}.sii",
+                    scs.namelist())
+            self.assertIn("def/company/unidade_anonima/in/audit_carga3.sii",
+                          scs.namelist())
+            for n in (7,8,12):
+                self.assertIn(f"def/company/martminas/in/audit_carga{n}.sii",
+                              scs.namelist())
+            self.assertNotIn("def/company/unidade_anonima/out/audit_carga23.sii",
+                             scs.namelist())
+            self.assertNotIn("def/company/martminas/out/audit_carga12.sii",
+                             scs.namelist())
+            self.assertEqual(scs.read("ReadMe.txt"),b"ORIGINAL INTACTO")
+        self.assertEqual(reports[0]["cobertura_maxima_empresas"][
+            "empresas_reconhecidas_com_lacunas"],0)
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
