@@ -1499,19 +1499,32 @@ def run_gui():
                   if mode=="corrigir" else "Nenhum SCS gerado. ")+
                  "Veja RESUMO_VALIDACAO_*.txt e PENDENCIAS_CLASSIFICACAO_*.csv. "+
                  "Nao entregar ao cliente sem validar DEF e ETS2.")
-            rbr=next((x for x in results if x["mapa"]=="RBR"),None)
-            coverage=(rbr or {}).get("cobertura_maxima_empresas",{})
-            if coverage:
+            coverages=[
+                (row["mapa"],row.get("cobertura_maxima_empresas") or {})
+                for row in results
+                if row.get("cobertura_maxima_empresas")
+            ]
+            if coverages:
+                report_parts=[]
+                for map_name,coverage in coverages:
+                    report_parts.append(
+                        map_name+": "+
+                        str(coverage["empresas_reconhecidas_totalmente_contempladas"])+"/"+
+                        str(coverage["empresas_reconhecidas_com_ao_menos_uma_carga"])+
+                        " empresas reconhecidas compativeis com IN/OUT completos; "+
+                        str(coverage["empresas_sem_classificacao"])+
+                        " nao classificadas ("+
+                        str(coverage["desconhecidas_com_sinais_de_carga_a_investigar"])+
+                        " com indicios para investigar); "+
+                        str(coverage["instancias_editor_detectadas"])+
+                        " unidades editor."
+                    )
                 msg+=(
-                    " RBR cobertura por EMPRESA (nao apenas 24/24 cargas): "+
-                    str(coverage["empresas_reconhecidas_totalmente_contempladas"])+"/"+
-                    str(coverage["empresas_reconhecidas_com_ao_menos_uma_carga"])+
-                    " empresas compativeis RECONHECIDAS contempladas; "+
-                    str(coverage["empresas_sem_classificacao"])+
-                    " empresas ainda sem atividade comprovada, das quais "+
-                    str(coverage["desconhecidas_com_sinais_de_carga_a_investigar"])+
-                    " merecem investigacao de compatibilidade. "+
-                    "Confira COBERTURA_MAXIMA_RBR.csv; NAO declarar 100% de cobertura total."
+                    " COBERTURA POR EMPRESA/CIDADE: "+
+                    " | ".join(report_parts)+
+                    " Confira COBERTURA_MAXIMA_<MAPA>.csv e "+
+                    "<MAPA>_REVISAO_ECONOMICA_PRIORIZADA.csv. "+
+                    "Nao equivale a 100% de cobertura comprovada ou frete homologado."
                 )
             work_queue.put(("success",msg))
         except Exception as exc:
