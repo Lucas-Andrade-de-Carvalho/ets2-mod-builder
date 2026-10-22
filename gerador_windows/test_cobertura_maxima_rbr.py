@@ -229,6 +229,89 @@ class ProvenEconomicExpansion(unittest.TestCase):
                 self.assertFalse(p.decide(c,"bobina","in").allowed)
 
 
+class DirectionalINOUTInference(unittest.TestCase):
+    def test_anonymous_farm_detected_from_fertilizer_in_and_crop_out(self):
+        farm=g.Company("unidade_xyz",old_in={"fertilizer"},
+                       old_out={"corn","soybeans"})
+        role=p.classify(farm)
+        self.assertEqual(role.role,"fazenda")
+        self.assertEqual(role.certainty,"alta")
+        self.assertIn("inferencia",role.evidence)
+        report=p.coverage({farm.name:farm},g.MANIFEST)
+        item=report["empresas"][0]
+        self.assertEqual(item["atividade"],"fazenda")
+        self.assertEqual(set(item["out_esperados"]),
+                         {"carga1","carga2","carga21","carga22"})
+        self.assertEqual(set(item["in_esperados"]),{"carga3"})
+        self.assertNotIn("carga24",item["out_esperados"])
+        self.assertNotIn("carga23",item["out_esperados"])
+        from auditor_existentes import can_add
+        farm.role=role.role
+        farm.explicit_role=True
+        self.assertTrue(can_add(g,farm,"milho","out","Minas_Gerais",
+                                professional=True))
+        self.assertTrue(can_add(g,farm,"adubo","in","RBR",
+                                professional=True))
+        self.assertFalse(can_add(g,farm,"soja","in","RBR",
+                                 professional=True))
+
+    def test_anonymous_farm_with_generic_grains_never_invents_species(self):
+        farm=g.Company("prod_42",old_in={"fertilizer"},old_out={"graos"})
+        self.assertEqual(p.classify(farm).role,"fazenda")
+        report=p.coverage({farm.name:farm},g.MANIFEST)["empresas"][0]
+        self.assertEqual(report["in_esperados"],["carga3"])
+        self.assertEqual(report["out_esperados"],[])
+
+    def test_bidirectional_grain_trade_is_not_a_farm(self):
+        depot=g.Company("unidade_876",old_in={"corn","soybeans"},
+                        old_out={"corn","soybeans"})
+        role=p.classify(depot)
+        self.assertEqual(role.role,"comercio_graos")
+        self.assertIn("armazenagem",role.evidence)
+        report=p.coverage({depot.name:depot},g.MANIFEST)["empresas"][0]
+        cargo={"carga1","carga2","carga21","carga22"}
+        self.assertEqual(set(report["in_esperados"]),cargo)
+        self.assertEqual(set(report["out_esperados"]),cargo)
+        self.assertNotIn("carga3",report["in_esperados"])
+        self.assertNotIn("carga23",report["out_esperados"])
+
+    def test_transport_or_conflicting_flows_are_not_misclassified(self):
+        transport=g.Company("transportadora_exemplo",
+                            old_in={"fertilizer"},old_out={"corn"})
+        self.assertEqual(p.classify(transport).role,"transportadora")
+        self.assertFalse(p.decide(transport,"milho","out").allowed)
+        contradictory=g.Company("company_nebulosa",
+                                old_in={"fertilizer","corn"},
+                                old_out={"corn","steel_coils"})
+        self.assertEqual(p.classify(contradictory).role,"desconhecida")
+        self.assertFalse(p.decide(contradictory,"soja","out").allowed)
+
+    def test_martminas_store_gets_all_proven_grocery_categories(self):
+        market=g.Company("MartMinas")
+        self.assertEqual(p.classify(market).role,"supermercado")
+        row=p.coverage({market.name:market},g.MANIFEST)["empresas"][0]
+        self.assertEqual(set(row["in_esperados"]),
+                         {"carga7","carga8","carga12","carga24"})
+        self.assertEqual(row["out_esperados"],[])
+
+    def test_anonymous_food_trader_preserves_documentary_product_limit(self):
+        c=g.Company("company_anonymous",old_in={"beer","potatoes","oranges"})
+        self.assertEqual(p.classify(c).role,"comercio_alimentos_inferido")
+        row=p.coverage({c.name:c},g.MANIFEST)["empresas"][0]
+        self.assertEqual(set(row["in_esperados"]),
+                         {"carga7","carga8","carga12"})
+        self.assertEqual(row["out_esperados"],[])
+        self.assertNotIn("carga24",row["in_esperados"])
+
+    def test_original_librelato_cargo_ids_support_directional_inference(self):
+        c=g.Company("agro_anonymous",old_in={"carga3"},
+                    old_out={"carga1","carga2"})
+        self.assertEqual(p.classify(c).role,"fazenda")
+        self.assertTrue(p.decide(c,"milho","out").allowed)
+        self.assertTrue(p.decide(c,"adubo","in").allowed)
+        self.assertFalse(p.decide(c,"cerveja","in").allowed)
+
+
 class RBRCoverageReport(unittest.TestCase):
     def fake(self):
         objs={
