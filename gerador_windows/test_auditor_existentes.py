@@ -304,6 +304,15 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(original.read_bytes(),backup)
         result=reports[0]
         self.assertGreaterEqual(result["permissoes_plausiveis_sem_evidencia_def"],2)
+        with (path/"MATRIZ_ENSAIOS_ETS2_RBR.csv").open(
+                newline="",encoding="utf-8-sig") as fp:
+            import csv
+            rows=list(csv.DictReader(fp,delimiter=";"))
+        self.assertEqual(len(rows),len(g.MANIFEST))
+        self.assertIn("origem_real_testada",rows[0])
+        self.assertIn("entrega_concluida",rows[0])
+        self.assertTrue(all(row["entrega_concluida"]=="" for row in rows))
+        self.assertTrue(all(row["frete_visivel_no_ets2"]=="" for row in rows))
         hyp=[d for d in result["decisoes"] if d["acao"]=="MANTER_PLAUSIVEL"]
         self.assertIn(("faz_milho","carga23"),
                       [(x["empresa"],x["carga"]) for x in hyp])
