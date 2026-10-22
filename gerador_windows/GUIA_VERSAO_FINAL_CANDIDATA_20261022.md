@@ -1,3 +1,5 @@
+> **Atualização regional autorizada (22/10/2026):** para **Minas Gerais e Eldorado**, foi aprovada uma exceção econômica que distribui **pluma de algodão (`carga5`)** das fazendas para armazéns/silos/cooperativas e **coco (`carga24`)** das fazendas para supermercados/mercearias/CEASAs. Estas associações são marcadas como simulação aprovada e NÃO como prova da mercadoria nos IN/OUT originais. **O RBR permanece sem esta exceção.** Na interface, selecione **Somente MINAS + ELDORADO** e execute **Auditar/Corrigir SCS Existente**. Consulte o guia `GUIA_ADAPTACAO_PLUMA_COCO_20261022.md`; esta regra substitui as notas históricas abaixo que bloqueavam automaticamente algodão/coco nesses dois mapas.
+
 # Company Logistics V3 — Entrega técnica candidata (22/10/2026)
 
 ## Escopo realmente concluído
