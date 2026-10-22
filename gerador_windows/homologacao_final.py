@@ -98,11 +98,14 @@ def run(g, sources, entries, out_path, game_log=None,
             for cid,entry in sorted(matrix.items(),key=lambda kv:catalogo.sort_key(kv[0])):
                 confirmed=entry.get("candidatos_para_teste",[])
                 documented=entry.get("candidatos_documentados_para_teste",[])
-                suggested=confirmed or documented
+                regional=entry.get("candidatos_simulacao_regional",[])
+                suggested=confirmed or documented or regional
                 first=suggested[0] if suggested else {}
                 evidence_level=("SETOR_E_ECONOMIA" if confirmed else
                                 "MESMA_MERCADORIA_IN_OUT_SETOR_PENDENTE"
-                                if documented else "SEM_PAR_DOCUMENTAL_EDITOR")
+                                if documented else
+                                "ADAPTACAO_REGIONAL_AUTORIZADA_SEM_PROVA_INOUT"
+                                if regional else "SEM_PAR_DOCUMENTAL_EDITOR")
                 rows.append({
                     "mapa":map_name,"carga":cid,"mercadoria":entry["nome"],
                     "situacao_auditoria":entry["status"],
