@@ -1361,20 +1361,21 @@ def run_gui():
                                    encoding="utf-8")
         except OSError as exc:
             append_log("Aviso: nao consegui salvar os caminhos: "+str(exc))
-    def check_paths(include_librelato):
-        required=(
-            ["mod","def1","def2","txt","eldorado"] if scope_var.get()=="eldorado"
-            else ["mod","def1","def2","txt","minas","eldorado","rbr"])
-        if include_librelato=="audit":
-            required=(["mod","def1","def2","eldorado","existing_eldorado"] if
-                      scope_var.get()=="eldorado" else
-                      ["mod","def1","def2","minas","eldorado","rbr",
-                       "existing_minas","existing_eldorado","existing_rbr"])
-        elif not include_librelato:required=["minas","eldorado","rbr"]
-        needed=required+["output"]
-        missing=[k for k in needed if not widgets[k].get().strip()]
+    def check_paths(action):
+        # Diagnostico tecnico independe das DEFs dos mapas.
+        originals=["mod","def1","def2","txt"]
+        maps=(["eldorado"] if scope_var.get()=="eldorado"
+              else ["minas","eldorado","rbr"])
+        required=(originals if action=="diagnostic" else
+                  originals+maps if action=="generate" else
+                  originals+maps+(
+                     ["existing_eldorado"] if scope_var.get()=="eldorado" else
+                     ["existing_minas","existing_eldorado","existing_rbr"]))
+        missing=[k for k in required+["output"] if not widgets[k].get().strip()]
         if missing:raise ValueError("Selecione os campos: "+", ".join(missing))
-        invalid=[k for k in required if not Path(widgets[k].get()).exists()]
+        optional=(["minas","eldorado","rbr"] if action=="diagnostic" else [])
+        invalid=[k for k in required+[x for x in optional if widgets[x].get().strip()]
+                 if not Path(widgets[k].get()).exists()]
         if invalid:raise ValueError("Arquivo ou pasta inexistente: "+", ".join(invalid))
     def change_busy(value):
         busy[0]=value
@@ -1444,28 +1445,33 @@ def run_gui():
 
     def worker_diagnostic(snapshot):
         try:
+            from diagnostico_arquivos import inspect
             out=Path(snapshot["output"])
+            path,result=inspect(sys.modules[__name__],snapshot,snapshot["txt"],out)
+            work_queue.put(("log","Librelato: "+str(path)+
+                            " | "+result["resultado"]+
+                            " | "+str(result["total_cargas_catalogo"])+
+                            " cargas, "+str(len(result["erros"]))+" erros tecnicos"))
+            if result["erros"]:
+                raise ValueError("Diagnostico bloqueado. Confira "+str(path)+
+                                 " antes de gerar SCS.")
+            maps_checked=[]
             for key in ("minas","eldorado","rbr"):
-                p=export_diagnostic(snapshot[key],out)
-                work_queue.put(("log",key+": diagnostico salvo em "+str(p)))
-            if all(snapshot.get(k) and Path(snapshot[k]).exists()
-                   for k in ("mod","def1","def2","txt")):
-                from diagnostico_arquivos import inspect
-                path,result=inspect(sys.modules[__name__],snapshot,snapshot["txt"],out)
-                work_queue.put(("log","Librelato: "+str(path)+
-                                " | "+result["resultado"]+
-                                " | "+str(result["total_cargas_catalogo"])+
-                                " cargas, "+str(len(result["erros"]))+" erros tecnicos"))
-            work_queue.put(("success","Diagnosticos exportados. Se os arquivos do "+
-                            "reboque e TXT estiverem selecionados, confira "+
-                            "DIAGNOSTICO_LIBRELATO_CARGAS_ORIGINAIS.json. "+
-                            "Validacao de rotas/ETS2 continua necessaria."))
+                if snapshot.get(key) and Path(snapshot[key]).exists():
+                    p=export_diagnostic(snapshot[key],out)
+                    maps_checked.append(key)
+                    work_queue.put(("log",key+": diagnostico salvo em "+str(p)))
+            work_queue.put(("success",
+                "Reboque e TXT examinados: "+str(result["total_cargas_catalogo"])+
+                " cargas. Relatorio: "+str(path)+". Mapas diagnosticados: "+
+                (", ".join(maps_checked) if maps_checked else "nenhum (opcionais)")+
+                ". Ainda nao homologado no ETS2."))
         except Exception as exc:
             work_queue.put(("error","Falha no diagnostico: "+str(exc)))
     def run(action):
         if busy[0]:return
         try:
-            check_paths(include_librelato=("audit" if action=="audit" else action=="generate"))
+            check_paths(action)
             persist()
             snapshot={k:v.get() for k,v in widgets.items()}
             change_busy(True)
@@ -1499,7 +1505,7 @@ def run_gui():
         except queue.Empty:
             pass
         root.after(125,pump)
-    btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR OS 3 MAPAS",
+    btn_diag=ttk.Button(actions,text="1. DIAGNOSTICAR LIBRELATO / MAPAS",
                         command=lambda:run("diagnostic"),style="Main.TButton")
     btn_diag.grid(row=0,column=0,sticky="ew",padx=3,pady=2)
     btn_generate=ttk.Button(actions,text="2. GERAR COMPANY(S) SELECIONADA(S)",
@@ -1539,6 +1545,8 @@ def main():
     parser.add_argument("--cli",action="store_true")
     parser.add_argument("--only-eldorado",action="store_true",
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
+    parser.add_argument("--diagnose-librelato",action="store_true",
+                        help="Diagnosticar MOD/DEF1/DEF2/TXT sem exigir DEF dos mapas")
     parser.add_argument("--audit-existing",action="store_true",
                         help="Auditar/corrigir Company SCS existente sem regenerar do zero")
     parser.add_argument("--audit-only",action="store_true",
@@ -1548,11 +1556,23 @@ def main():
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
     if not args.cli:run_gui();return
+    if args.diagnose_librelato:
+        from diagnostico_arquivos import inspect
+        required=("mod","def1","def2","txt","output")
+        missing=[key for key in required if not getattr(args,key)]
+        if missing:parser.error("Diagnostico exige: "+", ".join(missing))
+        inputs={key:getattr(args,key) for key in ("mod","def1","def2")}
+        report,data=inspect(sys.modules[__name__],inputs,args.txt,args.output)
+        print("Diagnostico:",report,"|",data["resultado"],
+              "| cargas:",data["total_cargas_catalogo"])
+        if data["erros"]:
+            raise ValueError("Diagnostico BLOQUEADO: "+", ".join(data["erros"][:5]))
+        return
     if args.audit_existing:
         import auditor_existentes
-        needed=(("mod","def1","def2","eldorado","existing_eldorado","output")
+        needed=(("mod","def1","def2","txt","eldorado","existing_eldorado","output")
                 if args.only_eldorado
-                else ("mod","def1","def2","minas","eldorado","rbr",
+                else ("mod","def1","def2","txt","minas","eldorado","rbr",
                       "existing_minas","existing_eldorado","existing_rbr","output"))
         missing=[k for k in needed if not getattr(args,k)]
         if missing:parser.error("Auditoria exige: "+", ".join(missing))
