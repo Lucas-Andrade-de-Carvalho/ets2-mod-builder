@@ -368,7 +368,13 @@ class AuditorSCSRegression(unittest.TestCase):
             map_file=self.root/(region+"_regional_def.zip")
             zip_write(map_file,map_base)
             comp_file=self.root/(region+"_regional_company.scs")
-            zip_write(comp_file,{"ReadMe.txt":b"ORIGINAL PRESERVADO"})
+            zip_write(comp_file,{
+                "ReadMe.txt":b"ORIGINAL PRESERVADO",
+                "def/company/construcao_01/in/carga5.sii":
+                    g.cargo_sii("carga5"),
+                "def/company/posto_combustivel/in/carga24.sii":
+                    g.cargo_sii("carga24"),
+            })
             defs[region]={"existing":comp_file,"map_def":map_file}
             companies[region]=comp_file.read_bytes()
         out=self.root/"saida_pluma_coco_so_minas_eldorado"
@@ -416,6 +422,13 @@ class AuditorSCSRegression(unittest.TestCase):
                                 f"def/company/{bad}/out/audit_{cargo}.sii",members)
                     self.assertEqual(z.read("ReadMe.txt"),
                                      b"ORIGINAL PRESERVADO")
+                    for bad_file in (
+                            "def/company/construcao_01/in/carga5.sii",
+                            "def/company/posto_combustivel/in/carga24.sii"):
+                        self.assertIn(bad_file,members)
+                        self.assertEqual(
+                            audit.file_active_ids(g,z.read(bad_file)),[])
+                self.assertGreaterEqual(report["permissoes_removidas"],2)
                 quality=report["qualidade_logistica"]
                 self.assertGreater(
                     quality["cargas"]["carga5"]["pares_simulacao_regional"],0)
