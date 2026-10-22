@@ -142,7 +142,7 @@ def can_add(g,c,cat,direction,map_name,professional=False,spec=None):
         return None
     return why
 
-def proven_incompatibility(company, category, direction, spec=None):
+def proven_incompatibility(company, category, direction, spec=None, map_name=None):
     """So exclui automaticamente contradicoes claras, nao mera falta de prova.
 
     Um setor reconhecido nao demonstra que todas as suas outras cargas
@@ -150,6 +150,26 @@ def proven_incompatibility(company, category, direction, spec=None):
     podem plantar; cooperativas armazenam e revendem varias mercadorias.
     """
     role=company.role
+    if (professional_policy.norm(map_name or "") in
+            professional_policy.REGIONAL_APPROVED_MAPS and
+            category in {"algodao","coco"}):
+        # A excecao solicitada exige que NEM as permissoes ANTIGAS
+        # continuem mandando pluma/coco para postos, construcoes ou
+        # industrias sem nexo. Restricao exclusiva MG/Eldorado.
+        bad_roles={
+            "obras","posto_combustivel","infra_passageiros",
+            "transportadora","mineracao_minerios","mineracao_calcario",
+            "siderurgica","metalurgica","premoldados","cimenteira",
+            "automotiva_fabrica"
+        }
+        identifying_name=professional_policy.norm(
+            company.name+" "+getattr(company,"display_name",""))
+        if (role in bad_roles or re.search(
+                r"(?:^|_)(?:obra|posto_combustivel|posto_gasolina|"
+                r"construcao|construction_site|gas_station)",identifying_name)):
+            return ("ADAPTACAO REGIONAL: pluma/coco nao devem ser "
+                    "carregados ou descarregados em obra, posto ou "
+                    "industria incompatível; permissao legada neutralizada")
     if spec is not None:
         if role in spec.get("forbidden_roles",()):
             return "Setor explicitamente proibido no cadastro desta mercadoria"
@@ -336,8 +356,11 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     states[company][direction].add(cargo)
                 else:
                     prohibition=(proven_incompatibility(
-                        comp,cat,direction,extras.get(cargo))
-                        if explicit_confidence(comp) else None)
+                        comp,cat,direction,extras.get(cargo),map_name=name)
+                        if (explicit_confidence(comp) or
+                            (professional and
+                             name in {"Minas_Gerais","Eldorado"} and
+                             cat in {"algodao","coco"})) else None)
                     if prohibition:
                         changed[path]=disable_id(g,changed[path],cargo)
                         decisions.append({"acao":"REMOVER","empresa":company,
