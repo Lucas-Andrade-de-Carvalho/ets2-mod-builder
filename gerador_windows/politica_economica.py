@@ -588,6 +588,22 @@ def coverage(companies,manifest,decision_fn=None):
             "nome_exibido_def":getattr(c,"display_name",""),
             "atividade":ident.role,
             "confianca_classificacao":ident.certainty,"justificativa":ident.evidence,
+            # Rastreabilidade para CADA empresa (inclusive ficticia):
+            # o auditor pode comparar cargas ORIGINAIS e decisoes por produto.
+            "in_originais_def":sorted(c.old_in),
+            "out_originais_def":sorted(c.old_out),
+            "categorias_in_originais":sorted(cargo_categories(c.old_in)),
+            "categorias_out_originais":sorted(cargo_categories(c.old_out)),
+            "metodo_classificacao":(
+                "inferencia_fluxo_in_out" if
+                ident.role.endswith("_inferida") or
+                ident.role in {"comercio_graos","revenda_fertilizante"} and
+                "inferencia" in ident.evidence or
+                "inferencia economica" in ident.evidence or
+                "fluxo " in ident.evidence or
+                "documentados no IN e OUT" in ident.evidence
+                else "identificador_ou_nome_def" if ident.role!="desconhecida"
+                else "pendente_evidencia"),
             "instancias_editor":len(locations),"in_esperados":sorted(ins),
             "out_esperados":sorted(outs),"decisoes":reasons})
         for loc in locations:
