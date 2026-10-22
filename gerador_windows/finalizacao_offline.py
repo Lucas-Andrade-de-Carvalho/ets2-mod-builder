@@ -23,7 +23,7 @@ def _fingerprint(g, paths):
     return {key:g.hash_source(path) for key,path in sorted(paths.items())}
 
 
-def run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
+def _run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
     """Devolve arquivo completo candidato para jogo ou relatorio de bloqueio.
 
     Retorna status, arquivos corrigidos, motivacao e checksums. Nunca diz
@@ -171,3 +171,24 @@ def run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
     log("Tres SCS tecnicamente revalidados e publicados em "+str(delivery)+
         ". Homologacao no ETS2 permanece pendente.")
     return result
+
+
+def run(g, sources, entries, output, *, game_log=None, log=lambda s:None):
+    """Falhas inesperadas tambem deixam motivo legivel sem SCS parcial."""
+    try:
+        return _run(g, sources, entries, output, game_log=game_log, log=log)
+    except Exception as exc:
+        try:
+            root=Path(output)
+            root.mkdir(parents=True,exist_ok=True)
+            (root/"FALHA_FINALIZACAO_OFFLINE.json").write_text(
+                json.dumps({
+                    "status":"INTERROMPIDO",
+                    "homologado_no_ets2":False,
+                    "motivo":type(exc).__name__+": "+str(exc),
+                    "acao":"Verifique os arquivos fonte. Nada desta tentativa "
+                           "pode ser tratado como Company homologada."
+                },indent=2,ensure_ascii=False),encoding="utf-8")
+        except OSError:
+            pass
+        raise
