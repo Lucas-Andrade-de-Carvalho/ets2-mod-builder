@@ -98,6 +98,46 @@ class RBRRolePolicy(unittest.TestCase):
                 self.assertEqual(p.classify(g.Company(id)).role,"desconhecida")
 
 
+class EvidenceFromRealDEF(unittest.TestCase):
+    def test_original_24_ids_are_exact_evidence_without_wrong_categories(self):
+        self.assertEqual(len(p.LIBRELATO_ID_CATEGORIES), 24)
+        self.assertEqual(p.cargo_categories({"carga1","carga21","carga24"}),
+                         {"milho","soja","coco"})
+        self.assertEqual(p.cargo_categories({"carga17","carga10"}),
+                         {"racao","cimento"})
+        self.assertNotIn("laranja",p.cargo_categories({"carga17"}))
+        self.assertEqual(p.cargo_categories({"carga25","carga999"}),set())
+
+    def test_farm_can_export_only_documented_crops(self):
+        farm=g.Company("fazenda_confiavel",old_out={"carga1","carga21"})
+        self.assertEqual(p.classify(farm).role,"fazenda")
+        self.assertTrue(p.decide(farm,"milho","out").allowed)
+        self.assertTrue(p.decide(farm,"soja","out").allowed)
+        self.assertFalse(p.decide(farm,"coco","out").allowed)
+        self.assertFalse(p.decide(farm,"algodao","out").allowed)
+
+    def test_grain_silo_can_receive_documented_original_id(self):
+        silo=g.Company("silo_documentado",old_in={"carga1"})
+        self.assertTrue(p.decide(silo,"milho","in").allowed)
+        self.assertFalse(p.decide(silo,"soja","in").allowed)
+        self.assertFalse(p.decide(silo,"milho","out").allowed)
+
+    def test_real_map_economic_roles_without_overgeneralizing(self):
+        roles={"abcconstru":"obras","constdivi":"obras",
+               "constjuatub2":"obras","construai2":"obras",
+               "ceramfazpgra":"ceramica","cerami_parap":"ceramica",
+               "marmolider":"marmoraria","curralracoes":"revenda_racao",
+               "araraserr":"madeireira","extrmadserr":"madeireira"}
+        for identifier,role in roles.items():
+            with self.subTest(identifier=identifier):
+                self.assertEqual(p.classify(g.Company(identifier)).role,role)
+        self.assertTrue(p.decide(g.Company("constdivi"),"cimento","in").allowed)
+        self.assertFalse(p.decide(g.Company("constdivi"),"cimento","out").allowed)
+        self.assertTrue(p.decide(g.Company("curralracoes"),"racao","out").allowed)
+        self.assertFalse(p.decide(g.Company("curralracoes"),"sorgo","out").allowed)
+        self.assertEqual(p.classify(g.Company("carga_des3")).role,"desconhecida")
+
+
 class RBRCoverageReport(unittest.TestCase):
     def fake(self):
         objs={
