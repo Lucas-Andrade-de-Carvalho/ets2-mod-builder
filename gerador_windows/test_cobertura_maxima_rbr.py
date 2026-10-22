@@ -313,6 +313,95 @@ class DirectionalINOUTInference(unittest.TestCase):
         self.assertFalse(p.decide(c,"cerveja","in").allowed)
 
 
+class FictionalCompanySectorInference(unittest.TestCase):
+    """As 24 cargas devem ser avaliadas SEM tabela de empresas reais."""
+
+    def test_fictional_feed_factory_inputs_and_outputs(self):
+        comp=g.Company("empresa_zx_001",old_in={"corn","soybeans"},
+                       old_out={"animal_feed"})
+        ident=p.classify(comp)
+        self.assertEqual(ident.role,"fabrica_racao_inferida")
+        row=p.coverage({comp.name:comp},g.MANIFEST)["empresas"][0]
+        self.assertEqual(set(row["in_esperados"]),
+                         {"carga1","carga2","carga21","carga22"})
+        self.assertEqual(set(row["out_esperados"]),
+                         {"carga17","carga18","carga19","carga20"})
+        self.assertNotIn("carga23",row["in_esperados"])
+
+    def test_fictional_industries_from_input_material_to_output_product(self):
+        candidates=[
+            ("alfa_x7",{"limestone"},{"cement"},"cimenteira_inferida","cimento"),
+            ("lote_42",{"argila"},{"bricks"},"ceramica_inferida","tijolo"),
+            ("logica_x",{"oranges"},{"orange_juice"},"processadora_citricos","laranja"),
+            ("santa_x",{"wood"},{"furniture"},"fabrica_moveis","madeira"),
+            ("fabrica_a8",{"cotton"},{"fabrics"},"textil","algodao"),
+            ("zaf_991",{"animal_feed"},{"cattle"},"pecuaria","racao"),
+        ]
+        for company,orig_in,orig_out,role,category in candidates:
+            with self.subTest(company=company):
+                obj=g.Company(company,old_in=orig_in,old_out=orig_out)
+                self.assertEqual(p.classify(obj).role,role)
+                if role in {"cimenteira_inferida","ceramica_inferida"}:
+                    self.assertTrue(p.decide(obj,category,"out").allowed)
+                    self.assertFalse(p.decide(obj,category,"in").allowed)
+                else:
+                    self.assertTrue(p.decide(obj,category,"in").allowed)
+                    self.assertFalse(p.decide(obj,category,"out").allowed)
+
+    def test_fictional_building_store_vs_building_receiver(self):
+        store=g.Company("company_4e2",old_in={"cement","bricks"},
+                        old_out={"cement","bricks"})
+        consumer=g.Company("company_9y2",old_in={"cement","bricks","wood"})
+        self.assertEqual(p.classify(store).role,"comercio_materiais_inferido")
+        self.assertEqual(p.classify(consumer).role,"consumidor_materiais_inferido")
+        for n,(cat,title) in g.MANIFEST.items():
+            cargo="carga"+str(n)
+            if cat in {"cimento","tijolo"}:
+                self.assertTrue(p.decide(store,cat,"in").allowed)
+                self.assertTrue(p.decide(store,cat,"out").allowed)
+            elif cat=="madeira":
+                self.assertFalse(p.decide(store,cat,"out").allowed)
+            if cat in {"cimento","tijolo","madeira"}:
+                self.assertTrue(p.decide(consumer,cat,"in").allowed)
+                self.assertFalse(p.decide(consumer,cat,"out").allowed)
+        self.assertFalse(p.decide(consumer,"granito","in").allowed)
+
+    def test_random_ids_and_ambiguous_industries_do_not_fabricate_cargo(self):
+        cases=[
+            g.Company("zzz999"),
+            g.Company("x_nohit",old_in={"limestone"}),
+            g.Company("x_mixed",old_in={"fertilizer","corn"},
+                      old_out={"corn","beer"}),
+            g.Company("x_builder",old_in={"cement","beer"},
+                      old_out={"bricks"}),
+            g.Company("x_feeds",old_in={"corn"},old_out={"beer"}),
+        ]
+        for c in cases:
+            with self.subTest(company=c.name):
+                self.assertEqual(p.classify(c).role,"desconhecida")
+                self.assertFalse(p.decide(c,"milho","out").allowed)
+                self.assertFalse(p.decide(c,"cimento","in").allowed)
+
+    def test_audit_matrix_contains_every_fictional_company(self):
+        examples={
+            "ficticia_001":g.Company("ficticia_001",old_in={"fertilizer"},
+                                     old_out={"corn"}),
+            "ficticia_002":g.Company("ficticia_002",old_in={"cement","bricks"}),
+            "ficticia_003":g.Company("ficticia_003"),
+        }
+        territory=p.coverage(examples,{1:("milho","Milho"),
+                                       6:("cimento","Cimento"),
+                                       13:("tijolo","Tijolos")})
+        self.assertEqual(territory["total_empresas"],3)
+        by_id={item["empresa"]:item for item in territory["empresas"]}
+        self.assertEqual(by_id["ficticia_001"]["atividade"],"fazenda")
+        self.assertEqual(by_id["ficticia_002"]["atividade"],
+                         "consumidor_materiais_inferido")
+        self.assertEqual(by_id["ficticia_003"]["atividade"],"desconhecida")
+        self.assertEqual(by_id["ficticia_001"]["in_esperados"],[])
+        self.assertEqual(by_id["ficticia_002"]["out_esperados"],[])
+
+
 class RBRCoverageReport(unittest.TestCase):
     def fake(self):
         objs={
