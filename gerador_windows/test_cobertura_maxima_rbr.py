@@ -126,10 +126,10 @@ class EvidenceFromRealDEF(unittest.TestCase):
         comp=g.Company("constdivi")
         comp.editor_files={
             "def/company/constdivi/editor/cidade_inventada.sii":
-                b"SiiNunit\\n{}\\n",
+                b"SiiNunit\n{}\n",
             "def/company/constdivi/editor/divinopolis.sii":
-                b"SiiNunit\\n{\\ncompany_def : .divinopolis {\\n"
-                b" city: divinopolis\\n prefab: mg_prefab_01\\n}\\n}\\n",
+                b"SiiNunit\n{\ncompany_def : .divinopolis {\n"
+                b" city: divinopolis\n prefab: mg_prefab_01\n}\n}\n",
         }
         refs=p.city_references(comp)
         self.assertEqual(len(refs),1)
