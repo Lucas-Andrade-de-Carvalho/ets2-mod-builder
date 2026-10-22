@@ -174,14 +174,19 @@ def main(exe_path):
                  "--existing-rbr",str(fixture.existing),
                  "--output",str(delivered)]
             called=subprocess.run(cmd,timeout=180,check=False)
-            if called.returncode:
-                raise RuntimeError("EXE falhou ao finalizar offline tres SCS")
-            result=json.loads((delivered/"RESULTADO_FINALIZACAO_OFFLINE.json")
-                              .read_text(encoding="utf-8"))
-            assert len(result["arquivos_corrigidos"])==3
+            if called.returncode==0:
+                raise RuntimeError("EXE liberou tres SCS sem 24 cadeias economicas")
+            report_path=delivered/"RESULTADO_FINALIZACAO_OFFLINE.json"
+            if not report_path.is_file():
+                raise RuntimeError("EXE nao registrou o bloqueio economico")
+            result=json.loads(report_path.read_text(encoding="utf-8"))
+            assert result["status"]=="BLOQUEADO_ECONOMIA_REAL",result
+            assert not result["arquivos_corrigidos"]
+            assert result["nenhum_scs_publicado"]
             assert result["reescritas_residuais"]==0
+            assert not list(delivered.rglob("*.scs"))
             assert not result["homologado_no_ets2"]
-            print("EXE Windows gerou tres SCS candidatos, reabriu ZIP e reauditorou todos")
+            print("EXE Windows reauditorou tres mapas e bloqueou entrega ficticia")
         finally:
             fixture.tearDown()
     finally:
