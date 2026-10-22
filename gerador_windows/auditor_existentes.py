@@ -141,6 +141,19 @@ def proven_incompatibility(company, category, direction, spec=None):
         if role in spec.get("forbidden_roles",()):
             return "Setor explicitamente proibido no cadastro desta mercadoria"
         return None
+    original=professional_policy.cargo_categories(
+        company.old_in if direction=="in" else company.old_out)
+    if category in original:
+        # Mercadoria exata documentada na DEF nesta direcao.
+        return None
+    if role in {"posto_combustivel","mineracao_minerios"}:
+        return ("A DEF original comprova combustiveis/minerios brutos, "
+                "nao esta carga do Librelato; permissao legada contraditoria")
+    if role=="fabrica_moveis" and category in {
+            "milho","soja","sorgo","adubo","racao","cerveja",
+            "batata","laranja","coco","algodao"}:
+        return ("Industria de moveis nao demonstrou operar esta carga "
+                "rural ou alimenticia na DEF original")
     if role=="transportadora":
         return "Transportadora nao e unidade de producao, compra ou revenda comprovada"
     if role=="infra_passageiros":
@@ -306,13 +319,19 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                             "direcao":direction,"carga":cargo,"arquivo":path,
                             "setor":comp.role,"confianca":"alta","motivo":prohibition})
                     else:
+                        hypothesis=(professional_policy.legacy_plausible(
+                            comp,cat,direction) if professional and
+                            explicit_confidence(comp) and cargo not in extras
+                            else None)
                         decisions.append({
-                            "acao":("REVISAR" if explicit_confidence(comp)
+                            "acao":("MANTER_PLAUSIVEL" if hypothesis else
+                                    "REVISAR" if explicit_confidence(comp)
                                     else "PRESERVAR_SEM_EVIDENCIA"),
                             "empresa":company,"direcao":direction,"carga":cargo,
                             "arquivo":path,"setor":comp.role,
                             "confianca":"media" if explicit_confidence(comp) else "indeterminada",
-                            "motivo":("Atividade conhecida mas a mercadoria exige "
+                            "motivo":(hypothesis if hypothesis else
+                                     "Atividade conhecida mas a mercadoria exige "
                                      "confirmacao documental antes de ser aprovada"
                                      if explicit_confidence(comp) else
                                      "Permissao herdada preservada sem alterar; "
@@ -416,8 +435,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         # uma fila de classificacao agrupada por empresa.
         manual=[d for d in decisions if d["acao"]=="REVISAR"]
         preserved=[d for d in decisions if d["acao"]=="PRESERVAR_SEM_EVIDENCIA"]
+        plausible=[d for d in decisions if d["acao"]=="MANTER_PLAUSIVEL"]
         pending_by_company=defaultdict(list)
-        for item in manual+preserved:
+        for item in manual+preserved+plausible:
             pending_by_company[item["empresa"]].append(item)
         classification_pending={d["empresa"] for d in preserved}
         routes_without_pair=[
@@ -434,12 +454,16 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "nenhum_scs_gerado":mode=="auditar",
             "diagnostico_pendencias":{
                 "total_decisoes_revisar":len(manual),
+                "permissoes_herdadas_plausiveis_sem_prova_original":len(plausible),
+                "empresas_com_hipoteses_plausiveis":len(
+                    {d["empresa"] for d in plausible}),
                 "permissoes_herdadas_preservadas_sem_evidencia":len(preserved),
                 "empresas_com_classificacao_pendente":len(classification_pending),
                 "empresas_com_revisoes_acionaveis":len({d["empresa"] for d in manual}),
                 "empresas_com_revisoes":len(pending_by_company),
-                "criterio":"PRESERVAR_SEM_EVIDENCIA nao e erro; "
-                           "permissoes ficam intactas ate comprovacao documental.",
+                "criterio":"MANTER_PLAUSIVEL sugere compatibilidade economica, "
+                           "NAO prova original nem homologacao. "
+                           "PRESERVAR_SEM_EVIDENCIA segue pendente.",
                 "cargas_sem_rota":routes_without_pair,
                 "cargas_novas_sem_politica_economica":additional_without_policy,
                 "por_motivo":dict(sorted(
@@ -473,6 +497,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "permissoes_examinadas":count,"arquivos_original":len(contents),
             "arquivos_adicionados":added,"arquivos_modificados":updated,
             "permissoes_removidas":len(removals),"pendencias_revisao":len(manual),
+            "permissoes_plausiveis_sem_evidencia_def":len(plausible),
             "permissoes_sem_evidencia_preservadas":len(preserved),
             "empresas_classificacao_pendente":len(classification_pending),
             "cargas_sem_rota_validada":routes_without_pair,
@@ -484,7 +509,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "rotas_completas_depois":sum(x["pares_distintos"]>0 for x in after.values()),
             "decisoes":decisions,
             "status":("PENDENTE_VALIDACAO_ECONOMICA"
-                      if manual or preserved or forgotten_companies or
+                      if manual or plausible or preserved or forgotten_companies or
                          routes_without_pair or additional_without_policy or
                          (territory and territory["empresas_sem_identificacao"])
                       else "AUDITORIA_ESTRUTURAL_CONCLUÍDA"),
