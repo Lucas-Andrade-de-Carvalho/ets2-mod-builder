@@ -21,6 +21,8 @@ ROLES=(
     # Cadeias adicionais observadas no relatório real RBR: setores por
     # nome publicamente exibido e marcas documentadas, nao por "agro"
     # generico ou outras palavras ambiguas.
+    ("entreposto_hortigraos",r"^ceagesp$"),
+    ("fabricante_fertilizante",r"^mosaico2?$|^mosaic_fertilizantes$"),
     ("beneficiadora_algodao",r"algodoeira|cotton_gin|^mt_torre_alg$|^ms_alg_ib$"),
     ("fabrica_moveis",r"marcenaria|furniture_factory|furniture_plant|moveis|^bechara$|^brigatto$|^esplane$"),
     ("comercio_graos",r"(?:^|_)graos(?:_|$)|^grupo_cereal$|^g_cereal_(?:rv|stb)$|^pr_anaconda$|^amaggi$"),
@@ -28,14 +30,14 @@ ROLES=(
     ("siderurgica",r"gerdau|cofer|usiminas|arcelor|^csn(?:_|$)|steel_mill|steelworks|siderurg|sider[ _]"),
     ("automotiva_fabrica",r"^(?:fiat|fca|vw|volkswagen|gm|hyundai|toyota|renault|ford|honda|bmw)(?:_|$)|montadora|automotive_plant|car_factory"),
     ("maquinas",r"^mc_?equip|^mcequip|maquinas|maquinario|machinery|equipment_factory"),
-    ("cimenteira",r"votoran|intercement|cimenteira|cement_plant|cement_factory"),
+    ("cimenteira",r"votoran|intercement|cimenteira|cement_plant|cement_factory|^globcement2?$"),
     ("premoldados",r"carmoprem|premold|pre_mold|precast|concrete_products"),
     ("cervejaria",r"ambev|heineken|brahma|cervejaria|brewery|brewing|beer_factory|^grupo_petropolis$|^grupo_p2?$|^cercrystal$|^cerveja_crystal$"),
     ("reciclagem",r"recicl|sucata|sucatao|ferro_velho|ferrovelho|scrapyard|recycling_yard"),
     ("ceramica",r"ceramica|olaria|brickyard|brick_factory|tijolaria"),
     ("pedreira",r"pedreira|quarry|rock_quarry|extratora"),
     ("marmoraria",r"marmoraria|marmor|granito|granite_shop|stoneworks"),
-    ("madeireira",r"madeireira|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
+    ("madeireira",r"madeireira|^madereira$|serraria|sawmill|timber_mill|lumberyard|serrac|^madeiras(?:[0-9]+)?$|^extrmadeira$|^betimmadeira$|^samirmadeira$"),
     ("fabrica_racao",r"racao_fabrica|fabrica_racao|feedmill|feed_mill|animal_feed_factory|nutricao_animal|brejeiro|^nutrition$|^trouw_nutrition$"),
     ("revenda_racao",r"^raguife$|(?:^|_)racoes(?:_|$)|feed_store|loja_racao"),
     ("agroinsumos",r"agropec|agroinsum|agro_supply|fertiliz|adubo|agrocenter|^agrish|^agroce|^agromais|casa_adubo|^cimoagro$"),
@@ -50,7 +52,7 @@ ROLES=(
     ("supermercado",r"supermercado|super_mercado|supermarket|grocery|atacadao|assai|bahamas|carrefour|^extra_|compr_bem|^compre_bem$|^martminas$|^martmina_c$|^super(?:abc|bh|eli|josyldo|oliveir)$|^merc(?:ado(?:kril|_ac)?|_[a-z0-9_]+)$|^pr_mercado$|^sc_mercado$"),
     ("hortifruti",r"ceasa|hortif|sacolao|fruit_warehouse|fresh_produce|produce_market|frutaria"),
     ("alimentos",r"industria_alim|food_processing|cannery|conservas|^arcor"),
-    ("distribuidor",r"atacad|wholesale|distribuidor|distrib_fruit|distrib_"),
+    ("distribuidor",r"atacad|wholesale|distribuidor|distrib_fruit|distrib_|^distrbebidas$"),
 )
 # Nem "banana" generica, nem "carro" generico, nem "agro" sozinho
 # identificam automaticamente a empresa; todos podiam causar erros.
@@ -100,6 +102,11 @@ class Identity:
 
 def classify(company):
     identifier=norm(company.name)
+    # Eldorado: rocasoja aparece expedindo soja na DEF original.
+    # Sem OUT documental, nao presumir propriedade/colheita pelo ID.
+    if identifier=="rocasoja" and "soja" in cargo_categories(company.old_out):
+        return Identity("fazenda_soja","alta",
+                        "identificador rocasoja + OUT soja no arquivo original")
     for role,pattern in ROLES:
         if re.search(pattern,identifier,re.I):
             return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
@@ -157,6 +164,24 @@ def decide(company,category,direction,identity=None):
         return forbid("ramo nao confirmado; carga deve ser revisada, sem preencher automaticamente")
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
+    if role=="fabricante_fertilizante":
+        if category=="adubo" and direction=="out":
+            return permit("Mosaic fabrica e comercializa adubo",
+                          "empresa e mercadoria explicitamente associadas")
+        return forbid("fabrica de fertilizantes nao e fornecedora/compradora generica")
+    if role=="entreposto_hortigraos":
+        if category in {"batata","laranja","coco"}:
+            return permit("entreposto comercializa hortifrutigranjeiros")
+        if category in GRAIN_CLASSES and category in (old_in|old_out):
+            return permit("entreposto recebe/expede graos documentados na DEF",
+                          "setor de armazenagem mais cargo original")
+        return forbid("CEAGESP nao demonstra comercio desta carga na unidade")
+    if role=="fazenda_soja":
+        if category=="soja" and direction=="out" and category in old_out:
+            return permit("fazenda expede soja documentada no OUT original")
+        if category=="adubo" and direction=="in":
+            return permit("fazenda de soja recebe adubo para lavoura")
+        return forbid("fazenda de soja nao produz nem consome esta carga sem evidencia")
     if role=="bananal":
         return (permit("bananal compra adubo para suas plantas","atividade agricola da unidade")
                 if category=="adubo" and direction=="in" else
