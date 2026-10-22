@@ -143,6 +143,44 @@ class ProfessionalEconomyTests(unittest.TestCase):
         self.assertTrue(policy.decide(farm,"racao","in").allowed)
 
 
+    def test_original_ets2_companies_present_in_eldorado(self):
+        # Fontes: trucksimulator.wiki.gg/wiki/Kaarfor;
+        # /SellPlan/Euro_Truck_Simulator_2; /Sanbuilders;
+        # /Konstnorr; /ITCC/Euro_Truck_Simulator_2.
+        # As instancias listadas no relatorio Eldorado(3) tem editor.
+        cases=[
+            ("kaarfor2","supermercado",("cerveja","in"),
+             ("cimento","out")),
+            ("sellplan2","supermercado",("coco","in"),
+             ("madeira","out")),
+            ("sanbuilders2","obras",("cimento","in"),
+             ("cimento","out")),
+            ("konstnr2","obras",("tijolo","in"),
+             ("cerveja","out")),
+            ("konstnr_hs2","obras",("madeira","in"),
+             ("madeira","out")),
+            ("itcc2","metalurgica",("bobina","in"),
+             ("bobina","out")),
+        ]
+        for name,expected_role,positive,negative in cases:
+            with self.subTest(name=name):
+                c=g.Company(name)
+                self.assertEqual(policy.classify(c).role,expected_role)
+                self.assertTrue(policy.decide(c,*positive).allowed)
+                self.assertFalse(policy.decide(c,*negative).allowed)
+        # Cimento para ITCC nao e suposto para toda industria:
+        # so e aceito se a DEF ORIGINAL registrar consumo.
+        c=g.Company("itcc2")
+        self.assertFalse(policy.decide(c,"cimento","in").allowed)
+        c.old_in.add("cement")
+        self.assertTrue(policy.decide(c,"cimento","in").allowed)
+        self.assertFalse(policy.decide(c,"cimento","out").allowed)
+        # Prefixos inventados e IDs parecidos nao entram.
+        for name in ("kaarfor_destruida","sellplan_falso","itcc_extra",
+                     "sanbuilder_inexistente"):
+            self.assertEqual(policy.classify(g.Company(name)).role,
+                             "desconhecida")
+
     def test_reported_rbr_industries_receive_only_economic_goods(self):
         examples=[
             ("ms_alg_ib","Algodoeira Irmãos Bürgel","beneficiadora_algodao",
