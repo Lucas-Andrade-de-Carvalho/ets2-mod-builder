@@ -16,6 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 import politica_economica as professional_policy
 import catalogo_fontes as catalogo_cargas
+import homologacao_logistica
 
 SII_EXT=(".sii",".sui")
 CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:#.*)?$)')
@@ -362,6 +363,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                     "origens":len(src),"destinos":len(dst),
                     "origens_lista":src,"destinos_lista":dst,
                     "pares_distintos":len(src)*len(dst)-len(set(src)&set(dst))}
+        homologation=(homologacao_logistica.assess(
+            baseline,final_active,manifest,extras,professional_policy,catalogo_cargas)
+            if professional else None)
         def territory_decision(c,cat,direction,cargo):
             if cargo in extras:
                 return catalogo_cargas.evaluate(
@@ -435,6 +439,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "cargas_adicionais":{cid:{"sha256":spec["sha256"],"body_types":spec["body_types"]} for cid,spec in extras.items()},
             "validacao_carga_carroceria":trailer_record,
             "verificacao_modelos_carga_ets2_154":cargo_model_evidence,
+            "qualidade_logistica":homologation,
             "matriz_empresa_cidade":territory,
             "empresas_compativeis_esquecidas":forgotten_companies,
             "unidades_cidade_compativeis_esquecidas":forgotten_units,
@@ -464,6 +469,26 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             "aviso":("Arquivo tecnicamente auditado, NAO homologado para cliente "
                      "ou ETS2 enquanto restarem empresas sem classificacao, "
                      "permissoes sem evidencia e cargas sem rotas.")}
+        # Auditoria dupla: par registrado nao e rota comprovada.
+        if homologation:
+            with (out/("CADEIAS_COMPROVADAS_"+name.upper()+".csv")).open(
+                    "w",newline="",encoding="utf-8-sig") as fp:
+                writer=csv.writer(fp,delimiter=";")
+                writer.writerow(["carga","nome","status","pares_scs",
+                    "pares_economicos","pares_com_editor","origens_confirmadas",
+                    "destinos_confirmados","bloqueios","homologado_ets2"])
+                for cid,row in sorted(homologation["cargas"].items(),
+                       key=lambda kv:catalogo_cargas.sort_key(kv[0])):
+                    writer.writerow([cid,row["nome"],row["status"],
+                        row["total_pares_no_scs"],
+                        row["pares_economicos_distintos"],
+                        row["pares_com_editor_em_ambas_empresas"],
+                        ",".join(row["origens_com_evidencia"]),
+                        ",".join(row["destinos_com_evidencia"]),
+                        " | ".join(row["bloqueios"]),"NAO"])
+            with (out/("QUALIDADE_LOGISTICA_"+name.upper()+".json")).open(
+                    "w",encoding="utf-8") as fp:
+                json.dump(homologation,fp,ensure_ascii=False,indent=2)
         # Dois niveis de diagnostico: aviso acionavel vs situacao herdada
         # somente informativa. O conjunto completo continua em AUDITORIA*.csv.
         with (out/("RESUMO_VALIDACAO_"+name.upper()+".txt")).open(
@@ -474,6 +499,14 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                      str(len(preserved))+"\n")
             fp.write("Empresas necessitando identificacao de atividade: "+
                      str(len(classification_pending))+"\n")
+            if homologation:
+                fp.write("Cargas com cadeia economicamente fundamentada: "+
+                         str(homologation["cargas_com_par_economico_comprovavel"])+
+                         "/"+str(len(manifest))+"\n")
+                fp.write("Cargas candidatas a teste no ETS2 (ambos editor): "+
+                         str(homologation["cargas_candidatas_teste_ets2"])+
+                         "/"+str(len(manifest))+"\n")
+                fp.write("Cargas comprovadamente homologadas no jogo: ZERO\n")
             fp.write("Cargas sem rota com empresas distintas: "+
                      ", ".join(routes_without_pair)+"\n")
             fp.write("Cargas novas aguardando politica economica: "+
