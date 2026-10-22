@@ -1361,6 +1361,8 @@ def run_gui():
                     variable=scope_var,value="eldorado").pack(anchor="w")
     ttk.Radiobutton(scope_row,text="Somente RBR — validar primeiro o mapa mais completo",
                     variable=scope_var,value="rbr").pack(anchor="w")
+    ttk.Radiobutton(scope_row,text="Somente MINAS + ELDORADO — adicionar pluma/coco, NAO mexer no RBR",
+                    variable=scope_var,value="minas_eldorado").pack(anchor="w")
     ttk.Radiobutton(scope_row,text="Todos os 3 mapas — executar gerador para MG, Eldorado e RBR",
                     variable=scope_var,value="todos").pack(anchor="w")
     audit_mode=tk.StringVar(value="corrigir")
@@ -1399,11 +1401,14 @@ def run_gui():
         originals=["mod","def1","def2","txt"]
         maps=(["eldorado"] if scope_var.get()=="eldorado"
               else ["rbr"] if scope_var.get()=="rbr"
+              else ["minas","eldorado"] if scope_var.get()=="minas_eldorado"
               else ["minas","eldorado","rbr"])
         all_maps=["minas","eldorado","rbr"]
         all_existing=["existing_minas","existing_eldorado","existing_rbr"]
         scoped_existing=(["existing_eldorado"] if scope_var.get()=="eldorado" else
                          ["existing_rbr"] if scope_var.get()=="rbr" else
+                         ["existing_minas","existing_eldorado"]
+                         if scope_var.get()=="minas_eldorado" else
                          all_existing)
         required=(originals if action=="diagnostic" else
                   originals+maps if action=="generate" else
@@ -1435,6 +1440,9 @@ def run_gui():
             elif scope=="rbr":
                 # MG e Eldorado nao sao lidos, regenerados nem sobrescritos.
                 maps={"RBR":snapshot["rbr"]}
+            elif scope=="minas_eldorado":
+                maps={"Minas_Gerais":snapshot["minas"],
+                      "Eldorado":snapshot["eldorado"]}
             else:
                 maps={"Minas_Gerais":snapshot["minas"],
                       "Eldorado":snapshot["eldorado"],"RBR":snapshot["rbr"]}
@@ -1456,6 +1464,12 @@ def run_gui():
                                    "map_def":snapshot["eldorado"]}} if scope=="eldorado" else
                      {"RBR":{"existing":snapshot["existing_rbr"],
                              "map_def":snapshot["rbr"]}} if scope=="rbr" else
+                     {"Minas_Gerais":{"existing":snapshot["existing_minas"],
+                                     "map_def":snapshot["minas"],
+                                     "editor_source":snapshot.get("editor_minas") or None},
+                      "Eldorado":{"existing":snapshot["existing_eldorado"],
+                                  "map_def":snapshot["eldorado"]}}
+                     if scope=="minas_eldorado" else
                      {"Minas_Gerais":{"existing":snapshot["existing_minas"],
                                      "map_def":snapshot["minas"],
                                      "editor_source":snapshot.get("editor_minas") or None},
@@ -1540,6 +1554,12 @@ def run_gui():
                      {"Eldorado":{"existing":snapshot["existing_eldorado"],
                                   "map_def":snapshot["eldorado"]}}
                      if scope=="eldorado" else
+                     {"Minas_Gerais":{"existing":snapshot["existing_minas"],
+                                     "map_def":snapshot["minas"],
+                                     "editor_source":snapshot.get("editor_minas") or None},
+                      "Eldorado":{"existing":snapshot["existing_eldorado"],
+                                  "map_def":snapshot["eldorado"]}}
+                     if scope=="minas_eldorado" else
                      {"Minas_Gerais":{"existing":snapshot["existing_minas"],
                                      "map_def":snapshot["minas"],
                                      "editor_source":snapshot.get("editor_minas") or None},
@@ -1705,6 +1725,8 @@ def main():
                         help="Gerar apenas Eldorado; nao abrir nem alterar os mapas MG/RBR")
     parser.add_argument("--only-rbr",action="store_true",
                         help="Auditar/gerar somente RBR; nao abrir MG/Eldorado")
+    parser.add_argument("--only-mg-eldorado",action="store_true",
+                        help="Auditar/gerar somente Minas+Eldorado; deixar RBR intacto")
     parser.add_argument("--finalize-offline",action="store_true",
                         help="Corrigir 3 mapas e reauditar sem alterar originais; ETS2 ainda requer teste")
     parser.add_argument("--preflight-real",action="store_true",
@@ -1721,8 +1743,9 @@ def main():
               "editor-minas","output"):
         parser.add_argument("--"+x,required=False)
     args=parser.parse_args()
-    if args.only_eldorado and args.only_rbr:
-        parser.error("Escolha SOMENTE um dos modos --only-eldorado ou --only-rbr")
+    if sum(bool(x) for x in (
+            args.only_eldorado,args.only_rbr,args.only_mg_eldorado))>1:
+        parser.error("Escolha apenas um dos modos de escopo por mapa")
     if not args.cli:run_gui();return
     if args.finalize_offline:
         from finalizacao_offline import run as offline_finish
