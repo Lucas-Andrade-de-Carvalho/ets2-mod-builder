@@ -636,6 +636,95 @@ def decide(company,category,direction,identity=None):
                       "IN especifico de paletes na DEF do mapa")
     return forbid("empresa nao demonstrou necessidade de receber "+category)
 
+# Excecao solicitada pelo autor do mapa/Company. Por construcao,
+# nao se aplica ao RBR nem a cargas alem da pluma e do coco.
+# A regra oferece origens/destinos ficticios EXISTENTES da DEF; nao
+# afirma que a empresa tenha aqueles produtos em IN/OUT originais.
+REGIONAL_APPROVED_MAPS=frozenset({"minas_gerais","eldorado"})
+REGIONAL_APPROVED_CATEGORIES=frozenset({"algodao","coco"})
+REGIONAL_FARM_ROLES=frozenset({
+    "fazenda","fazenda_soja","fazenda_batata","fazenda_laranja"
+})
+REGIONAL_COTTON_RECEIVERS=frozenset({
+    "silo","cooperativa","beneficiadora_algodao","textil",
+    "entreposto_hortigraos","comercio_graos","distribuidor"
+})
+REGIONAL_COCONUT_RECEIVERS=frozenset({
+    "supermercado","hortifruti","entreposto_hortigraos",
+    "comercio_alimentos_inferido"
+})
+REGIONAL_FORBIDDEN_ROLES=frozenset({
+    "obras","posto_combustivel","infra_passageiros",
+    "transportadora","mineracao_minerios","mineracao_calcario",
+    "siderurgica","metalurgica","premoldados","cimenteira",
+    "automotiva_fabrica","bananal","cervejaria","ceramica"
+})
+
+
+def regional_approved_decision(company,category,direction,map_name,identity=None):
+    """EXCECAO EXPLICITA do usuario para MG/Eldorado, nunca RBR.
+
+    Devolve Decision aprovado somente para:
+      OUT de pluma/coco de fazendas existentes;
+      IN pluma de armazens/silos, cooperativas, beneficiadoras ou texteis;
+      IN coco de mercados, mercearias e centrais de hortifruti.
+    Nao fabrica empresa/cidade/arquivo editor nem atribui commodity
+    desconhecida à DEF original. Sua confianca é nivel SIMULADO.
+    """
+    scope=norm(map_name or "")
+    if (scope not in REGIONAL_APPROVED_MAPS or
+            category not in REGIONAL_APPROVED_CATEGORIES or
+            direction not in {"in","out"}):
+        return None
+    identity=identity or classify(company)
+    role=identity.role
+    if role in REGIONAL_FORBIDDEN_ROLES:
+        return None
+    candidate=norm(company.name)+" "+norm(getattr(company,"display_name",""))
+    farm_name=bool(re.search(r"(?:^|_)(?:fazenda|faz_|farm|plantacao|sitio|chacara)",candidate))
+    farm=(role in REGIONAL_FARM_ROLES or
+          (role=="desconhecida" and farm_name))
+    if direction=="out":
+        if not farm:
+            return None
+        return Decision(
+            True,
+            "ADAPTACAO REGIONAL AUTORIZADA: fazenda existente pode "
+            "expedir "+("pluma de algodao" if category=="algodao" else "coco")+
+            " como producao/compra agregada simulada, mesmo sem OUT "
+            "original da mercadoria",
+            "SIMULACAO_ECONOMICA_APROVADA_USUARIO_MG_ELDORADO","media"
+        )
+    # Pluma: armazéns também recebem/armazenam fardos e cooperativas
+    # podem agrupar a safra; não enviar para obras, postos ou siderúrgicas.
+    if category=="algodao":
+        warehouse_name=bool(re.search(
+            r"(?:armazem|armazens|warehouse|galpao|deposito_agric)",
+            candidate))
+        cotton=(role in REGIONAL_COTTON_RECEIVERS or
+                (role=="desconhecida" and warehouse_name))
+        if not cotton:return None
+        return Decision(
+            True,
+            "ADAPTACAO REGIONAL AUTORIZADA: pluma expedida por fazendas "
+            "para armazenagem/beneficiamento/distribuicao; nao confirma "
+            "pluma no IN original",
+            "SIMULACAO_ECONOMICA_APROVADA_USUARIO_MG_ELDORADO","media"
+        )
+    grocery_name=bool(re.search(
+        r"mercearia|mercadinho|quitanda|mercado(?:_|$)|supermercado|"
+        r"ceasa|hortifrut|sacolao|frutaria|grocery",candidate))
+    food_retail=(role in REGIONAL_COCONUT_RECEIVERS or
+                 (role=="desconhecida" and grocery_name))
+    if not food_retail:return None
+    return Decision(
+        True,
+        "ADAPTACAO REGIONAL AUTORIZADA: coco de fazendas para reposicao "
+        "de estoque em supermercado, mercearia, CEASA ou hortifruti",
+        "SIMULACAO_ECONOMICA_APROVADA_USUARIO_MG_ELDORADO","media"
+    )
+
+
 def legacy_plausible(company,category,direction):
     """Só avaliar permissões JÁ existentes; nunca gerar novas por hipótese.
 
