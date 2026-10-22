@@ -228,6 +228,47 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertIn("23/24 cargas",txt)
         self.assertIn("SIMULACAO",txt)
 
+    def test_real_eldorado_pallet_in_out_closes_missing_receiver(self):
+        """Reproduz palete: madereira OUT, spani IN, kaarfor2 OUT.
+
+        A DEF original contem 'empty_palet'; nao pode ser descartada
+        por diferenca de grafia com palete do Librelato.
+        """
+        map_file=self.root/"def_eldorado_palete_real.zip"
+        zip_write(map_file,{
+            "madereira/out/empty_palet.sii":old("empty_palet"),
+            "madereira/in/empty_palet.sii":old("empty_palet"),
+            "spani/in/empty_palet.sii":old("empty_palet"),
+            "spani/out/empty_palet.sii":old("empty_palet"),
+            "kaarfor2/out/empty_palet.sii":old("empty_palet"),
+            "kaarfor2/in/potatoes.sii":old("potatoes"),
+            "brasilog/out/empty_palet.sii":old("empty_palet"),
+        })
+        original=self.root/"company_palete_original.scs"
+        zip_write(original,{"Info.txt":b"KEEP ORIGINAL"})
+        dest=self.root/"eldorado_palete_corrigido"
+        fixture=self.fixture.inp
+        reports=audit.run(
+            g,{"Eldorado":{"existing":original,"map_def":map_file}},
+            dest,professional=True,
+            source_files={key:fixture[key] for key in ("mod","def1","def2")})
+        self.assertEqual(len(reports),1)
+        after=reports[0]["rotas_depois"]["carga16"]
+        self.assertGreaterEqual(after["origens"],2)
+        self.assertGreaterEqual(after["destinos"],1)
+        self.assertGreaterEqual(after["pares_distintos"],1)
+        with zipfile.ZipFile(dest/reports[0]["arquivo_corrigido"]) as z:
+            names=set(z.namelist())
+            self.assertIn("def/company/spani/in/audit_carga16.sii",names)
+            self.assertIn("def/company/madereira/out/audit_carga16.sii",names)
+            self.assertIn("def/company/kaarfor2/out/audit_carga16.sii",names)
+            self.assertNotIn("def/company/kaarfor2/in/audit_carga16.sii",
+                             names)
+            self.assertNotIn("def/company/brasilog/out/audit_carga16.sii",
+                             names)
+            self.assertEqual(z.read("Info.txt"),b"KEEP ORIGINAL")
+        self.assertIsNone(original.stat().st_size==0)
+
     def test_correct_false_routes_and_preserve_valid_originals(self):
         old_bytes=self.existing.read_bytes()
         result=self.invoke()
