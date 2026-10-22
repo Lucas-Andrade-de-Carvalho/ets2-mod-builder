@@ -32,6 +32,10 @@ def assess(companies,territory,final_active,manifest,quality):
     rows=[]
     known_with_cargo=known_complete=known_incomplete=outside=unclassified=0
     potential_unknown=0
+    # Cobertura das permissoes ECONOMICAMENTE JUSTIFICADAS na DEF,
+    # separada da homologacao territorial/ETS2. Inclui empresas ficticias.
+    evidence_expected=evidence_covered=0
+    evidence_companies=evidence_companies_complete=0
     for id,c in sorted(companies.items()):
         row=docs[id]
         # Usar a MESMA identidade documental empregada pela matriz
@@ -46,6 +50,16 @@ def assess(companies,territory,final_active,manifest,quality):
         missing_in=sorted(planned_in-actual_in)
         missing_out=sorted(planned_out-actual_out)
         candidate=role=="desconhecida"
+        declared_in=list(row.get("in_originais_def",[]))
+        declared_out=list(row.get("out_originais_def",[]))
+        justified=len(planned_in)+len(planned_out)
+        fulfilled=len(planned_in & actual_in)+len(planned_out & actual_out)
+        evidence_expected+=justified
+        evidence_covered+=fulfilled
+        if justified:
+            evidence_companies+=1
+            if justified==fulfilled:
+                evidence_companies_complete+=1
         # Nenhuma permissao e deduzida a partir deste sinal.
         historical=bool(actual_in|actual_out)
         old_name=getattr(c,"display_name","") or ""
@@ -56,7 +70,13 @@ def assess(companies,territory,final_active,manifest,quality):
         if candidate:
             unclassified+=1
             potential_unknown+=bool(maybe)
-            status=("REVISAR_POSSIVEL_COMPATIBILIDADE" if maybe
+            # Ramo pendente NAO significa que cargas documentadas deixaram
+            # de ser atendidas. Relatar separadamente as duas dimensoes.
+            status=("SETOR_PENDENTE_PERMISSOES_INCOMPLETAS"
+                    if justified and (missing_in or missing_out) else
+                    "SETOR_PENDENTE_PERMISSOES_DOCUMENTADAS"
+                    if justified else
+                    "REVISAR_POSSIVEL_COMPATIBILIDADE" if maybe
                     else "ATIVIDADE_SEM_PROVA")
         elif role=="infra_passageiros":
             outside+=1
@@ -77,6 +97,14 @@ def assess(companies,territory,final_active,manifest,quality):
             "nome_exibido":old_name,
             "setor":role,
             "status":status,
+            "metodo_classificacao":row.get("metodo_classificacao",""),
+            "justificativa_classificacao":row.get("justificativa",""),
+            "in_originais_def":declared_in,
+            "out_originais_def":declared_out,
+            "categorias_in_originais":row.get("categorias_in_originais",[]),
+            "categorias_out_originais":row.get("categorias_out_originais",[]),
+            "permissoes_justificadas":justified,
+            "permissoes_justificadas_atendidas":fulfilled,
             "cidades":sorted(cities.get(id,[])),
             "total_instancias_editor":unit_counts.get(id,0),
             "in_esperados":sorted(planned_in),
@@ -154,6 +182,18 @@ def assess(companies,territory,final_active,manifest,quality):
     )
     return {
         "total_empresas_def":len(rows),
+        "permissoes_justificadas":evidence_expected,
+        "permissoes_justificadas_atendidas":evidence_covered,
+        "empresas_com_permissoes_justificadas":evidence_companies,
+        "empresas_com_permissoes_justificadas_completas":
+            evidence_companies_complete,
+        "cobertura_permissoes_justificadas_pct":(
+            round(100*evidence_covered/evidence_expected,2)
+            if evidence_expected else None),
+        "denominador_cobertura_justificada":
+            "SOMENTE permissões autorizadas pela atividade ou pelos IN/OUT "
+            "originais; nao inclui compatibilidades nao documentadas, "
+            "empresa nao classificada sem mercadoria nem homologacao em jogo",
         "empresas_reconhecidas_com_ao_menos_uma_carga":known_with_cargo,
         "empresas_reconhecidas_totalmente_contempladas":known_complete,
         "empresas_reconhecidas_com_lacunas":known_incomplete,
@@ -212,8 +252,12 @@ def write(directory, report, map_name="RBR"):
     with (out/("COBERTURA_MAXIMA_"+key+".csv")).open(
             "w",newline="",encoding="utf-8-sig") as f:
         fieldnames=[
-            "empresa","nome_exibido","setor","status","cidades",
-            "total_instancias_editor","in_esperados","out_esperados",
+            "empresa","nome_exibido","setor","status","metodo_classificacao",
+            "justificativa_classificacao",
+            "in_originais_def","out_originais_def",
+            "categorias_in_originais","categorias_out_originais",
+            "permissoes_justificadas","permissoes_justificadas_atendidas",
+            "cidades","total_instancias_editor","in_esperados","out_esperados",
             "in_efetivos","out_efetivos","in_faltantes","out_faltantes",
             "herdadas_nao_comprovadas","sinal_compatibilidade_a_investigar"
         ]
@@ -223,7 +267,9 @@ def write(directory, report, map_name="RBR"):
             w.writerow({k:",".join(v) if isinstance(v,list) else v
                         for k,v in row.items()})
     priority={"COMPATIVEL_COM_LACUNAS":0,
-              "REVISAR_POSSIVEL_COMPATIBILIDADE":1}
+              "SETOR_PENDENTE_PERMISSOES_INCOMPLETAS":0,
+              "REVISAR_POSSIVEL_COMPATIBILIDADE":1,
+              "SETOR_PENDENTE_PERMISSOES_DOCUMENTADAS":2}
     pending=sorted(
         (r for r in report["empresas"] if r["status"] in priority),
         key=lambda r:(priority[r["status"]],
