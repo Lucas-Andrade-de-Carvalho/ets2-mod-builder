@@ -61,11 +61,11 @@ class DiagnosticTrailerTests(unittest.TestCase):
         with zipfile.ZipFile(p) as archive:
             content={name:archive.read(name) for name in archive.namelist()}
         content["def/vehicle/trailer_owned/test/body/grade.sii"]=(
-            b"body_type: alta\\ncargo_loading_methods[]: area\\n")
+            b"body_type: alta\ncargo_loading_methods[]: area\n")
         content["def/vehicle/cargo/carga1/model_area.sii"]=(
-            b"cargo_model_match : .area {\\n"
-            b" loading_method: area\\n"
-            b' data_path[]: "/def/vehicle/cargo/carga1/accessory.sii"\\n}')
+            b"cargo_model_match : .area {\n"
+            b" loading_method: area\n"
+            b' data_path[]: "/def/vehicle/cargo/carga1/accessory.sii"\n}')
         content["def/vehicle/cargo/carga1/accessory.sii"]=(
             b"accessory_cargo_data: .carga { }")
         zip_write(p,content)
@@ -78,7 +78,7 @@ class DiagnosticTrailerTests(unittest.TestCase):
         self.assertFalse(evidence["incompatibilidade_explicita_de_metodos"])
 
         content["def/vehicle/trailer_owned/test/body/grade.sii"]=(
-            b"body_type: alta\\ncargo_loading_methods[]: bulk\\n")
+            b"body_type: alta\ncargo_loading_methods[]: bulk\n")
         zip_write(p,content)
         _dest,broken=diag.inspect(g,self.input,self.txt,self.root/"models_mismatch")
         self.assertTrue(broken["carga_modelo_154"]["carga1"][
