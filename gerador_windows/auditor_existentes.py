@@ -677,6 +677,105 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
     return outputs
 
 
+def _write_three_map_dashboard(folder, reports, *, simulated=False):
+    """Resumo auditavel para cada mapa sem misturar cobertura e homologacao."""
+    if not reports:
+        return
+    items=[]
+    for report in sorted(reports,key=lambda x:x["mapa"]):
+        evidence=report.get("cobertura_maxima_empresas") or {}
+        quality=report.get("qualidade_logistica") or {}
+        cargo_info=quality.get("cargas") or {}
+        missing_economic=sorted(
+            cargo for cargo,v in cargo_info.items()
+            if v.get("pares_economicos_distintos",0)==0)
+        missing_documented=sorted(
+            cargo for cargo,v in cargo_info.items()
+            if v.get("pares_com_evidencia_inout_distintos",0)==0)
+        missing_editors=sorted(
+            cargo for cargo,v in cargo_info.items()
+            if v.get("pares_com_editor_em_ambas_empresas",0)==0)
+        blockers=[]
+        if evidence.get("empresas_sem_classificacao",0):
+            blockers.append("Empresas com atividade ainda desconhecida")
+        if evidence.get("empresas_compativeis_sem_editor_valido",0):
+            blockers.append("Empresas compativeis sem company_def cidade+prefab")
+        if report.get("pendencias_revisao",0):
+            blockers.append("Decisoes economicas exigem revisao")
+        if missing_economic:
+            blockers.append("Cargas sem par economicamente justificado")
+        if missing_editors:
+            blockers.append("Cargas sem par com editor documentado")
+        items.append({
+            "mapa":report["mapa"],
+            "empresas_na_def":report.get("empresas_na_def"),
+            "empresas_nao_classificadas":evidence.get("empresas_sem_classificacao"),
+            "empresas_com_editor_ausente":evidence.get("empresas_sem_editor"),
+            "cidades_documentadas":evidence.get("cidades_identificadas"),
+            "permissoes_justificadas":evidence.get("permissoes_justificadas"),
+            "permissoes_justificadas_atendidas":
+                evidence.get("permissoes_justificadas_atendidas"),
+            "pct_permissoes_justificadas":
+                evidence.get("cobertura_permissoes_justificadas_pct"),
+            "cargas_com_par_cadastrado":quality.get("cargas_com_par_cadastrado",0),
+            "cargas_com_par_documental":
+                quality.get("cargas_com_par_evidencia_inout",0),
+            "cargas_com_par_economico":
+                quality.get("cargas_com_par_economico_comprovavel",0),
+            "cargas_com_par_editor_documental":
+                quality.get("cargas_candidatas_documentais_teste",0),
+            "cargas_candidatas_no_editor":
+                quality.get("cargas_candidatas_teste_ets2",0),
+            "cargas_sem_par_documental":missing_documented,
+            "cargas_sem_par_economico":missing_economic,
+            "cargas_sem_par_editor":missing_editors,
+            "pendencias_revisao":report.get("pendencias_revisao",0),
+            "bloqueios":blockers,
+            "hash_company_original":report.get("sha256_entrada",""),
+            "hash_def_original":report.get("sha256_def",""),
+            "status":"ANALISE_PENDENTE" if blockers else
+                     "DOCUMENTOS_CONSISTENTES_TESTE_NO_JOGO_PENDENTE",
+            "homologado_no_ets2":False
+        })
+    dashboard={
+        "versao":"3.0-painel",
+        "mapas_analisados":len(items),
+        "simulacao_sem_escrita_scs":simulated,
+        "status":"HOMOLOGACAO_ETS2_PENDENTE",
+        "homologado_no_ets2":False,
+        "criterio":"Percentual de permissoes justificadas mede apenas o que "
+                   "os IN/OUT e regras de setor demonstram. Sem exigir "
+                   "cidades/prefabs jogaveis, fretes visiveis e entregas "
+                   "no ETS2, jamais e homologacao de 100%.",
+        "mapas":items
+    }
+    folder=Path(folder)
+    (folder/"PAINEL_GERAL_LOGISTICA_V3.json").write_text(
+        json.dumps(dashboard,indent=2,ensure_ascii=False),encoding="utf-8")
+    lines=["PAINEL GERAL DE LOGISTICA V3 - NAO E HOMOLOGACAO ETS2",
+           "Analise: SIMULACAO" if simulated else "Analise: COMPANY CORRIGIDA"]
+    for item in items:
+        lines+=["", "MAPA "+item["mapa"],
+                "Empresas da DEF: "+str(item["empresas_na_def"]),
+                "Cobertura de permissoes justificadas: "+
+                str(item["pct_permissoes_justificadas"])+"% ("+
+                str(item["permissoes_justificadas_atendidas"])+"/"+
+                str(item["permissoes_justificadas"])+")",
+                "Pares IN/OUT documentados: "+
+                str(item["cargas_com_par_documental"])+"/24 cargas",
+                "Pares com setor conhecido: "+
+                str(item["cargas_com_par_economico"])+"/24 cargas",
+                "Pares com editor: "+
+                str(item["cargas_candidatas_no_editor"])+"/24 cargas",
+                "Empresas nao classificadas: "+
+                str(item["empresas_nao_classificadas"]),
+                "Bloqueios: "+"; ".join(item["bloqueios"] or
+                                        ["Testes reais no jogo pendentes"])]
+    (folder/"PAINEL_GERAL_LOGISTICA_V3.txt").write_text(
+        "\n".join(lines)+"\n",encoding="utf-8")
+    return dashboard
+
+
 def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
         professional=False, source_files=None):
     """Publica resultados SOMENTE depois que todos os mapas terminarem.
@@ -699,6 +798,8 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
                 type(exc).__name__+": "+str(exc)+"\n",
                 encoding="utf-8")
             raise
+        if professional:
+            _write_three_map_dashboard(stage,result,simulated=mode=="auditar")
         for item in sorted(stage.iterdir()):
             if item.is_file():
                 os.replace(item,published/item.name)
