@@ -195,7 +195,7 @@ def infer_by_flow(company):
     # categorias explicitamente registradas no lado correto.
     if (len(incoming & RETAIL_FOOD)>=3 and
             not (outgoing - RETAIL_FOOD) and
-            not (incoming & AGRICULTURE_INCOMPATIBLE)):
+            not (incoming & (AGRICULTURE_INCOMPATIBLE-RETAIL_FOOD))):
         return Identity(
             "comercio_alimentos_inferido","alta",
             "fluxo alimentar diversificado documentado na DEF, sem prova "
