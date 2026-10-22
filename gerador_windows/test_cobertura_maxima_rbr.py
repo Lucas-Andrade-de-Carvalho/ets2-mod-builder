@@ -8,6 +8,78 @@ import politica_economica as p
 import cobertura_maxima_rbr as coverage
 
 
+class RegionalCottonCoconutPolicyTests(unittest.TestCase):
+    def test_farms_supply_cotton_and_coconut_in_two_maps_only(self):
+        companies=[
+            g.Company("fazenda_milho",old_in={"fertilizer"},old_out={"corn"}),
+            g.Company("fazenda_batata",old_in={"adubo"},old_out={"potatoes"}),
+            g.Company("fazenda_laranja",old_in={"fertilizer"},old_out={"oranges"}),
+            g.Company("unidade_x09",display_name="Fazenda Campo Largo")
+        ]
+        for comp in companies:
+            for region in ("Minas_Gerais","Eldorado"):
+                for product in ("algodao","coco"):
+                    with self.subTest(name=comp.name,map=region,product=product):
+                        result=p.regional_approved_decision(
+                            comp,product,"out",region)
+                        self.assertTrue(result and result.allowed)
+                        self.assertIn("SIMULACAO",result.evidence)
+                        self.assertIsNone(p.regional_approved_decision(
+                            comp,product,"in",region))
+            for product in ("algodao","coco"):
+                self.assertIsNone(p.regional_approved_decision(
+                    comp,product,"out","RBR"))
+
+    def test_pluma_destinations_not_building_sites_or_fuel_stations(self):
+        permitted=("silo_001","armazem_central","cooperativa_leste",
+                   "beneficiadora_algodao","textil_y","galpao_deposito")
+        for name in permitted:
+            with self.subTest(name=name):
+                c=g.Company(name)
+                v=p.regional_approved_decision(c,"algodao","in","Eldorado")
+                self.assertTrue(v and v.allowed)
+                self.assertIsNone(p.regional_approved_decision(
+                    c,"algodao","out","Eldorado"))
+        for name in ("obra_centro","posto_petrol", "mineracao_1",
+                     "brasilog","siderurgica_casa","construcao_1"):
+            with self.subTest(deny=name):
+                c=g.Company(name)
+                self.assertIsNone(p.regional_approved_decision(
+                    c,"algodao","in","Minas_Gerais"))
+                self.assertIsNone(p.regional_approved_decision(
+                    c,"coco","in","Eldorado"))
+
+    def test_coconut_only_grocery_merceria_ceasa_and_hortifruti_in(self):
+        for name in ("martminas","supermercado_norte","mercearia_jardim",
+                     "mercadinho_joao","quitanda_das_frutas",
+                     "ceasa_norte","hortifruti_sul"):
+            with self.subTest(name=name):
+                c=g.Company(name)
+                v=p.regional_approved_decision(c,"coco","in","Minas_Gerais")
+                self.assertTrue(v and v.allowed)
+                self.assertIsNone(p.regional_approved_decision(
+                    c,"coco","out","Minas_Gerais"))
+        for name in ("obra_norte","posto_combustivel","gerdau",
+                     "mineracao1","silo_de_graos","cimenteira"):
+            c=g.Company(name)
+            self.assertIsNone(p.regional_approved_decision(
+                c,"coco","in","Eldorado"))
+
+    def test_restriction_is_precisely_two_categories_two_maps(self):
+        c=g.Company("fazenda_001")
+        for region in ("RBR","RS","Minas","",None):
+            for cat in ("algodao","coco"):
+                self.assertIsNone(p.regional_approved_decision(
+                    c,cat,"out",region))
+        for region in ("Minas_Gerais","Eldorado"):
+            for category in set(p.CATEGORIES)-{"algodao","coco"}:
+                self.assertIsNone(p.regional_approved_decision(
+                    c,category,"out",region))
+        # Regra padrao do RBR segue independente da adaptacao regional.
+        self.assertFalse(p.decide(c,"coco","out").allowed)
+        self.assertFalse(p.decide(c,"algodao","out").allowed)
+
+
 class RealMapPalletGapRegression(unittest.TestCase):
     """Casos reproduzidos dos arquivos AUDITORIA_(4).json do cliente."""
 
