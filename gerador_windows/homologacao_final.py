@@ -89,11 +89,17 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
             quality=summary.get("qualidade_logistica") or {}
             matrix=quality.get("cargas",{})
             for cid,entry in sorted(matrix.items(),key=lambda kv:catalogo.sort_key(kv[0])):
-                suggested=entry.get("candidatos_para_teste",[])
+                confirmed=entry.get("candidatos_para_teste",[])
+                documented=entry.get("candidatos_documentados_para_teste",[])
+                suggested=confirmed or documented
                 first=suggested[0] if suggested else {}
+                evidence_level=("SETOR_E_ECONOMIA" if confirmed else
+                                "MESMA_MERCADORIA_IN_OUT_SETOR_PENDENTE"
+                                if documented else "SEM_PAR_DOCUMENTAL_EDITOR")
                 rows.append({
                     "mapa":map_name,"carga":cid,"mercadoria":entry["nome"],
                     "situacao_auditoria":entry["status"],
+                    "nivel_evidencia":evidence_level,
                     "origem_sugerida":first.get("origem",""),
                     "destino_sugerido":first.get("destino",""),
                     "frete_visivel_no_ets2":"",
@@ -166,7 +172,8 @@ def run(g, sources, entries, out_path, game_log=None, log=lambda message:None):
         json.dumps(cert,indent=2,ensure_ascii=False),encoding="utf-8")
     with (out/"MATRIZ_ENSAIOS_ETS2.csv").open("w",newline="",encoding="utf-8-sig") as fp:
         columns=("mapa","carga","mercadoria","situacao_auditoria",
-                 "origem_sugerida","destino_sugerido","frete_visivel_no_ets2",
+                 "nivel_evidencia","origem_sugerida","destino_sugerido",
+                 "frete_visivel_no_ets2",
                  "coleta_realizada","entrega_realizada","carga_modelo_visivel",
                  "evidencia_de_teste","observacoes_de_jogo")
         writer=csv.DictWriter(fp,fieldnames=columns,delimiter=";")
