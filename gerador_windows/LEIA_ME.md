@@ -452,3 +452,43 @@ revisoes e cadeias sem rota. Em vez disso, publica
 pendencias nem as transforma em contratos de transporte ficticios.
 Uma versao sintética de 24 cadeias continua sendo teste de software,
 nao comprovacao de fretes reais dentro do ETS2.
+
+
+## Recuperar dados reais: Eldorado e cidades de Minas Gerais
+
+### Eldorado: atividade economica demonstravel
+
+Classificador revisado para Mosaic (mosaico/mosaico2: fabricacao de adubo),
+CEAGESP (ceagesp: hortifruti e cereais documentados no IN/OUT),
+Globcement (globcement/globcement2: cimento), madeireira e comerciantes
+de bebidas (cerveja apenas se documentada no OUT original).
+RocaSoja so passa a fazenda de soja se o OUT original confirmar soja.
+IDs genericos ou empresariais ambiguos continuam para revisao, em vez
+de receber 24 mercadorias irreais. Os totais antigos de empresas sem
+identificacao so podem ser revisados com nova execucao sobre a DEF real.
+
+### Minas: recuperar instancias city+prefab de arquivos originais
+
+O auditor agora tenta encontrar company_def + city + prefab em:
+1. DEF original de Minas Gerais que o usuario selecionou.
+2. Company existente de Minas Gerais, se contiver esses editor files.
+3. Pacote adicional do mesmo mapa, opcional: SCS/ZIP ou pasta extraida.
+
+Na interface, use o novo campo 'Editor Minas (SCS/ZIP com city+prefab, opcional)'.
+Deixe em branco se nao tiver o arquivo: o proprio gerador tenta recuperar
+as entradas reais da Company existente automaticamente.
+
+Exemplo de CLI: acrescente --editor-minas editor_minas.zip ao comando
+--cli --audit-existing, --preflight-real ou --finalize-offline.
+
+O JSON de auditoria inclui o campo recuperacao_editor, detalhando fonte,
+arquivos validos, rejeicoes, colisao e quantidade de editor recuperado.
+Editor de origem externa nunca e inserido no SCS gerado, apenas usado como
+evidencia documental de existencia de empresa+cidade+prefab.
+
+Sem company_def valido em nenhuma das fontes, a cobertura territorial
+continua bloqueada e o auditor NAO inventa empresa, cidade ou prefab.
+
+Documentacao oficial: https://modding.scssoft.com/wiki/Games/ETS2/Modding_guides/1.4.1
+DEF Company oficial Minas: https://mapaminasets2.com.br/adicionais/
+Fonte adicional nao prova prefab funcionando; ETS2 deve ser testado.
