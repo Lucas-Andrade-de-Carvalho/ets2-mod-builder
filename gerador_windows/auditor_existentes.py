@@ -883,6 +883,45 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                         if p not in changed or (
                             changed[p]==raw and z.read(p)!=raw):
                             raise ValueError("Arquivo original alterado indevidamente: "+p)
+                    # Auditoria POS-EXPORTACAO: ler o ZIP de verdade,
+                    # reconstruir permissao por empresa/direcao e conferir
+                    # 100% com o estado que gerou os relatórios. Nunca
+                    # divulgar 24/24 com arquivo diferente do inventario.
+                    validated=defaultdict(lambda:{"in":set(),"out":set()})
+                    occurrences=defaultdict(int)
+                    for path in sorted(z.namelist()):
+                        match=g.RE_COMPANY_PATH.search(path)
+                        if (not match or match.group(2) not in {"in","out"}
+                                or not path.endswith(SII_EXT)):
+                            continue
+                        company,direction=match.group(1).lower(),match.group(2).lower()
+                        for cargo in file_active_ids(g,z.read(path)):
+                            validated[company][direction].add(cargo)
+                            occurrences[(company,direction,cargo)]+=1
+                    for company in set(validated)|set(final_active):
+                        for direction in ("in","out"):
+                            if (validated[company][direction]!=
+                                    final_active[company][direction]):
+                                raise ValueError(
+                                    "SCS e relatorio discordam em "+company+
+                                    "/"+direction+"; publicacao bloqueada")
+                    duplicates=[(company,direction,cargo)
+                                for (company,direction,cargo),n in occurrences.items()
+                                if n>1 and company in baseline]
+                    if duplicates:
+                        example=duplicates[0]
+                        raise ValueError(
+                            "SCS ainda contem cargo duplicado para empresa "
+                            "da DEF: "+"/".join(example)+
+                            " (total "+str(len(duplicates))+"); "
+                            "nao sera publicado")
+                    summary["validacao_pos_exportacao"]={
+                        "arquivo_zip_integro":True,
+                        "mesmas_permissoes_do_relatorio":True,
+                        "duplicatas_em_empresas_do_mapa":0,
+                        "permissoes_ativas":sum(occurrences.values()),
+                        "homologado_no_ets2":False
+                    }
                 output_sha=digest(temporary.read_bytes())
                 output=out/("ETS2_"+name.upper()+"_AUDITADA_V25_"+
                             input_digest+"_"+output_sha[:12]+".scs")
