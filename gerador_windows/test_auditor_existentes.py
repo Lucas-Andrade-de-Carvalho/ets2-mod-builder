@@ -320,7 +320,7 @@ class AuditorSCSRegression(unittest.TestCase):
         by_id={x["empresa"]:x for x in
                result["matriz_empresa_cidade"]["empresas"]}
         self.assertEqual(by_id["extracao_ju"]["atividade"],"madeireira")
-        self.assertEqual(by_id["go_p_riobra"]["atividade"],"desconhecida")
+        self.assertEqual(by_id["go_p_riobra"]["atividade"],"posto_combustivel")
         self.assertIn("carga1",result["rotas_depois"])
 
     def test_rbr_real_sector_corrections_preserve_crop_rotation_as_hypothesis(self):
