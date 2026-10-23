@@ -393,18 +393,6 @@ def classify(company):
         return Identity("posto_combustivel","alta",
                         "posto identificado pelo nome exibido e entrada "
                         "original de gasolina/diesel/etanol/oleo de motor")
-    for role,pattern in ROLES:
-        if re.search(pattern,identifier,re.I):
-            if (role=="terminal_portuario" and
-                    not (company.old_in or company.old_out)):
-                # ID porto1 sozinho nao comprova que o terminal realmente
-                # opera cargas. Sem arquivos originais, deixar pendente.
-                continue
-            return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
-    # Nome publicamente exibido vem de company_permanent.name, NAO do
-    # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
-    # quando houver correspondencia inequívoca com UM setor.
-    public_name=getattr(company,"display_name","")
     # RBR "fazenda_ac": o nome do editor declara ARMAZENAGEM DE GRAOS,
     # e ha as mesmas especies de graos IN/OUT. Nao inferir lavoura.
     public_name=getattr(company,"display_name","")
@@ -416,6 +404,17 @@ def classify(company):
         return Identity("silo","alta",
                         "nome exibido diz armazenagem de graos e especies "
                         "compartilhadas constam de IN e OUT originais")
+    for role,pattern in ROLES:
+        if re.search(pattern,identifier,re.I):
+            if (role=="terminal_portuario" and
+                    not (company.old_in or company.old_out)):
+                # ID porto1 sozinho nao comprova que o terminal realmente
+                # opera cargas. Sem arquivos originais, deixar pendente.
+                continue
+            return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
+    # Nome publicamente exibido vem de company_permanent.name, NAO do
+    # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
+    # quando houver correspondencia inequívoca com UM setor.
     # RBR "Galo Prod. Agricolas": nao confundir vendedor de ração/adubo
     # com fazenda so porque o nome publico tem 'agricola'.
     # O proprio IN/OUT da DEF documenta adubo IN/OUT e racao OUT.
