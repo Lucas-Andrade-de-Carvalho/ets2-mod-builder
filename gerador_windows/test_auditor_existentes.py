@@ -323,6 +323,93 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(by_id["go_p_riobra"]["atividade"],"posto_combustivel")
         self.assertIn("carga1",result["rotas_depois"])
 
+    def test_three_map_pending_queue_priority_and_original_inout(self):
+        maps=[]
+        for name in ("Minas_Gerais","Eldorado","RBR"):
+            maps.append({
+                "mapa":name,"total_cargas_catalogo":24,
+                "pendencias_revisao":1,
+                "permissoes_sem_evidencia_preservadas":1,
+                "permissoes_plausiveis_sem_evidencia_def":1,
+                "matriz_empresa_cidade":{"empresas":[
+                    {"empresa":"unidade_confusa","atividade":"desconhecida",
+                     "nome_exibido":"Empresa sem nome",
+                     "in_originais_def":["fertilizer"],
+                     "out_originais_def":["corn"],"instancias_editor":1},
+                    {"empresa":"empresa_sem_cargas","atividade":"desconhecida",
+                     "nome_exibido":"Unidade sem frete",
+                     "in_originais_def":[],"out_originais_def":[],
+                     "instancias_editor":0}
+                ]},
+                "decisoes":[
+                    {"acao":"REVISAR","empresa":"unidade_confusa",
+                     "carga":"carga1","direcao":"out",
+                     "arquivo":"def/company/unidade_confusa/out/carga1.sii",
+                     "setor":"desconhecida","motivo":"precisa confirmar"},
+                    {"acao":"PRESERVAR_SEM_EVIDENCIA",
+                     "empresa":"unidade_confusa","carga":"carga2",
+                     "direcao":"out","motivo":"falta evidencia"},
+                    {"acao":"MANTER_PLAUSIVEL","empresa":"unidade_confusa",
+                     "carga":"carga23","direcao":"in",
+                     "motivo":"possivel rotacao"},
+                    {"acao":"ADICIONAR","empresa":"unidade_confusa",
+                     "carga":"carga3","direcao":"in"}
+                ],
+                "qualidade_logistica":{
+                    "cargas_com_par_cadastrado":24,
+                    "cargas_com_par_economico_comprovavel":22,
+                    "cargas_candidatas_teste_ets2":20},
+                "cargas_sem_rota_validada":[]})
+        target=self.root/"triagem_global"
+        target.mkdir()
+        report=audit._three_map_pending_queue(target,maps)
+        self.assertEqual(report["prioridade_1_revisao"],3)
+        self.assertEqual(report["prioridade_2_legada_sem_prova"],3)
+        self.assertEqual(report["prioridade_3_hipotese"],3)
+        self.assertEqual(report["prioridade_4_sem_frete"],3)
+        self.assertFalse(report["homologado_no_ets2"])
+        import csv
+        with (target/"TRIAGEM_PENDENCIAS_3_MAPAS.csv").open(
+                newline="",encoding="utf-8-sig") as fp:
+            records=list(csv.DictReader(fp,delimiter=";"))
+        self.assertEqual(len(records),12)
+        self.assertEqual(records[0]["prioridade"],"1")
+        self.assertIn("fertilizer",records[0]["in_originais_def"])
+        self.assertIn("corn",records[0]["out_originais_def"])
+        self.assertEqual(records[0]["homologado_ets2"],"NAO")
+        self.assertEqual(records[-1]["acao"],
+                         "SEM_FRETE_PENDENTE_IDENTIFICADO")
+        self.assertIsNone(
+            audit._three_map_pending_queue(target,maps[:2]))
+
+    def test_scs_with_all_previous_chains_cannot_publish_broken_catalog(self):
+        """Se entrada tinha todos os pares, nao silenciosamente perder
+        carga após limpar posto sem alternativa economica verdadeira."""
+        real_def=self.root/"mapa_sem_produtor_adequado.zip"
+        zip_write(real_def,{
+            "go_petrobras/in/gasolina.sii":old("gasolina"),
+            "go_petrobras/out/tanqvazio.sii":old("tanqvazio"),
+            "supermercado_centro/in/potatoes.sii":old("potatoes")
+        })
+        previous=self.root/"company_todas_rotas_herdadas.scs"
+        archive={}
+        for n in range(1,len(g.MANIFEST)+1):
+            for company,direction in (
+                    ("go_petrobras","out"),("supermercado_centro","in")):
+                archive[
+                    f"def/company/{company}/{direction}/carga{n}.sii"
+                ]=g.cargo_sii(f"carga{n}")
+        zip_write(previous,archive)
+        original=previous.read_bytes()
+        target=self.root/"blocked_catalog_regression"
+        with self.assertRaisesRegex(ValueError,"PROTECAO DE CADEIAS"):
+            audit.run(g,{"RBR":{"existing":previous,"map_def":real_def}},
+                      target,professional=True,source_files={
+                        k:self.fixture.inp[k] for k in ("mod","def1","def2")})
+        self.assertEqual(previous.read_bytes(),original)
+        self.assertEqual(list(target.glob("*.scs")),[])
+        self.assertTrue((target/"AUDITORIA_INCOMPLETA.txt").exists())
+
     def test_rbr_real_sector_corrections_preserve_crop_rotation_as_hypothesis(self):
         """Auditoria binaria: remove fretes minerais/combustivel falsos e
         mantem sorghum em fazenda/silo SOMENTE quando herdado e plausivel."""
