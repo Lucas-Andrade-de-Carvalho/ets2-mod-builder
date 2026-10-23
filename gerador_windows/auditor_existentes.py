@@ -538,7 +538,9 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             cargo for cargo in before
             if before[cargo]["pares_distintos"]>0
             and after[cargo]["pares_distintos"]==0)
-        if mode=="corrigir" and professional and regressed_routes:
+        originally_complete=bool(before) and all(
+            row["pares_distintos"]>0 for row in before.values())
+        if mode=="corrigir" and professional and originally_complete and regressed_routes:
             raise ValueError(
                 name+": PROTECAO DE CADEIAS: a correcao eliminaria "
                 "todos os pares de origem/destino das cargas "+
