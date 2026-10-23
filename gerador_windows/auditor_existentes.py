@@ -978,6 +978,129 @@ def _write_three_map_dashboard(folder, reports, *, simulated=False):
     return dashboard
 
 
+def _three_map_pending_queue(folder, reports):
+    """Fila de DECISOES dos 3 mapas, contextualizada pelos IN/OUT verdadeiros.
+
+    Nao transforma nomes desconhecidos em produtor, nao inventa cargas e
+    nao mistura permissao 'possivel' com comprovacao da DEF original.
+    Publicada so depois de analisar os tres mapas na mesma execucao.
+    """
+    expected={"Minas_Gerais","Eldorado","RBR"}
+    if {r.get("mapa") for r in reports}!=expected:
+        return None
+    categories={
+        "REVISAR":(1,"Exigir documento original que confirme carga/direcao"),
+        "PRESERVAR_SEM_EVIDENCIA":(
+            2,"Identificar atividade pelos fluxos, nao aprovar ainda"),
+        "MANTER_PLAUSIVEL":(
+            3,"Conferir produto e direcao na DEF; plausibilidade nao e prova")
+    }
+    headers=[
+        "prioridade","mapa","empresa","nome_exibido","setor_inferido",
+        "acao","carga","direcao","arquivo_scs",
+        "in_originais_def","out_originais_def","instancias_editor",
+        "motivo","acao_recomendada","homologado_ets2"
+    ]
+    queue=[]
+    overview={}
+    for report in sorted(reports,key=lambda x:x["mapa"]):
+        map_name=report["mapa"]
+        territory=(report.get("matriz_empresa_cidade") or {})
+        company_evidence={
+            x.get("empresa"):x for x in territory.get("empresas",[])
+        }
+        unresolved=set()
+        for d in report.get("decisoes",[]):
+            action=d.get("acao")
+            if action not in categories:
+                continue
+            urgency,advice=categories[action]
+            comp=d.get("empresa","")
+            ev=company_evidence.get(comp,{})
+            def as_text(value):
+                if isinstance(value,(list,tuple,set)):
+                    return ",".join(sorted(str(x) for x in value))
+                return str(value or "")
+            queue.append({
+                "prioridade":urgency,"mapa":map_name,"empresa":comp,
+                "nome_exibido":ev.get("nome_exibido",""),
+                "setor_inferido":d.get("setor") or ev.get("atividade",""),
+                "acao":action,"carga":d.get("carga",""),
+                "direcao":d.get("direcao",""),
+                "arquivo_scs":d.get("arquivo",""),
+                "in_originais_def":as_text(ev.get("in_originais_def")),
+                "out_originais_def":as_text(ev.get("out_originais_def")),
+                "instancias_editor":ev.get("instancias_editor",0),
+                "motivo":d.get("motivo",""),"acao_recomendada":advice,
+                "homologado_ets2":"NAO"
+            })
+            unresolved.add(comp)
+        # Empresa desconhecida SEM permissao pendente nao equivale a
+        # carga errada. Manter listada como baixa prioridade, nunca erro.
+        unknown=0
+        for company,ev in company_evidence.items():
+            if not company or ev.get("atividade")!="desconhecida":
+                continue
+            unknown+=1
+            if company in unresolved:
+                continue
+            queue.append({
+                "prioridade":4,"mapa":map_name,"empresa":company,
+                "nome_exibido":ev.get("nome_exibido",""),
+                "setor_inferido":"desconhecida",
+                "acao":"SEM_FRETE_PENDENTE_IDENTIFICADO",
+                "carga":"","direcao":"","arquivo_scs":"",
+                "in_originais_def":as_text(ev.get("in_originais_def")),
+                "out_originais_def":as_text(ev.get("out_originais_def")),
+                "instancias_editor":ev.get("instancias_editor",0),
+                "motivo":"Empresa sem classe segura mas sem cargo antigo "
+                         "pendente nesta auditoria",
+                "acao_recomendada":"Revisar setor apenas se houver demanda "
+                                   "de frete compatível com as 24 mercadorias",
+                "homologado_ets2":"NAO"
+            })
+        quality=report.get("qualidade_logistica") or {}
+        overview[map_name]={
+            "total_cargas":report.get("total_cargas_catalogo"),
+            "cargas_com_par_cadastrado":quality.get("cargas_com_par_cadastrado",0),
+            "pares_economicos":quality.get("cargas_com_par_economico_comprovavel",0),
+            "candidatas_teste_ets2":quality.get("cargas_candidatas_teste_ets2",0),
+            "revisoes_pontuais":report.get("pendencias_revisao",0),
+            "herdadas_sem_prova":report.get(
+                "permissoes_sem_evidencia_preservadas",0),
+            "herdadas_plausiveis_sem_prova":report.get(
+                "permissoes_plausiveis_sem_evidencia_def",0),
+            "empresas_sem_classe":unknown,
+            "empresas_com_revisao_relevante":len(unresolved),
+            "cargas_sem_par":report.get("cargas_sem_rota_validada",[]),
+            "adaptacoes_regionais_novas":report.get(
+                "permissoes_adaptacao_regional_adicionadas",0)
+        }
+    queue.sort(key=lambda d:(d["prioridade"],d["mapa"],d["empresa"],
+                             d["carga"],d["direcao"]))
+    with (folder/"TRIAGEM_PENDENCIAS_3_MAPAS.csv").open(
+            "w",newline="",encoding="utf-8-sig") as stream:
+        writer=csv.DictWriter(stream,fieldnames=headers,delimiter=";")
+        writer.writeheader()
+        writer.writerows(queue)
+    summary={
+        "mapas":overview,"decisoes_na_fila":len(queue),
+        "prioridade_1_revisao":sum(r["prioridade"]==1 for r in queue),
+        "prioridade_2_legada_sem_prova":sum(r["prioridade"]==2 for r in queue),
+        "prioridade_3_hipotese":sum(r["prioridade"]==3 for r in queue),
+        "prioridade_4_sem_frete":sum(r["prioridade"]==4 for r in queue),
+        "status":"PENDENTE_ENSAIOS_NO_ETS2",
+        "homologado_no_ets2":False,
+        "criterio":"Fila de evidencias; nenhuma mercadoria nova e "
+                   "aprovada apenas por nome de empresa, origem/destino "
+                   "ou quantidade de instancias editor."
+    }
+    (folder/"TRIAGEM_PENDENCIAS_3_MAPAS.json").write_text(
+        json.dumps(summary,ensure_ascii=False,indent=2),
+        encoding="utf-8")
+    return summary
+
+
 def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
         professional=False, source_files=None):
     """Publica resultados SOMENTE depois que todos os mapas terminarem.
@@ -1002,6 +1125,7 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
             raise
         if professional:
             _write_three_map_dashboard(stage,result,simulated=mode=="auditar")
+            _three_map_pending_queue(stage,result)
         for item in sorted(stage.iterdir()):
             if item.is_file():
                 os.replace(item,published/item.name)
