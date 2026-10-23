@@ -228,6 +228,66 @@ def infer_by_flow(company):
                         "vestuario/eletronicos/embalagens/pecas, inclusive "
                         "fora das 24 cargas; nao e fabrica ou agropecuaria")
 
+    # Eldorado real: IN/OUT de dezenas de produtos de setores distintos,
+    # incluindo fertilizante, mas tambem brinquedos, roupas, alimentos,
+    # utensilios e pneus. E centro de movimentacao, NAO simples revenda
+    # especializada de adubo. Ex.: cmddiesel, midwest, drekkar2.
+    logistic_signal={
+        "clothes","clothes3","toys","tyres","tableware","beverages",
+        "drymilk","canned_beans","carrots","cauliflower","sugar","sugar2"
+    }
+    if (len(in_names)>=12 and len(out_names)>=12 and
+            len(in_names & out_names)>=10 and
+            len((in_names | out_names) & logistic_signal)>=5 and
+            "fertilizer" in (in_names | out_names)):
+        return Identity("centro_logistico_inferido","alta",
+                        "movimentacao de roupas, alimentos, utensilios e pneus "
+                        "com IN/OUT diversos; fertilizante sozinho nao "
+                        "transforma centro logistico em loja de adubo")
+
+    # Instalações com dezenas de químicos perigosos em ambos os sentidos:
+    # nao tratar como obra ou supermercado mesmo que ID historico sugira.
+    chemical_hazards={
+        "arsenic","chlorine","cyanide","mercuric","sulfuric",
+        "nitrocel","acid","potahydro","sodhydro","phosphor"
+    }
+    if (len(in_names & chemical_hazards)>=6 and
+            len(out_names & chemical_hazards)>=6):
+        return Identity("terminal_quimico_inferido","alta",
+                        "fluxo massivo de produtos quimicos especiais e "
+                        "perigosos IN/OUT; nao ha evidencia de consumo "
+                        "de mercado ou de materiais em obra")
+
+    # MG: vendedor de equipamentos agricolas e adubo, com os
+    # mesmos itens recebidos e expedidos. Nao e revenda exclusiva de adubo.
+    farm_machines={
+        "trator","tratores","escavadeira","pneutrator_s","bcorte",
+        "aramefar","equipagrico","digger500","forklifts"
+    }
+    if (len(in_names & farm_machines)>=3 and
+            len(out_names & farm_machines)>=3 and
+            "adubo" in incoming and "adubo" in outgoing):
+        return Identity("revenda_maquinas_agricolas_inferida","alta",
+                        "maquinas e implementos agricolas em IN e OUT "
+                        "junto de fertilizante; revenda mista documentada")
+
+    # MG: fabricante de descartaveis com emissao de copos/pratos/talheres.
+    # Nenhum destes itens equivale às 24 cargas do Librelato.
+    disposable={"coposdesc","pratosdesc","talheresdesc"}
+    if len(out_names & disposable)>=2 and len(in_names & disposable)==0:
+        return Identity("fabricante_descartaveis_inferido","alta",
+                        "expede copos, pratos e talheres descartaveis; "
+                        "nao inventar mercadoria Librelato equivalente")
+
+    # MG: unidade de reciclagem de pallets/papel/plastico/metais.
+    waste={"papelao","plasticom","supaletes","sualuminio",
+           "suferrosa","sumadeira","sumetal","supneus"}
+    if (len(in_names & waste)>=5 and len(out_names & waste)>=4 and
+            len(in_names & out_names & waste)>=4):
+        return Identity("reciclagem_inferida","alta",
+                        "recebe e expede residuos reciclaveis; paletes "
+                        "autorizados apenas quando presentes no IN/OUT")
+
     # Industria madeireira/extração de madeira: receber troncos, expedir
     # moveis. Um nome ficticio "extracao1" NAO indica cultivo de graos.
     if (("madeira" in incoming or
@@ -393,6 +453,14 @@ def classify(company):
         return Identity("posto_combustivel","alta",
                         "posto identificado pelo nome exibido e entrada "
                         "original de gasolina/diesel/etanol/oleo de motor")
+    # Sobrescrita de IDs antigos SOMENTE quando os IN/OUT brutos
+    # documentam um setor contraditorio com extrema confianca.
+    # Ex.: sellplan2 (ID de supermercado) com fluxos massivos de
+    # produtos quimicos perigosos. Nao atribuir cerveja e coco.
+    conflicting=infer_by_flow(company)
+    if (conflicting is not None and
+            conflicting.role=="terminal_quimico_inferido"):
+        return conflicting
     # RBR "fazenda_ac": o nome do editor declara ARMAZENAGEM DE GRAOS,
     # e ha as mesmas especies de graos IN/OUT. Nao inferir lavoura.
     public_name=getattr(company,"display_name","")
@@ -472,7 +540,10 @@ def decide(company,category,direction,identity=None):
                         "alta" if identity.certainty=="alta" else "media")
     def forbid(reason):
         return Decision(False,reason,identity.evidence,identity.certainty)
-    if role in {"centro_logistico_inferido","terminal_portuario"}:
+    if role in {"centro_logistico_inferido","terminal_portuario",
+                "terminal_quimico_inferido",
+                "revenda_maquinas_agricolas_inferida","reciclagem_inferida",
+                "fabricante_descartaveis_inferido"}:
         # Um terminal/armazem comercializa servicos de transbordo, nao
         # fabrica cada especie. Aceitar APENAS a mercadoria/ciclo no
         # IN/OUT autenticado na mesma direcao.
@@ -796,7 +867,15 @@ def regional_approved_decision(company,category,direction,map_name,identity=None
             r"(?:armazem|armazens|warehouse|galpao|deposito_agric|"
             r"beneficiadora_?algodao|cotton_?gin|algodoeira)",
             candidate))
-        cotton=(role in REGIONAL_COTTON_RECEIVERS or
+        # Nao usar qualquer distribuidor como receptor de pluma:
+        # abcatacado/MartMinas operam alimentos, bebidas e descartaveis,
+        # nao fardos textiles. Distribuidor precisa de sinal de
+        # armazenagem agricola ou industria textil no nome/fluxo.
+        distributor_cotton=(role=="distribuidor" and bool(re.search(
+            r"armaz|galpao|algod|textil|silo|cooper|agric|fibra",
+            candidate)))
+        cotton=(role in (REGIONAL_COTTON_RECEIVERS-{"distribuidor"}) or
+                distributor_cotton or
                 (role=="desconhecida" and warehouse_name))
         if not cotton:return None
         return Decision(
