@@ -186,6 +186,38 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(first_file.read_bytes(),before)
         self.assertEqual(len(list(output.glob("*.scs"))),2)
 
+    def test_published_scs_never_overwritten_if_existing_bytes_differ(self):
+        """Um arquivo na saida pode ser de cliente; conflito tem de
+        abortar antes de publicar relatórios novos."""
+        folder=self.root/"immutable_scs_collision"
+        first=self.invoke(out=folder)[0]
+        scs=folder/first["arquivo_corrigido"]
+        report=folder/"AUDITORIA_ELDORADO.json"
+        before_report=report.read_bytes()
+        collision=b"USER_SCS_MUST_NOT_BE_OVERWRITTEN"
+        scs.write_bytes(collision)
+        with self.assertRaisesRegex(
+                ValueError,"recusa sobrescrever versao anterior"):
+            self.invoke(out=folder)
+        self.assertEqual(scs.read_bytes(),collision)
+        self.assertEqual(report.read_bytes(),before_report)
+        self.assertIn("recusa sobrescrever",(
+            folder/"AUDITORIA_INCOMPLETA.txt").read_text(
+                encoding="utf-8"))
+
+    def test_republishing_identical_scs_does_not_update_its_timestamp(self):
+        folder=self.root/"immutable_scs_same_bytes"
+        result=self.invoke(out=folder)[0]
+        scs=folder/result["arquivo_corrigido"]
+        import os
+        stamp=1_600_000_000
+        os.utime(scs,(stamp,stamp))
+        before=scs.read_bytes()
+        self.invoke(out=folder)
+        self.assertEqual(scs.read_bytes(),before)
+        self.assertEqual(int(scs.stat().st_mtime),stamp)
+        self.assertFalse((folder/"AUDITORIA_INCOMPLETA.txt").exists())
+
     def test_publication_failure_rolls_back_all_existing_reports(self):
         """Nao trocar parte da auditoria ao falhar publicacao dos mapas."""
         from unittest import mock
