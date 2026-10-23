@@ -395,6 +395,11 @@ def classify(company):
                         "original de gasolina/diesel/etanol/oleo de motor")
     for role,pattern in ROLES:
         if re.search(pattern,identifier,re.I):
+            if (role=="terminal_portuario" and
+                    not (company.old_in or company.old_out)):
+                # ID porto1 sozinho nao comprova que o terminal realmente
+                # opera cargas. Sem arquivos originais, deixar pendente.
+                continue
             return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
     # Nome publicamente exibido vem de company_permanent.name, NAO do
     # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
