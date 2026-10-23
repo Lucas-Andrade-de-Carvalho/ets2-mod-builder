@@ -21,7 +21,7 @@ import recuperacao_editor
 import cobertura_maxima_rbr
 
 SII_EXT=(".sii",".sui")
-CARGO_FIELD = re.compile(r'(?im)^([ \t]*cargo[ \t]*:[ \t]*)"?cargo\.([a-z][a-z0-9_]*)"?(?=[ \t]*(?:}[ \t]*)*(?:(?:#|//)[^\r\n]*)?$)')
+CARGO_FIELD = re.compile(r'(?im)^([ \t]*cargo[ \t]*:[ \t]*)"?cargo\.([a-z][a-z0-9_]*)"?(?=[ \t]*(?:}[ \t]*)*(?:(?:#|//)[^\r\n]*)?\r?$)')
 OTHER_FIELD = re.compile(r'(?im)^\s*cargo\s*:\s*"?cargo\.([a-z0-9_]+)"?')
 # Tokens SII sao ASCII; operar sobre bytes evita destruir comentarios ou
 # nomes cp1252/latin1 quando neutralizando uma carga especifica.
