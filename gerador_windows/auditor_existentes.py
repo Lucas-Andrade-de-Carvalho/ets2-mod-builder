@@ -285,6 +285,12 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
     # produto apenas porque a Company antiga lhes atribuiu fretes.
     # Documentacao ORIGINAL da mesma categoria e direcao foi avaliada
     # acima e sempre prevalece.
+    if role in {"recebedor_agricola_inferido",
+                 "expedidor_residuos_inferido",
+                 "entreposto_madeira_inferido"}:
+        return ("Atividade comprovada por IN/OUT direcional, mas esta "
+                "permissao herdada nao tem o mesmo produto e direcao "
+                "na DEF; nao extrapolar ramo inferido")
     if role=="revenda_fertilizante" and category!="adubo":
         return ("Revenda especializada de fertilizante sem IN/OUT "
                 "original desta mercadoria; nao fabricar colheita/racao")
