@@ -281,6 +281,24 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
             and category not in original):
         return ("Fabrica de refrigerantes expede bebidas genericas, "
                 "nao cerveja: permissao herdada de carga12 incompatível")
+    # Negocios especializados nao sao exportadores de todo tipo de
+    # produto apenas porque a Company antiga lhes atribuiu fretes.
+    # Documentacao ORIGINAL da mesma categoria e direcao foi avaliada
+    # acima e sempre prevalece.
+    if role=="revenda_fertilizante" and category!="adubo":
+        return ("Revenda especializada de fertilizante sem IN/OUT "
+                "original desta mercadoria; nao fabricar colheita/racao")
+    if role=="revenda_racao" and category not in {"racao"}:
+        return ("Loja de racao nao produz nem recebe grãos sem IN/OUT "
+                "especifico da DEF na direcao existente")
+    if role=="obras" and direction=="out" and category in {
+            "cimento","tijolo","granito","madeira","bobina"}:
+        return ("Canteiro de obras consome material; expedicao de "
+                "material novo sem OUT original nao e fornecedor")
+    if role in {"fabrica_moveis","fabrica_paineis"} and direction=="out" and (
+            category in {"madeira","palete"}):
+        return ("Produto final industrial nao equivale a madeira bruta "
+                "ou palete da carga Librelato sem OUT original")
     if role=="fabrica_moveis" and category in {
             "milho","soja","sorgo","adubo","racao","cerveja",
             "batata","laranja","coco","algodao"}:
