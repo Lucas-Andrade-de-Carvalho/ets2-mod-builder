@@ -195,6 +195,24 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
         # Outros setores: nao apagar mercadoria realmente declarada no
         # IN/OUT autentico sem uma contradicao material acima.
         return None
+    # RBR: extracao de troncos exige maquinaria florestal Ponsse e
+    # expedicao de madeira bruta. Fretes legados de milho, soja ou
+    # racao para esses pontos vieram de mapeamentos genericos de IN/OUT
+    # e nao fazem sentido com o fluxo de madeira documentado.
+    if role=="madeireira":
+        ins={professional_policy.norm(x) for x in company.old_in}
+        outs={professional_policy.norm(x) for x in company.old_out}
+        extraction=(
+            any(re.fullmatch(r"ponsse[0-9]*",v) for v in ins) and
+            bool(outs & {"troncos","troncos_di","logs","timber"})
+        )
+        if extraction and category in {
+                "milho","soja","sorgo","racao","batata","laranja",
+                "coco","algodao","cerveja","cimento","bobina",
+                "tijolo","granito"}:
+            return ("Empresa comprovadamente dedicada a extracao florestal "
+                    "(colheitadeiras Ponsse IN, toras OUT): esta carga "
+                    "herdada nao combina com a operacao original")
     if role in {"posto_combustivel","mineracao_minerios"}:
         return ("A DEF original comprova combustiveis/minerios brutos, "
                 "nao esta carga do Librelato; permissao legada contraditoria")
