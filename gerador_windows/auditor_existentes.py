@@ -1240,28 +1240,28 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
         # na etapa final, restaurar exatamente os arquivos que existiam
         # antes da execucao. O staging no proprio volume garante replace
         # local sem copiar modelos de centenas de MB desnecessariamente.
-        # NUNCA substituir .scs anterior: os nomes incluem hash do
-        # proprio conteudo. Se alguem alterou um arquivo com o mesmo
-        # nome, o conflito e fatal, nao um overwrite silencioso.
-        # Prevalidar antes de mover um unico relatorio da execucao.
-        for item in sorted(stage.iterdir()):
-            if not item.is_file() or item.suffix.lower()!=".scs":
-                continue
-            dest=published/item.name
-            if dest.exists():
-                if not dest.is_file():
-                    raise ValueError(
-                        "Saida SCS ocupada por pasta: "+dest.name)
-                if digest(item.read_bytes())!=digest(dest.read_bytes()):
-                    raise ValueError(
-                        "Arquivo SCS existente com mesmo nome e bytes "
-                        "diferentes; recusa sobrescrever versao anterior: "+
-                        dest.name)
         undo=stage/"_ROLLBACK_PREEXISTENTES"
         undo.mkdir()
         shipped=[]
         replaced=[]
         try:
+            # NUNCA substituir .scs anterior: os nomes incluem hash do
+            # proprio conteudo. Se alguem alterou um arquivo com o mesmo
+            # nome, o conflito e fatal, nao um overwrite silencioso.
+            # Prevalidar antes de mover um unico relatorio da execucao.
+            for item in sorted(stage.iterdir()):
+                if not item.is_file() or item.suffix.lower()!=".scs":
+                    continue
+                dest=published/item.name
+                if dest.exists():
+                    if not dest.is_file():
+                        raise ValueError(
+                            "Saida SCS ocupada por pasta: "+dest.name)
+                    if digest(item.read_bytes())!=digest(dest.read_bytes()):
+                        raise ValueError(
+                            "Arquivo SCS existente com mesmo nome e bytes "
+                            "diferentes; recusa sobrescrever versao anterior: "+
+                            dest.name)
             for item in sorted(stage.iterdir()):
                 if not item.is_file():
                     continue
