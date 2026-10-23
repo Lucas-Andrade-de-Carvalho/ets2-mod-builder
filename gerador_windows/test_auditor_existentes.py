@@ -66,6 +66,13 @@ class AuditorSCSRegression(unittest.TestCase):
 }
 '''
         self.assertEqual(audit.file_active_ids(g,documented),["carga12"])
+        compact=b'''SiiNunit
+{
+ cargo_def : .x {
+  cargo: "cargo.carga12" }
+}
+'''
+        self.assertEqual(audit.file_active_ids(g,compact),["carga12"])
         ambiguous=b'''SiiNunit
 {
  cargo_def : .x {
