@@ -23,6 +23,10 @@ import cobertura_maxima_rbr
 SII_EXT=(".sii",".sui")
 CARGO_FIELD = re.compile(r'(?im)^([ \t]*cargo[ \t]*:[ \t]*)"?cargo\.([a-z][a-z0-9_]*)"?(?=[ \t]*(?:}[ \t]*)*(?:(?:#|//)[^\r\n]*)?$)')
 OTHER_FIELD = re.compile(r'(?im)^\s*cargo\s*:\s*"?cargo\.([a-z0-9_]+)"?')
+# Tokens SII sao ASCII; operar sobre bytes evita destruir comentarios ou
+# nomes cp1252/latin1 quando neutralizando uma carga especifica.
+CARGO_FIELD_BYTES = re.compile(CARGO_FIELD.pattern.encode("ascii"))
+OTHER_FIELD_BYTES = re.compile(OTHER_FIELD.pattern.encode("ascii"))
 ROLE_SAFE_PRODUCERS={
     "siderurgica","cervejaria","cimenteira","ceramica","pedreira",
     "madeireira","fabrica_racao","fazenda_batata","fazenda_laranja"
@@ -62,13 +66,15 @@ def inventory_archive(g, path):
     return result
 
 def file_active_ids(g, raw):
-    text=g.read_sii(raw)
-    found=[m.group(2).lower() for m in CARGO_FIELD.finditer(text)]
-    documented=OTHER_FIELD.findall(text)
+    # Ainda validar o SII antes de procurar tokens: um arquivo binario
+    # nao pode ser confundido com DEF textual.
+    g.read_sii(raw)
+    found=[m.group(2).decode("ascii").lower()
+           for m in CARGO_FIELD_BYTES.finditer(raw)]
+    documented=OTHER_FIELD_BYTES.findall(raw)
     if len(found)!=len(documented):
-        # Sem essa verificação, sintaxe valida porém nao reconhecida
-        # podia desaparecer do inventario e ser duplicada no SCS novo.
-        # Nao editar arquivo que a engine nao consegue analisar.
+        # Sem essa verificacao, sintaxe nao reconhecida podia sumir
+        # do inventario e reaparecer como cargo duplicado no novo SCS.
         raise ValueError(
             "Company contem linha cargo: em sintaxe nao reconhecida; "
             "revisar aspas, comentarios e final da linha antes de "
@@ -76,16 +82,20 @@ def file_active_ids(g, raw):
     return found
 
 def disable_id(g, raw, cargo_id):
-    text=g.read_sii(raw)
+    file_active_ids(g,raw)
+    token=cargo_id.encode("ascii")
     removed=[0]
     def transform(m):
-        if m.group(2).lower()!=cargo_id:
+        if m.group(2).lower()!=token:
             return m.group(0)
         removed[0]+=1
-        return m.group(1)+'""'
-    out=CARGO_FIELD.sub(transform,text)
-    if removed[0]<1:raise ValueError("Cargo nao localizado ao neutralizar: "+cargo_id)
-    return out.encode("utf-8")
+        return m.group(1)+b'""'
+    out=CARGO_FIELD_BYTES.sub(transform,raw)
+    if removed[0]<1:
+        raise ValueError("Cargo nao localizado ao neutralizar: "+cargo_id)
+    # Reescrever apenas bytes do campo cargo. A empresa pode ter CRLF,
+    # BOM, comentarios ou nomes Latin-1, preservados integralmente.
+    return out
 
 def safe_reason(g, c,cat,direction,map_name,professional=False,spec=None):
     if professional:
