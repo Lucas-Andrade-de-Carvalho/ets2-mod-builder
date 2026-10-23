@@ -16,7 +16,7 @@ ROLES=(
     # Atividades verificaveis pelo nome da unidade e pelos fluxos originais:
     # Posto de combustivel e mineracao de brita/calcario nao sao silos
     # produtores de milho, algodao ou coco.
-    ("posto_combustivel",r"petrobras|posto_?combust|fuel_station|gas_station|^posto_?ipiranga$|^auto_?posto(?:_|$)|^posto_(?!policial|prf|fiscal)"),
+    ("posto_combustivel",r"petrobras|posto_?combust|fuel_station|gas_station|^posto_?ipiranga$|^auto_?posto(?:_|$)"),
     ("mineracao_minerios",r"mineracao|mineradora|^minerita|mine_ore|iron_ore_mine"),
     ("usina_acucar",r"usina_?acucar|sugar_mill|sugar_plant|engenho_?acucar"),
     ("terminal_portuario",r"^porto[0-9]+$|^portosant[0-9]+$|^portosebas[0-9]*$|^pr_porto(?:_pr)?$|^sc_porto(?:_|$)|^porto_?terminal$"),
@@ -197,6 +197,23 @@ def infer_by_flow(company):
                         "diversas mercadorias de setores diferentes IN e OUT; "
                         "nao confirma fabricacao de nenhuma delas")
 
+    # Transportadora/operador de armazem generalista com produtos de
+    # roupas, eletro, pneus, bebidas e alimentos. Os outros IDs podem
+    # nem figurar entre as 24 cargas do Librelato; são evidencia de setor.
+    broader_catalog={
+        "calcado","eletro","roupas","pneus","pecas","pecas2","matprima",
+        "matprima_b","bebidas","bebidas_b","lata","chocolate","frango"
+    }
+    broad_in=in_names & broader_catalog
+    broad_out=out_names & broader_catalog
+    if (len(in_names)>=10 and len(out_names)>=10
+            and len(broad_in)>=4 and len(broad_out)>=4
+            and len(broad_in & broad_out)>=3):
+        return Identity("centro_logistico_inferido","alta",
+                        "IN/OUT originals movimentam bens multis setoriais: "
+                        "vestuario/eletronicos/embalagens/pecas, inclusive "
+                        "fora das 24 cargas; nao e fabrica ou agropecuaria")
+
     # Industria madeireira/extração de madeira: receber troncos, expedir
     # moveis. Um nome ficticio "extracao1" NAO indica cultivo de graos.
     if (("madeira" in incoming or
@@ -348,6 +365,20 @@ def classify(company):
     if identifier=="rocasoja" and "soja" in cargo_categories(company.old_out):
         return Identity("fazenda_soja","alta",
                         "identificador rocasoja + OUT soja no arquivo original")
+    # "Auto Posto Rio Branco" e "Posto Abobrao" constam em RBR: IN
+    # combustiveis e OUT filtros usados/vasilhames. Exigir o fluxo
+    # petroquimico antes de inferir pelo nome generico "posto".
+    public_name=getattr(company,"display_name","")
+    display=norm(public_name)
+    is_fuel_station=bool(re.search(
+        r"(?:^|_)(?:auto_)?posto_(?!policial|prf|fiscal|saude)",display))
+    fuel_input=any(re.fullmatch(
+        r"(?:diesel[l]?|gasolina|etanol|oleo_motor|gasoline|diesel_fuel)",
+        norm(x)) for x in company.old_in)
+    if is_fuel_station and fuel_input:
+        return Identity("posto_combustivel","alta",
+                        "posto identificado pelo nome exibido e entrada "
+                        "original de gasolina/diesel/etanol/oleo de motor")
     for role,pattern in ROLES:
         if re.search(pattern,identifier,re.I):
             return Identity(role,"alta","atividade pelo identificador de empresa "+company.name)
