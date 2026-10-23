@@ -174,6 +174,20 @@ def infer_by_flow(company):
     grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
     other_out=outgoing - CROP_CLASSES
 
+    # Muitos mapas usam "go_p_riobra"/"p_abobrao" para postos e podem
+    # nao incluir company_permanent.name. Combustivel no IN e tanque
+    # vazio/filtro usado no OUT sustentam a classificacao sem lista real.
+    fuel_in=_any_evidence(in_names,
+        r"(?:diesel[l]?|etanol|gasolina|oleo_motor|gasoline|diesel_fuel)")
+    fuel_recovery=_any_evidence(out_names,
+        r"(?:tanqvazio|filtro_usad|filtro_usado|oil_filter_used|empty_tank)")
+    station_id=bool(re.search(r"^(?:[a-z]{2}_)?p_[a-z0-9_]+$",
+                              norm(company.name)))
+    if station_id and fuel_in and fuel_recovery:
+        return Identity("posto_combustivel","alta",
+                        "combustivel no IN e filtro/tanque vazio no OUT "
+                        "com identificador de posto; empresa ficticia da DEF")
+
     # RBR: extração de madeira usa colheitadeiras florestais Ponsse no
     # recebimento e expede troncos. Não é fábrica de ração nem fazenda de
     # grãos. Vários IDs fictícios (extracao_ju/sb) usam exatamente o fluxo.
