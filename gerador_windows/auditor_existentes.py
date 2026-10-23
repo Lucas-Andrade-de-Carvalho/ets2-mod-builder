@@ -1177,9 +1177,53 @@ def run(g, map_entries, out_path, mode="corrigir", log=lambda s: None,
         if professional:
             _write_three_map_dashboard(stage,result,simulated=mode=="auditar")
             _three_map_pending_queue(stage,result)
-        for item in sorted(stage.iterdir()):
-            if item.is_file():
-                os.replace(item,published/item.name)
+        # Publicacao em lote com rollback: se um relatorio/Company falhar
+        # na etapa final, restaurar exatamente os arquivos que existiam
+        # antes da execucao. O staging no proprio volume garante replace
+        # local sem copiar modelos de centenas de MB desnecessariamente.
+        undo=stage/"_ROLLBACK_PREEXISTENTES"
+        undo.mkdir()
+        shipped=[]
+        replaced=[]
+        try:
+            for item in sorted(stage.iterdir()):
+                if not item.is_file():
+                    continue
+                dest=published/item.name
+                if dest.exists():
+                    if not dest.is_file():
+                        raise ValueError("Destino ocupado por pasta: "+dest.name)
+                    previous=undo/item.name
+                    os.replace(dest,previous)
+                    replaced.append((dest,previous))
+                os.replace(item,dest)
+                shipped.append(dest)
+        except Exception as exc:
+            problems=[]
+            for dest in reversed(shipped):
+                try:
+                    if dest.exists():
+                        dest.unlink()
+                except OSError as failure:
+                    problems.append("Nao removeu "+dest.name+": "+str(failure))
+            for dest,previous in reversed(replaced):
+                try:
+                    if previous.exists():
+                        os.replace(previous,dest)
+                except OSError as failure:
+                    problems.append("Nao restaurou "+dest.name+": "+str(failure))
+            (published/"AUDITORIA_INCOMPLETA.txt").write_text(
+                "Publicacao de tres mapas interrompida. Foi tentada a "
+                "restauracao integral dos arquivos que existiam antes.\n"+
+                type(exc).__name__+": "+str(exc)+"\n"+
+                ("Falhas no rollback: "+"; ".join(problems)+"\n"
+                 if problems else "Rollback efetuado sem erro registrado.\n"),
+                encoding="utf-8")
+            raise
+        # Remover marcador obsoleto so depois da publicacao completa.
+        marker=published/"AUDITORIA_INCOMPLETA.txt"
+        if marker.is_file():
+            marker.unlink()
         log("Auditoria de "+str(len(result))+
             " mapa(s) finalizada e publicada em conjunto.")
         return result
