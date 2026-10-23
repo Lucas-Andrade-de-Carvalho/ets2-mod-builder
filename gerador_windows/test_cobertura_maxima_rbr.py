@@ -136,6 +136,69 @@ class RealMapPalletGapRegression(unittest.TestCase):
         self.assertFalse(p.decide(c,"coco","out").allowed)
 
 
+class RBRCurrentAudit5Regression(unittest.TestCase):
+    """Regressoes ancoradas na AUDITORIA_RBR(5) e nos 2 CSVs do RBR."""
+
+    def test_forestry_fictional_names_are_logging_not_feed_factories(self):
+        for name in ("extracao_ju","extracao_sb","mt_extracao1"):
+            obj=g.Company(name,old_in={"ponsse","ponsse2","ponsse3"},
+                          old_out={"troncos","troncos_di"})
+            ident=p.classify(obj)
+            self.assertEqual(ident.role,"madeireira",name)
+            self.assertTrue(p.decide(obj,"madeira","out").allowed)
+            self.assertFalse(p.decide(obj,"racao","out").allowed)
+            self.assertFalse(p.decide(obj,"milho","in").allowed)
+
+    def test_rbr_auto_posto_riobranco_and_abobrao_only_fuel(self):
+        for name,display in (("go_p_riobra","Auto Posto Rio Branco"),
+                             ("p_abobrao","Posto Abobrão")):
+            obj=g.Company(name,display_name=display,
+                          old_in={"diesell","etanol","filtro_oleo","gasolina"},
+                          old_out={"filtro_usad","tanqvazio"})
+            self.assertEqual(p.classify(obj).role,"posto_combustivel")
+            for category in ("cimento","tijolo","madeira","milho","soja"):
+                self.assertFalse(p.decide(obj,category,"in").allowed)
+        generic=g.Company("posto_centro",display_name="Posto Policial",
+                          old_in={"equipamento"},old_out=set())
+        self.assertNotEqual(p.classify(generic).role,"posto_combustivel")
+
+    def test_warehouse_fazenda_ac_is_not_crop_production(self):
+        obj=g.Company("fazenda_ac",display_name="AG - Armazenagem de Grãos",
+                      old_in={"milho_a","soja_a"},
+                      old_out={"milho_b","soja_b"})
+        self.assertEqual(p.classify(obj).role,"silo")
+        self.assertTrue(p.decide(obj,"milho","in").allowed)
+        self.assertTrue(p.decide(obj,"soja","out").allowed)
+        self.assertFalse(p.decide(obj,"coco","out").allowed)
+
+    def test_generic_logistics_no_longer_auto_agroinsumos(self):
+        inbound={"adubo","bebidas","calcado","eletro","roupas","pneus",
+                 "pecas","matprima","lata","racao","chocolate","frango"}
+        outbound=inbound|{"plast_usado","sucata"}
+        for name in ("ggr","gmp","mit","tsb","thunay"):
+            c=g.Company(name,display_name=name.upper()+" Log",
+                        old_in=inbound,old_out=outbound)
+            self.assertEqual(p.classify(c).role,"centro_logistico_inferido")
+            self.assertTrue(p.decide(c,"adubo","in").allowed)
+            self.assertTrue(p.decide(c,"racao","out").allowed)
+            self.assertFalse(p.decide(c,"coco","out").allowed)
+            self.assertFalse(p.decide(c,"bobina","in").allowed)
+        galo=g.Company("galo_agro",display_name="Galo Prod. Agrícolas",
+                      old_in={"adubo","fertilizante"},
+                      old_out={"adubo","racao"})
+        self.assertEqual(p.classify(galo).role,"agroinsumos")
+
+    def test_rbr_port_with_many_goods_is_transshipment_not_manufacturer(self):
+        obj=g.Company("pr_porto_pr",display_name="Porto Paranaguá",
+                      old_in={"bobina","algodao","batata_a"},
+                      old_out={"bobina","soja_a"})
+        self.assertEqual(p.classify(obj).role,"terminal_portuario")
+        self.assertTrue(p.decide(obj,"bobina","in").allowed)
+        self.assertTrue(p.decide(obj,"soja","out").allowed)
+        self.assertFalse(p.decide(obj,"sorgo","out").allowed)
+        self.assertFalse(p.decide(obj,"coco","in").allowed)
+
+
 class RBRFinalEconomyRegression(unittest.TestCase):
     """Fixtures derivadas de AUDITORIA_RBR(4).json, nao supostas marcas."""
 
