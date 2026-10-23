@@ -277,10 +277,15 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
     # DEF demonstram bebida NAO alcoolica; so preservar cerveja se o
     # proprio IN/OUT original trouxer identificador especifico de beer.
     # Nao bloquear paletes documentados (retorno de embalagens).
-    if (role=="fabricante_refrigerantes" and category=="cerveja"
-            and category not in original):
-        return ("Fabrica de refrigerantes expede bebidas genericas, "
-                "nao cerveja: permissao herdada de carga12 incompatível")
+    if role=="fabricante_refrigerantes" and category not in original:
+        return ("Industria de refrigerantes nao possui IN/OUT original "
+                "para esta mercadoria Librelato; nao extrapolar bebida "
+                "generica para cerveja, graos ou outros produtos")
+    if role=="agroinsumos" and direction=="in" and category in {
+            "milho","soja"}:
+        return ("Revenda de insumos rurais nao recebeu estes graos no "
+                "IN original; evitar converter loja de adubo em silo "
+                "de colheita sem prova documental")
     # Negocios especializados nao sao exportadores de todo tipo de
     # produto apenas porque a Company antiga lhes atribuiu fretes.
     # Documentacao ORIGINAL da mesma categoria e direcao foi avaliada
