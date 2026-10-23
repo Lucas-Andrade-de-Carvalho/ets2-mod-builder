@@ -21,7 +21,7 @@ import recuperacao_editor
 import cobertura_maxima_rbr
 
 SII_EXT=(".sii",".sui")
-CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:(?:#|//).*)?$)')
+CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*}*\s*(?:(?:#|//).*)?$)')
 OTHER_FIELD = re.compile(r'(?im)^\s*cargo\s*:\s*"?cargo\.([a-z0-9_]+)"?')
 ROLE_SAFE_PRODUCERS={
     "siderurgica","cervejaria","cimenteira","ceramica","pedreira",
