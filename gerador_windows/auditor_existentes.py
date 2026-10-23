@@ -529,6 +529,22 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         classification_pending={d["empresa"] for d in preserved}
         routes_without_pair=[
             cargo for cargo,row in after.items() if row["pares_distintos"]==0]
+        # Impedir regressao silenciosa ao consolidar 3 mapas: nao entregar
+        # arquivo novo que PERDEU uma cadeia originalmente completa.
+        # O alerta e bloqueante: se a rota antiga era economicamente
+        # falsa, o usuario deve buscar origem/destino comprovaveis,
+        # e nao preservar o frete falso so para exibir 24/24.
+        regressed_routes=sorted(
+            cargo for cargo in before
+            if before[cargo]["pares_distintos"]>0
+            and after[cargo]["pares_distintos"]==0)
+        if mode=="corrigir" and professional and regressed_routes:
+            raise ValueError(
+                name+": PROTECAO DE CADEIAS: a correcao eliminaria "
+                "todos os pares de origem/destino das cargas "+
+                ", ".join(regressed_routes)+". Nenhum SCS sera publicado. "
+                "Confirme na DEF fornecedor e comprador validos; "
+                "nao restaure automaticamente rotas incorretas.")
         additional_without_policy=sorted(
             (cid for cid,spec in extras.items()
              if spec.get("categoria") not in professional_policy.CATEGORIES),
