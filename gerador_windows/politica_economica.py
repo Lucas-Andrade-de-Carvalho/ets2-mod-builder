@@ -300,6 +300,33 @@ def infer_by_flow(company):
                         "expede copos, pratos e talheres descartaveis; "
                         "nao inventar mercadoria Librelato equivalente")
 
+    # Atividade agrocomercial inferida sem usar o nome da empresa:
+    # mercadorias de duas familias agricolas recebidas e nenhuma carga
+    # expedida. Uma distribuidora, fabrica ou centro de consumo pode
+    # recebe-las; nunca presumir cultivo nem autorizar novos OUT.
+    if (len(crops_in)>=2 and not outgoing and not out_names and
+            not (incoming & AGRICULTURE_INCOMPATIBLE)):
+        return Identity(
+            "recebedor_agricola_inferido","alta",
+            "duas ou mais culturas identificadas somente no IN da DEF; "
+            "papel de recebedor, sem atribuir producao agricola"
+        )
+
+    # Comercio agropecuario comprovado pelas saidas de adubo, racao e
+    # equipamentos. O identificador pode ser ficticio (e.g. agrotec);
+    # sem OUT de especie cultivada, nao transformar em fazenda.
+    farm_goods={"equipagrico","aramefar","trator","trator_ca",
+                "trator_jd","bcorte","pneutrator_s"}
+    if ({"adubo","racao"} <= outgoing and
+            len(out_names & farm_goods)>=1 and
+            not (outgoing & CROP_CLASSES) and
+            len(out_names) <= 25):
+        return Identity(
+            "agroinsumos","alta",
+            "adubo e racao expedidos junto de equipamentos/insumos "
+            "rurais na DEF; revenda, nao producao de grãos"
+        )
+
     # MG: unidade de reciclagem de pallets/papel/plastico/metais.
     waste={"papelao","plasticom","supaletes","sualuminio",
            "suferrosa","sumadeira","sumetal","supneus"}
@@ -308,6 +335,21 @@ def infer_by_flow(company):
         return Identity("reciclagem_inferida","alta",
                         "recebe e expede residuos reciclaveis; paletes "
                         "autorizados apenas quando presentes no IN/OUT")
+
+    # Residuos e paletes no OUT sem producao de produto nas 24 cargas:
+    # autorizacao apenas dos fluxos originais de retorno/coleta, nunca
+    # transformar residuo em fabricante de todas as mercadorias.
+    packaging_waste={"papelao","plasticom","supaletes","sumadeira",
+                     "sualuminio","suferrosa","sumetal","supneus",
+                     "empty_palet","paletev","empty_pallets"}
+    if (len(out_names & packaging_waste)>=2 and
+            not in_names and
+            not (outgoing - {"palete"})):
+        return Identity(
+            "expedidor_residuos_inferido","alta",
+            "expede residuos e embalagens recuperadas, sem linhas "
+            "de producao ou compra comprovadas no IN da DEF"
+        )
 
     # Industria madeireira/extração de madeira: receber troncos, expedir
     # moveis. Um nome ficticio "extracao1" NAO indica cultivo de graos.
@@ -371,6 +413,18 @@ def infer_by_flow(company):
             and not (outgoing - {"racao"})):
         return Identity("pecuaria","alta",
                         "fluxo agropecuario: racao no IN e animais no OUT")
+
+    # Entreposto de madeira: a mesma mercadoria entra e sai. Exigir
+    # sentido real nos arquivos e nao deduzir que a unidade cultiva
+    # eucalipto nem fabrica paletes sem prova.
+    if ("madeira" in incoming and "madeira" in outgoing and
+            not (outgoing - {"madeira","palete"}) and
+            not (incoming - {"madeira","palete"})):
+        return Identity(
+            "entreposto_madeira_inferido","alta",
+            "madeira recebida e expedida na DEF; comercio/transbordo "
+            "sem declarar exploracao florestal ou fabricacao"
+        )
 
     # Compra e revenda de material de construcao documentados.
     # Loja inferida NAO gera cargas fora das especies que constam na DEF.
@@ -589,6 +643,18 @@ def decide(company,category,direction,identity=None):
                           "somente IN/OUT original da DEF; nao e produtor")
         return forbid("sem IN/OUT original nesta mercadoria/direcao; "
                       "terminal nao fabrica cargas")
+    if role in {"recebedor_agricola_inferido",
+                "expedidor_residuos_inferido",
+                "entreposto_madeira_inferido"}:
+        # A evidencia e sempre do proprio arquivo IN/OUT, por categoria
+        # e direcao. Nao criar permissao apenas por ter um ramo provavel.
+        if documentary:
+            return permit(
+                "mercadoria original documentada na direcao da "
+                "atividade inferida; sem extrapolar outros produtos",
+                "IN/OUT original da DEF, direcao comprovada")
+        return forbid(
+            "atividade inferida nao documenta esta mercadoria e direcao")
     if role=="desconhecida":
         # Mesmo sem identificar o ramo ficticio, a DEF ORIGINAL documenta
         # exatamente esta mercadoria nessa direcao. Converter p.ex. corn
