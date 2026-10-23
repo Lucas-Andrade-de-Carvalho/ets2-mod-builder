@@ -218,6 +218,52 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertEqual(int(scs.stat().st_mtime),stamp)
         self.assertFalse((folder/"AUDITORIA_INCOMPLETA.txt").exists())
 
+    def test_three_map_publication_failure_restores_every_previous_file(self):
+        """Terceiro mapa falha ao publicar: restaurar arquivos de MG,
+        Eldorado e RBR, inclusive sentinelas do cliente."""
+        from unittest import mock
+        out=self.root/"crossmap_publish_atomic"
+        out.mkdir()
+        original_reports={}
+        for name in ("ELDORADO","MINAS_GERAIS","RBR"):
+            path=out/("AUDITORIA_"+name+".json")
+            value=("PREVIOUS_CUSTOMER_REPORT_"+name).encode("ascii")
+            path.write_bytes(value)
+            original_reports[path]=value
+        other=out/"RBR_NAO_ALTERAR.scs"
+        other.write_bytes(b"PREVIOUS_CUSTOMER_SCS")
+        input_sha=self.existing.read_bytes()
+        plans={
+            k:{"existing":self.existing,"map_def":self.baseline}
+            for k in ("Minas_Gerais","Eldorado","RBR")
+        }
+        normal=audit.os.replace
+        def fail_last_map_report(src,dst):
+            src,dst=Path(src),Path(dst)
+            if (src.name=="AUDITORIA_RBR.json" and
+                    src.parent.name.startswith("auditor_staging_")):
+                raise OSError("Terceiro mapa interrompe publicacao")
+            return normal(src,dst)
+        with mock.patch.object(audit.os,"replace",
+                               side_effect=fail_last_map_report):
+            with self.assertRaisesRegex(
+                    OSError,"Terceiro mapa interrompe publicacao"):
+                audit.run(g,plans,out,mode="corrigir")
+        for path,value in original_reports.items():
+            self.assertEqual(path.read_bytes(),value)
+        self.assertEqual(other.read_bytes(),b"PREVIOUS_CUSTOMER_SCS")
+        self.assertEqual(self.existing.read_bytes(),input_sha)
+        self.assertEqual(list(out.glob("ETS2_*_AUDITADA_*.scs")),[])
+        self.assertIn("Rollback",(
+            out/"AUDITORIA_INCOMPLETA.txt").read_text(
+                encoding="utf-8"))
+        # Reexecutar sem injecao publica os tres mapas corretamente.
+        result=audit.run(g,plans,out,mode="corrigir")
+        self.assertEqual({x["mapa"] for x in result},
+                         {"Minas_Gerais","Eldorado","RBR"})
+        self.assertFalse((out/"AUDITORIA_INCOMPLETA.txt").exists())
+        self.assertEqual(len(list(out.glob("ETS2_*_AUDITADA_*.scs"))),3)
+
     def test_publication_failure_rolls_back_all_existing_reports(self):
         """Nao trocar parte da auditoria ao falhar publicacao dos mapas."""
         from unittest import mock
