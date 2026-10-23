@@ -46,6 +46,7 @@ jobs:
           Copy-Item gerador_windows/VALIDACAO_FINAL_RBR_20261022.md release/VALIDACAO_FINAL_RBR.md
           Copy-Item gerador_windows/DIAGNOSTICO_RBR_RELATORIOS_5.md release/DIAGNOSTICO_RBR_AUDITORIA_5.md
           Copy-Item gerador_windows/GUIA_CONSOLIDACAO_TRES_MAPAS.md release/GUIA_CONSOLIDACAO_TRES_MAPAS.md
+          Copy-Item gerador_windows/GUIA_CHECKLIST_FINAL_SEM_REGRESSOES.md release/CHECKLIST_FINAL_SEM_REGRESSOES.md
           Copy-Item gerador_windows/GUIA_FECHAMENTO_QUALIDADE_V3.md release/LEIA_PRIMEIRO_QUALIDADE_FINAL_V3.md
           Copy-Item gerador_windows/DIAGNOSTICO_CONSOLIDADO_MG_ELDORADO_RBR_20261022.md release/DIAGNOSTICO_REAL_TRES_MAPAS_22OUT2026.md
           Copy-Item gerador_windows/GUIA_ADAPTACAO_PLUMA_COCO_20261022.md release/GUIA_PLUMA_COCO_MG_ELDORADO.md
