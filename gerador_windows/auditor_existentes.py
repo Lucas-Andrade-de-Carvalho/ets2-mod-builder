@@ -21,7 +21,7 @@ import recuperacao_editor
 import cobertura_maxima_rbr
 
 SII_EXT=(".sii",".sui")
-CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:#.*)?$)')
+CARGO_FIELD = re.compile(r'(?im)^(\s*cargo\s*:\s*)"?cargo\.([a-z][a-z0-9_]*)"?(?=\s*(?:(?:#|//).*)?$)')
 OTHER_FIELD = re.compile(r'(?im)^\s*cargo\s*:\s*"?cargo\.([a-z0-9_]+)"?')
 ROLE_SAFE_PRODUCERS={
     "siderurgica","cervejaria","cimenteira","ceramica","pedreira",
@@ -63,7 +63,17 @@ def inventory_archive(g, path):
 
 def file_active_ids(g, raw):
     text=g.read_sii(raw)
-    return [m.group(2).lower() for m in CARGO_FIELD.finditer(text)]
+    found=[m.group(2).lower() for m in CARGO_FIELD.finditer(text)]
+    documented=OTHER_FIELD.findall(text)
+    if len(found)!=len(documented):
+        # Sem essa verificação, sintaxe valida porém nao reconhecida
+        # podia desaparecer do inventario e ser duplicada no SCS novo.
+        # Nao editar arquivo que a engine nao consegue analisar.
+        raise ValueError(
+            "Company contem linha cargo: em sintaxe nao reconhecida; "
+            "revisar aspas, comentarios e final da linha antes de "
+            "neutralizar ou adicionar qualquer permissao")
+    return found
 
 def disable_id(g, raw, cargo_id):
     text=g.read_sii(raw)
