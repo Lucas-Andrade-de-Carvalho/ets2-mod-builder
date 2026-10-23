@@ -160,7 +160,9 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
             "obras","posto_combustivel","infra_passageiros",
             "transportadora","mineracao_minerios","mineracao_calcario",
             "siderurgica","metalurgica","premoldados","cimenteira",
-            "automotiva_fabrica"
+            "automotiva_fabrica","terminal_quimico_inferido",
+            "fabricante_descartaveis_inferido",
+            "revenda_maquinas_agricolas_inferida","reciclagem_inferida"
         }
         identifying_name=professional_policy.norm(
             company.name+" "+getattr(company,"display_name",""))
