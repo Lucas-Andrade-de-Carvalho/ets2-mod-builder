@@ -57,6 +57,59 @@ class AuditorSCSRegression(unittest.TestCase):
                                          "map_def":self.baseline}},
                          out or self.root/"audit_output",mode=mode)
 
+    def test_refinement_repeat_is_stable_and_never_overwrites_old_scs(self):
+        """Mesma entrada+politica -> mesmo arquivo. Mesma Company com
+        DEF diferente -> novo nome sem destruir a entrega anterior."""
+        output=self.root/"versioned_scs_reports"
+        first=self.invoke(out=output)[0]
+        first_file=output/first["arquivo_corrigido"]
+        before=first_file.read_bytes()
+        assert first_file.is_file()
+        again=self.invoke(out=output)[0]
+        self.assertEqual(first["arquivo_corrigido"],again["arquivo_corrigido"])
+        self.assertEqual(first["sha256_scs_corrigido"],again["sha256_scs_corrigido"])
+        self.assertEqual(first_file.read_bytes(),before)
+        self.assertEqual(len(list(output.glob("*.scs"))),1)
+        with zipfile.ZipFile(self.baseline) as original:
+            members={p:original.read(p) for p in original.namelist()}
+        members["supermercado_novo/in/beer.sii"]=old("beer")
+        zip_write(self.baseline,members)
+        changed=self.invoke(out=output)[0]
+        self.assertNotEqual(changed["arquivo_corrigido"],first["arquivo_corrigido"])
+        self.assertNotEqual(changed["sha256_scs_corrigido"],first["sha256_scs_corrigido"])
+        self.assertEqual(first_file.read_bytes(),before)
+        self.assertEqual(len(list(output.glob("*.scs"))),2)
+
+    def test_publication_failure_rolls_back_all_existing_reports(self):
+        """Nao trocar parte da auditoria ao falhar publicacao dos mapas."""
+        from unittest import mock
+        output=self.root/"rollback_scope"
+        output.mkdir()
+        sentinel_json=output/"AUDITORIA_ELDORADO.json"
+        sentinel_csv=output/"AUDITORIA_ELDORADO.csv"
+        sentinel_json.write_bytes(b"USER_PREVIOUS_JSON")
+        sentinel_csv.write_bytes(b"USER_PREVIOUS_CSV")
+        baseline=self.existing.read_bytes()
+        normal_replace=audit.os.replace
+        def fail_staged_json(src,dst):
+            src,dst=Path(src),Path(dst)
+            if (src.name=="AUDITORIA_ELDORADO.json" and
+                    src.parent.name.startswith("auditor_staging_")):
+                raise OSError("Falha injetada na publicacao do JSON")
+            return normal_replace(src,dst)
+        with mock.patch.object(audit.os,"replace",side_effect=fail_staged_json):
+            with self.assertRaisesRegex(OSError,"Falha injetada"):
+                self.invoke(out=output)
+        self.assertEqual(sentinel_json.read_bytes(),b"USER_PREVIOUS_JSON")
+        self.assertEqual(sentinel_csv.read_bytes(),b"USER_PREVIOUS_CSV")
+        self.assertEqual(self.existing.read_bytes(),baseline)
+        self.assertEqual(list(output.glob("*.scs")),[])
+        self.assertIn("Rollback",(
+            output/"AUDITORIA_INCOMPLETA.txt").read_text(encoding="utf-8"))
+        # Sucesso posterior limpa aviso obsoleto sem apagar o resultado.
+        self.invoke(out=output)
+        self.assertFalse((output/"AUDITORIA_INCOMPLETA.txt").exists())
+
     def test_professional_anonymous_farm_flow_generates_real_scs_permissions(self):
         """A interpretacao IN/OUT tem de alterar o SCS, nao so o JSON."""
         mapa=self.root/"fluxo_mapa_rbr.zip"
