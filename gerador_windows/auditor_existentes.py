@@ -853,10 +853,10 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 writer.writerow([cargo,a["origens"],a["destinos"],b["origens"],
                                  b["destinos"],b["pares_distintos"]])
         if mode=="corrigir":
-            output=out/("ETS2_"+name.upper()+"_AUDITADA_V25_"+
-                        g.hash_source(entry["existing"])[:8]+".scs")
-            if Path(entry["existing"]).resolve()==output.resolve():
-                raise ValueError("Nunca sobrescrever a Company original")
+            input_digest=g.hash_source(entry["existing"])[:8]
+            # O nome final inclui tambem a identidade da SAIDA. Gerar a
+            # partir da mesma Company com outra politica nao pode
+            # sobrescrever uma versao anterior do usuario.
             with tempfile.NamedTemporaryFile(prefix="company_audit_",suffix=".scs",
                                              dir=out,delete=False) as tmp:
                 temporary=Path(tmp.name)
@@ -873,10 +873,24 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                         if p not in changed or (
                             changed[p]==raw and z.read(p)!=raw):
                             raise ValueError("Arquivo original alterado indevidamente: "+p)
-                os.replace(temporary,output)
+                output_sha=digest(temporary.read_bytes())
+                output=out/("ETS2_"+name.upper()+"_AUDITADA_V25_"+
+                            input_digest+"_"+output_sha[:12]+".scs")
+                if Path(entry["existing"]).resolve()==output.resolve():
+                    raise ValueError("Nunca sobrescrever a Company original")
+                if output.exists():
+                    if digest(output.read_bytes())!=output_sha:
+                        raise ValueError("Nome de SCS ja utilizado por outra "
+                                         "versao; preservando arquivo existente: "+
+                                         output.name)
+                    # Idempotencia: output ja e EXATAMENTE o mesmo.
+                    # Nao atualizar data de modificacao nem apagar backup.
+                else:
+                    os.replace(temporary,output)
             finally:
                 if temporary.exists():temporary.unlink()
             summary["arquivo_corrigido"]=output.name
+            summary["sha256_scs_corrigido"]=output_sha
             outbase.with_suffix(".json").write_text(
                 json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
             log(name+": Company auditada salva: "+output.name+
