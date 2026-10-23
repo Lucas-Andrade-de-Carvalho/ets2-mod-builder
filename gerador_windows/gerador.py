@@ -1500,6 +1500,8 @@ def run_gui():
             review=sum(x["pendencias_revisao"] for x in results)
             unverified=sum(x.get("permissoes_sem_evidencia_preservadas",0)
                            for x in results)
+            plausible=sum(x.get("permissoes_plausiveis_sem_evidencia_def",0)
+                          for x in results)
             companies=sum(x.get("empresas_classificacao_pendente",0)
                           for x in results)
             # A contagem anterior (279 nos mapas reais do cliente) considera
@@ -1534,7 +1536,8 @@ def run_gui():
                 " com ambas empresas documentadas no editor.",
                 str(review)+" revisoes pontuais; "+str(entire_def_unknown)+
                 " empresas sem setor definido; "+str(unverified)+
-                " permissoes antigas preservadas sem comprovacao.",
+                " permissoes antigas preservadas sem comprovacao; "+
+                str(plausible)+" antigas plausiveis, mas ainda sem prova.",
                 "COBERTURA ENTRE EMPRESAS RECONHECIDAS (NAO sobre toda a DEF):"
             ]
             for entry in results:
