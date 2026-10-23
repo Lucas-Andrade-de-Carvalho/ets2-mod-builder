@@ -926,7 +926,7 @@ REGIONAL_FARM_ROLES=frozenset({
 })
 REGIONAL_COTTON_RECEIVERS=frozenset({
     "silo","cooperativa","beneficiadora_algodao","textil",
-    "entreposto_hortigraos","comercio_graos","distribuidor"
+    "comercio_graos","distribuidor"
 })
 REGIONAL_COCONUT_RECEIVERS=frozenset({
     "supermercado","hortifruti","entreposto_hortigraos",
