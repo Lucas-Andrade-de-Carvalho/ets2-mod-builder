@@ -57,6 +57,33 @@ class AuditorSCSRegression(unittest.TestCase):
                                          "map_def":self.baseline}},
                          out or self.root/"audit_output",mode=mode)
 
+    def test_sii_parser_accepts_trailing_comments_but_rejects_unparsed_cargo(self):
+        documented=b'''SiiNunit
+{
+ cargo_def : .x {
+  cargo: "cargo.carga12" // comentario aceito no SII
+ }
+}
+'''
+        self.assertEqual(audit.file_active_ids(g,documented),["carga12"])
+        ambiguous=b'''SiiNunit
+{
+ cargo_def : .x {
+  cargo: "cargo.carga12"; texto inesperado
+ }
+}
+'''
+        with self.assertRaisesRegex(ValueError,"sintaxe nao reconhecida"):
+            audit.file_active_ids(g,ambiguous)
+        neutral=b'''SiiNunit
+{
+ cargo_def : .x {
+  cargo: ""
+ }
+}
+'''
+        self.assertEqual(audit.file_active_ids(g,neutral),[])
+
     def test_refinement_repeat_is_stable_and_never_overwrites_old_scs(self):
         """Mesma entrada+politica -> mesmo arquivo. Mesma Company com
         DEF diferente -> novo nome sem destruir a entrega anterior."""
