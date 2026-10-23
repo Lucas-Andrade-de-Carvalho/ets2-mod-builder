@@ -377,6 +377,19 @@ def infer_by_flow(company):
                         "adubo em IN/OUT, racao no OUT e nenhuma colheita "
                         "documentada: atividade de comercializacao")
 
+    # Eldorado: producao de vigas/paineis e estruturas PRE-MOLDADAS
+    # com cimento no IN nao caracteriza siderurgica. A atividade
+    # materialmente comprovada prevalece sobre um ID historico ITCC.
+    precast={"concr_beams","floorpanels","precast_strs","wallpanels",
+             "concrete_beams","precast_panels","concrete_panels"}
+    if ("cimento" in incoming and len(out_names & precast)>=3 and
+            not (outgoing - {"cimento"})):
+        return Identity(
+            "premoldados","alta",
+            "cimento recebido e estruturas/paineis pre-moldados "
+            "expedidos; nao fabrica cimento nem bobinas"
+        )
+
     # Cadeias industriais: materia-prima recebida E produto expedido.
     # Identificador ficticio (empresa_x7) nao impede inferencia.
     if ("racao" in outgoing and grains_in and
@@ -534,7 +547,8 @@ def classify(company):
     # produtos quimicos perigosos. Nao atribuir cerveja e coco.
     conflicting=infer_by_flow(company)
     if (conflicting is not None and
-            conflicting.role=="terminal_quimico_inferido"):
+            conflicting.role in {
+                "terminal_quimico_inferido","premoldados"}):
         return conflicting
     # RBR "fazenda_ac": o nome do editor declara ARMAZENAGEM DE GRAOS,
     # e ha as mesmas especies de graos IN/OUT. Nao inferir lavoura.
@@ -554,7 +568,8 @@ def classify(company):
     is_soda_brand=bool(re.search(
         r"(?:^|_)(?:pepsico|coca_?cola)(?:_|$)",brand))
     soda_out=any(re.fullmatch(
-        r"(?:refrigerant|refrigerante|refrigerantes|bebidas|bebidas_b)",
+        r"(?:refri|refrigerant|refrigerante|refrigerantes|"
+        r"energetico|energy_drink|bebidas|bebidas_b)",
         norm(x)) for x in company.old_out)
     if is_soda_brand and soda_out:
         return Identity(
