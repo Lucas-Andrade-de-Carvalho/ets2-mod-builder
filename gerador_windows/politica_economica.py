@@ -601,17 +601,17 @@ def decide(company,category,direction,identity=None):
                       "esta mercadoria/direcao; nao criar rota")
 
     if role=="fabricante_refrigerantes":
-        if category=="palete" and documentary:
+        # Nao perder frutas ou paletes REALMENTE documentados. Uma
+        # empresa de bebidas pode receber frutas e devolver embalagens;
+        # exclusivamente a palavra generica "bebidas" nao prova beer.
+        if documentary:
             return permit(
-                "paletes documentados na mesma direcao da fabrica de bebidas",
-                "IN/OUT original de paletes")
-        if category=="cerveja" and documentary:
-            return permit(
-                "cerveja expressamente declarada na DEF original",
-                "produto cerveja, nao bebidas genericas")
+                "produto especifico documentado na mesma direcao "
+                "do IN/OUT da industria de bebidas",
+                "categoria original explicita, nao sinonimo generico")
         return forbid(
-            "industria de refrigerantes nao comprova cerveja nem "
-            "outras cargas Librelato fora do IN/OUT original")
+            "fabrica de refrigerantes nao comprova cerveja nem "
+            "outras mercadorias ausentes do IN/OUT original")
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
     if role in {"posto_combustivel","mineracao_minerios"}:
