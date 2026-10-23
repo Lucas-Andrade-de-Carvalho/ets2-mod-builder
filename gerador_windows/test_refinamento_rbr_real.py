@@ -103,6 +103,46 @@ class RBRRealEconomicRefinement(unittest.TestCase):
                 self.assertIsNotNone(proven_incompatibility(
                     company,cat,"in",map_name="RBR"))
 
+    def test_specialized_fertilizer_dealer_does_not_inherit_grains(self):
+        c=g.Company("agromecvo",old_in={"fertilizante"},
+                    old_out={"fertilizante","paletev"})
+        c.role=policy.classify(c).role
+        self.assertEqual(c.role,"revenda_fertilizante")
+        for cat,side in (("milho","in"),("soja","in"),("racao","out")):
+            self.assertIsNotNone(proven_incompatibility(
+                c,cat,side,map_name="RBR"))
+        self.assertIsNone(proven_incompatibility(c,"adubo","in",map_name="RBR"))
+        self.assertIsNone(proven_incompatibility(c,"palete","out",map_name="RBR"))
+
+    def test_feed_retailer_does_not_invent_grain_receipts(self):
+        c=g.Company("raguife",old_out={"racao"})
+        c.role=policy.classify(c).role
+        self.assertEqual(c.role,"revenda_racao")
+        self.assertIsNotNone(proven_incompatibility(c,"milho","in",map_name="RBR"))
+        self.assertIsNotNone(proven_incompatibility(c,"sorgo","in",map_name="RBR"))
+        self.assertIsNone(proven_incompatibility(c,"racao","out",map_name="RBR"))
+
+    def test_worksite_cannot_export_undocumented_cement(self):
+        c=g.Company("coluna_ma",old_in={"cimento"})
+        c.role=policy.classify(c).role
+        self.assertEqual(c.role,"obras")
+        self.assertIsNotNone(proven_incompatibility(c,"cimento","out",map_name="RBR"))
+        self.assertIsNone(proven_incompatibility(c,"cimento","in",map_name="RBR"))
+
+    def test_finished_furniture_does_not_claim_raw_wood_output(self):
+        for company in ("bechara","greenplac"):
+            with self.subTest(name=company):
+                c=g.Company(company,old_in={"madeirase"})
+                c.role=policy.classify(c).role
+                self.assertIsNotNone(proven_incompatibility(
+                    c,"madeira","out",map_name="RBR"))
+                self.assertIsNotNone(proven_incompatibility(
+                    c,"palete","out",map_name="RBR"))
+                # A declaracao verdadeira em OUT sempre prevalece.
+                c.old_out.add("madeirase")
+                self.assertIsNone(proven_incompatibility(
+                    c,"madeira","out",map_name="RBR"))
+
     def test_no_regression_ambev_supermarket_and_regional_scope(self):
         brewery=g.Company("ambev",old_out={"beer"})
         market=g.Company("supermercado_centro",old_in={"beer"})
