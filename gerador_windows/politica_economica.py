@@ -16,9 +16,10 @@ ROLES=(
     # Atividades verificaveis pelo nome da unidade e pelos fluxos originais:
     # Posto de combustivel e mineracao de brita/calcario nao sao silos
     # produtores de milho, algodao ou coco.
-    ("posto_combustivel",r"petrobras|posto_?combust|fuel_station|gas_station|^posto_?ipiranga$"),
+    ("posto_combustivel",r"petrobras|posto_?combust|fuel_station|gas_station|^posto_?ipiranga$|^auto_?posto(?:_|$)|^posto_(?!policial|prf|fiscal)"),
     ("mineracao_minerios",r"mineracao|mineradora|^minerita|mine_ore|iron_ore_mine"),
     ("usina_acucar",r"usina_?acucar|sugar_mill|sugar_plant|engenho_?acucar"),
+    ("terminal_portuario",r"^porto[0-9]+$|^portosant[0-9]+$|^portosebas[0-9]*$|^pr_porto(?:_pr)?$|^sc_porto(?:_|$)|^porto_?terminal$"),
     ("transportadora",r"transport|transpor|transp|logistic|logistica|logist|freight|carrier|haulage|brasilog|braslog|rasador|avant|cmm_transport|cmm_transp|ttr_?log|^trame2$|^trade2$|^stokes2$|^posped2$|(?:^|_)translov|(?:^|_)multlog$|(?:^|_)jampalog$|(?:^|_)tvslog$|^go_alfa_tr$"),
     ("bananal",r"bananal|banana_farm|banana_plantation|fazenda_banana|^eldorado_bananas$|^bana_farm"),
     ("fazenda_batata",r"(?:fazenda|faz|farm|plantacao|cultivo).*?(?:batata|potato)|(?:batata|potato).*?(?:fazenda|farm|plantacao)"),
@@ -172,6 +173,29 @@ def infer_by_flow(company):
     grain_generic_out=any(GENERIC_GRAIN.fullmatch(t) for t in out_names)
     grain_generic_in=any(GENERIC_GRAIN.fullmatch(t) for t in in_names)
     other_out=outgoing - CROP_CLASSES
+
+    # RBR: extração de madeira usa colheitadeiras florestais Ponsse no
+    # recebimento e expede troncos. Não é fábrica de ração nem fazenda de
+    # grãos. Vários IDs fictícios (extracao_ju/sb) usam exatamente o fluxo.
+    if (_any_evidence(in_names,r"(?:ponsse(?:[0-9]+)?|harvester_?forest|forest_?machine)")
+            and _any_evidence(out_names,r"(?:troncos(?:_di)?|logs|timber|madeirase(?:_b)?)")
+            and not (outgoing - {"madeira"})):
+        return Identity("madeireira","alta",
+                        "fluxo florestal: colheitadeira Ponsse no IN e "
+                        "troncos/madeira no OUT original da DEF")
+
+    # Empresas de logística podem movimentar muitos setores sem
+    # fabricar todos os produtos. Exigir diversidade inequívoca e
+    # mercadorias documentadas nos dois sentidos.
+    all_cats=incoming|outgoing
+    if (len(all_cats)>=5 and len(incoming)>=4 and len(outgoing)>=4
+            and (all_cats & GRAIN_CLASSES)
+            and (all_cats & (BUILDING_CLASSES|{"bobina"}))
+            and (all_cats & (RETAIL_FOOD|{"racao","adubo"}))):
+        return Identity("centro_logistico_inferido","alta",
+                        "fluxo multi-setorial de armazenagem/transbordo: "
+                        "diversas mercadorias de setores diferentes IN e OUT; "
+                        "nao confirma fabricacao de nenhuma delas")
 
     # Industria madeireira/extração de madeira: receber troncos, expedir
     # moveis. Um nome ficticio "extracao1" NAO indica cultivo de graos.
@@ -331,6 +355,17 @@ def classify(company):
     # campo de uma carga nem de OUT potencialmente adulterado. Usar apenas
     # quando houver correspondencia inequívoca com UM setor.
     public_name=getattr(company,"display_name","")
+    # RBR "fazenda_ac": o nome do editor declara ARMAZENAGEM DE GRAOS,
+    # e ha as mesmas especies de graos IN/OUT. Nao inferir lavoura.
+    public_name=getattr(company,"display_name","")
+    in_grains=cargo_categories(company.old_in)&GRAIN_CLASSES
+    out_grains=cargo_categories(company.old_out)&GRAIN_CLASSES
+    if (in_grains & out_grains and re.search(
+            r"armazena(?:gem)?_?(?:de_?)?graos|(?:silo|armazem)_?de_?graos",
+            norm(public_name))):
+        return Identity("silo","alta",
+                        "nome exibido diz armazenagem de graos e especies "
+                        "compartilhadas constam de IN e OUT originais")
     # RBR "Galo Prod. Agricolas": nao confundir vendedor de ração/adubo
     # com fazenda so porque o nome publico tem 'agricola'.
     # O proprio IN/OUT da DEF documenta adubo IN/OUT e racao OUT.
@@ -388,6 +423,16 @@ def decide(company,category,direction,identity=None):
                         "alta" if identity.certainty=="alta" else "media")
     def forbid(reason):
         return Decision(False,reason,identity.evidence,identity.certainty)
+    if role in {"centro_logistico_inferido","terminal_portuario"}:
+        # Um terminal/armazem comercializa servicos de transbordo, nao
+        # fabrica cada especie. Aceitar APENAS a mercadoria/ciclo no
+        # IN/OUT autenticado na mesma direcao.
+        if documentary:
+            return permit("movimentacao/armazenagem documentada da "
+                          "mercadoria na direcao original do terminal",
+                          "somente IN/OUT original da DEF; nao e produtor")
+        return forbid("sem IN/OUT original nesta mercadoria/direcao; "
+                      "terminal nao fabrica cargas")
     if role=="desconhecida":
         # Mesmo sem identificar o ramo ficticio, a DEF ORIGINAL documenta
         # exatamente esta mercadoria nessa direcao. Converter p.ex. corn
