@@ -19,6 +19,8 @@ class RBRRealEconomicRefinement(unittest.TestCase):
         )
         self.assertEqual(policy.classify(company).role,"fabricante_refrigerantes")
         self.assertFalse(policy.decide(company,"cerveja","out").allowed)
+        self.assertTrue(policy.decide(company,"laranja","in").allowed)
+        self.assertFalse(policy.decide(company,"laranja","out").allowed)
         self.assertTrue(policy.decide(company,"palete","out").allowed)
         company.role=policy.classify(company).role
         self.assertIsNotNone(proven_incompatibility(
