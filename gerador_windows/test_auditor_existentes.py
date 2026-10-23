@@ -84,6 +84,20 @@ class AuditorSCSRegression(unittest.TestCase):
 '''
         self.assertEqual(audit.file_active_ids(g,neutral),[])
 
+    def test_malformed_cargo_cannot_publish_unverified_scs(self):
+        with zipfile.ZipFile(self.existing) as source:
+            old_files={name:source.read(name) for name in source.namelist()}
+        old_files["def/company/ambev/out/broken_syntax.sii"]=(
+            b'SiiNunit { cargo_def : .a {\n cargo: "cargo.carga12"; INVALID\n } }')
+        zip_write(self.existing,old_files)
+        before=self.existing.read_bytes()
+        output=self.root/"untrusted_cargo_rejected"
+        with self.assertRaisesRegex(ValueError,"sintaxe nao reconhecida"):
+            self.invoke(out=output)
+        self.assertEqual(self.existing.read_bytes(),before)
+        self.assertEqual(list(output.glob("*.scs")),[])
+        self.assertTrue((output/"AUDITORIA_INCOMPLETA.txt").exists())
+
     def test_refinement_repeat_is_stable_and_never_overwrites_old_scs(self):
         """Mesma entrada+politica -> mesmo arquivo. Mesma Company com
         DEF diferente -> novo nome sem destruir a entrega anterior."""
@@ -92,6 +106,10 @@ class AuditorSCSRegression(unittest.TestCase):
         first_file=output/first["arquivo_corrigido"]
         before=first_file.read_bytes()
         assert first_file.is_file()
+        self.assertTrue(first["validacao_pos_exportacao"]["arquivo_zip_integro"])
+        self.assertTrue(first["validacao_pos_exportacao"]["mesmas_permissoes_do_relatorio"])
+        self.assertEqual(first["validacao_pos_exportacao"]["duplicatas_em_empresas_do_mapa"],0)
+        self.assertFalse(first["validacao_pos_exportacao"]["homologado_no_ets2"])
         again=self.invoke(out=output)[0]
         self.assertEqual(first["arquivo_corrigido"],again["arquivo_corrigido"])
         self.assertEqual(first["sha256_scs_corrigido"],again["sha256_scs_corrigido"])
