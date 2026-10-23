@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,14 +29,21 @@ jobs:
         run: python -m pip install pyinstaller==6.16.0
       - name: Gerar EXE de interface grafica
         run: python -m PyInstaller --onefile --windowed --name ETS2_Company_Gerador --distpath dist gerador_windows/gerador.py
+      - name: Gerar alternativa Windows em pasta (sem --onefile)
+        shell: pwsh
+        run: python -m PyInstaller --onedir --windowed --name ETS2_Company_Gerador --distpath dist_portable --workpath build_portable --specpath specs_portable gerador_windows/gerador.py
       - name: Executar EXE real com tres mapas sinteticos
         shell: pwsh
-        run: python gerador_windows/smoke_exe.py dist/ETS2_Company_Gerador.exe
+        run: |
+          python gerador_windows/smoke_exe.py dist/ETS2_Company_Gerador.exe
+          python gerador_windows/smoke_exe.py dist_portable/ETS2_Company_Gerador/ETS2_Company_Gerador.exe
       - name: Conferir arquivo Windows
         shell: pwsh
         run: |
           if (-not (Test-Path "dist/ETS2_Company_Gerador.exe")) { throw "EXE nao gerado" }
           if ((Get-Item "dist/ETS2_Company_Gerador.exe").Length -lt 2000000) { throw "EXE incompleto" }
+          if (-not (Test-Path "dist_portable/ETS2_Company_Gerador/ETS2_Company_Gerador.exe")) { throw "EXE em pasta nao gerado" }
+          if (-not (Test-Path "dist_portable/ETS2_Company_Gerador/_internal")) { throw "Dependencias do EXE em pasta ausentes" }
       - name: Preparar pacote de entrega com instrucoes e hash
         shell: pwsh
         run: |
@@ -60,5 +67,36 @@ jobs:
         with:
           name: Gerador-ETS2-Windows
           path: release/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preparar alternativas de download verificaveis
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release_portable -Force | Out-Null
+          Copy-Item dist_portable/ETS2_Company_Gerador -Destination release_portable -Recurse -Force
+          Copy-Item gerador_windows/GUIA_ALTERNATIVAS_DOWNLOAD_SEGURO.md release_portable/LEIA_PRIMEIRO.md
+          $exe = "release_portable/ETS2_Company_Gerador/ETS2_Company_Gerador.exe"
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "COMMIT=$env:GITHUB_SHA" | Out-File release_portable/PROVENIENCIA_PASTA_SHA256.txt -Encoding utf8
+          "SHA256_EXE_PASTA=$sha" | Out-File release_portable/PROVENIENCIA_PASTA_SHA256.txt -Append -Encoding utf8
+          "SEGURANCA_NAO_GARANTIDA_VERIFICAR_ANTIVIRUS=true" | Out-File release_portable/PROVENIENCIA_PASTA_SHA256.txt -Append -Encoding utf8
+          New-Item -ItemType Directory -Path release_source -Force | Out-Null
+          Copy-Item gerador_windows/*.py release_source/ -Force
+          Copy-Item gerador_windows/GUIA_ALTERNATIVAS_DOWNLOAD_SEGURO.md release_source/LEIA_PRIMEIRO.md
+          "COMMIT=$env:GITHUB_SHA" | Out-File release_source/PROVENIENCIA_CODIGO_FONTE.txt -Encoding utf8
+          "VERSAO=Python_3.12_sem_EXE" | Out-File release_source/PROVENIENCIA_CODIGO_FONTE.txt -Append -Encoding utf8
+          if (-not (Test-Path "release_source/gerador.py")) { throw "Codigo-fonte nao empacotado" }
+      - name: Disponibilizar alternativa Windows em pasta
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gerador-ETS2-Windows-Pasta
+          path: release_portable/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Disponibilizar codigo-fonte sem EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gerador-ETS2-Codigo-Fonte
+          path: release_source/*
           if-no-files-found: error
           retention-days: 30
