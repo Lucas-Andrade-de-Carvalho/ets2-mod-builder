@@ -784,6 +784,15 @@ def decide(company,category,direction,identity=None):
         if category=="palete" and category in (old_out if direction=="out" else old_in):
             return permit("empresa madeireira movimenta paletes documentados", "DEF original da mercadoria")
         return forbid("revenda de madeiras nao fabrica nem consome automaticamente outras cargas")
+    if (role=="revenda_aco" and category=="bobina"
+            and direction=="in"):
+        incoming={norm(x) for x in company.old_in}
+        outgoing={norm(x) for x in company.old_out}
+        if ({"iron_pipes","largetubes"} <= incoming
+                and {"sandwch_pnls","scrap_metals"} <= outgoing):
+            return permit(
+                "aco para producao de paineis metalicos",
+                "compra de bobinas inferida de materiais e residuos da DEF")
     if role=="revenda_aco":
         if category=="bobina" and category in (old_out if direction=="out" else old_in):
             return permit("distribuidora de aco movimenta bobina documentada na DEF","DEF original da bobina")
