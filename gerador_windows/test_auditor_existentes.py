@@ -269,6 +269,60 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertEqual(z.read("Info.txt"),b"KEEP ORIGINAL")
         self.assertGreater(original.stat().st_size,0)
 
+    def test_rbr_audit5_logging_and_fuel_cleanup_preserves_original(self):
+        """AUDITORIA_RBR(5): extracao_ju move troncos, postos movem combustivel.
+        Corrige SOMENTE fretes antigos incompatíveis no SCS novo.
+        """
+        map_zip=self.root/"rbr_audit5_company_originais.zip"
+        zip_write(map_zip,{
+            "extracao_ju/in/ponsse.sii":old("ponsse"),
+            "extracao_ju/out/troncos.sii":old("troncos"),
+            "extracao_sc/in/ponsse2.sii":old("ponsse2"),
+            "extracao_sc/out/troncos_di.sii":old("troncos_di"),
+            "go_p_riobra/in/gasolina.sii":old("gasolina"),
+            "go_p_riobra/out/tanqvazio.sii":old("tanqvazio"),
+            "faz_milho/in/fertilizante.sii":old("fertilizante"),
+            "faz_milho/out/milho_a.sii":old("milho_a"),
+            "silo_1/in/milho_a.sii":old("milho_a"),
+        })
+        existing=self.root/"rbr_audit5_existing.scs"
+        zip_write(existing,{
+            "def/company/extracao_ju/in/carga1.sii":g.cargo_sii("carga1"),
+            "def/company/extracao_ju/in/carga2.sii":g.cargo_sii("carga2"),
+            "def/company/extracao_ju/out/carga17.sii":g.cargo_sii("carga17"),
+            "def/company/extracao_sc/out/carga20.sii":g.cargo_sii("carga20"),
+            "def/company/go_p_riobra/in/carga6.sii":g.cargo_sii("carga6"),
+            "def/company/go_p_riobra/in/carga13.sii":g.cargo_sii("carga13"),
+            "def/company/faz_milho/out/carga1.sii":g.cargo_sii("carga1"),
+            "def/company/silo_1/in/carga1.sii":g.cargo_sii("carga1"),
+            "Original.txt":b"RBR_ANTES_INTACTO"
+        })
+        pristine=existing.read_bytes()
+        out=self.root/"rbr_audit5_repaired"
+        input_files={name:self.fixture.inp[name] for name in ("mod","def1","def2")}
+        result=audit.run(
+            g,{"RBR":{"existing":existing,"map_def":map_zip}},
+            out,professional=True,source_files=input_files)[0]
+        self.assertEqual(existing.read_bytes(),pristine)
+        self.assertGreaterEqual(result["permissoes_removidas"],6)
+        with zipfile.ZipFile(out/result["arquivo_corrigido"]) as patched:
+            self.assertIsNone(patched.testzip())
+            self.assertEqual(patched.read("Original.txt"),b"RBR_ANTES_INTACTO")
+            for relative in (
+                "extracao_ju/in/carga1.sii","extracao_ju/in/carga2.sii",
+                "extracao_ju/out/carga17.sii","extracao_sc/out/carga20.sii",
+                "go_p_riobra/in/carga6.sii","go_p_riobra/in/carga13.sii"):
+                self.assertEqual(audit.file_active_ids(
+                    g,patched.read("def/company/"+relative)),[])
+            for relative in ("faz_milho/out/carga1.sii","silo_1/in/carga1.sii"):
+                self.assertEqual(audit.file_active_ids(
+                    g,patched.read("def/company/"+relative)),["carga1"])
+        by_id={x["empresa"]:x for x in
+               result["matriz_empresa_cidade"]["empresas"]}
+        self.assertEqual(by_id["extracao_ju"]["atividade"],"madeireira")
+        self.assertEqual(by_id["go_p_riobra"]["atividade"],"desconhecida")
+        self.assertIn("carga1",result["rotas_depois"])
+
     def test_rbr_real_sector_corrections_preserve_crop_rotation_as_hypothesis(self):
         """Auditoria binaria: remove fretes minerais/combustivel falsos e
         mantem sorghum em fazenda/silo SOMENTE quando herdado e plausivel."""
