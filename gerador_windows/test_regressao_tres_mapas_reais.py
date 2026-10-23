@@ -107,6 +107,41 @@ class MGAndEldoradoEconomicFlows(unittest.TestCase):
                 self.assertFalse(policy.decide(c,"cerveja","in").allowed)
                 self.assertFalse(policy.decide(c,"cimento","in").allowed)
 
+    def test_minas_cocacola_refri_is_not_just_waste_depot(self):
+        c=examined("cocacola",out_tokens=[
+            "agua600","energetico","papelao","plasticom",
+            "refri","supaletes"])
+        self.assertEqual(c.role,"fabricante_refrigerantes")
+        self.assertFalse(policy.decide(c,"cerveja","out").allowed)
+        self.assertTrue(policy.decide(c,"palete","out").allowed)
+        self.assertIsNotNone(proven_incompatibility(
+            c,"cerveja","out",map_name="Minas_Gerais"))
+
+    def test_eldorado_itcc_prefab_not_siderurgic_or_cement_factory(self):
+        c=examined("itcc2",in_tokens=[
+            "cement","largetubes","ore","sand","gravel"],
+            out_tokens=[
+            "cement","concr_beams","floorpanels","precast_strs",
+            "wallpanels","iron_pipes"])
+        self.assertEqual(c.role,"premoldados")
+        self.assertTrue(policy.decide(c,"cimento","in").allowed)
+        self.assertFalse(policy.decide(c,"cimento","out").allowed)
+        self.assertFalse(policy.decide(c,"bobina","out").allowed)
+        self.assertIsNotNone(proven_incompatibility(
+            c,"cimento","out",map_name="Eldorado"))
+        # Um identificador sem fluxo verdadeiro nao vira pre-moldado.
+        self.assertEqual(policy.classify(g.Company("itcc2")).role,
+                         "metalurgica")
+
+    def test_minas_food_wholesale_cannot_receive_regional_cotton(self):
+        c=examined("abcatacado",in_tokens=[
+            "amstel","brahma","budweiser","batata","laranja",
+            "agua600","cafe","frangoabatid","leite"],
+            out_tokens=["papelao","plasticom","supaletes"])
+        self.assertIsNone(policy.regional_approved_decision(
+            c,"algodao","in","Minas_Gerais"))
+        self.assertFalse(policy.decide(c,"algodao","in").allowed)
+
     def test_no_garbage_graos_alias_or_sorghum_without_documentation(self):
         c=examined("agh",in_tokens=[
             "big_bag_seed","digger500","feijao","milho",
