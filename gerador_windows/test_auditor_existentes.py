@@ -269,6 +269,87 @@ class AuditorSCSRegression(unittest.TestCase):
             self.assertEqual(z.read("Info.txt"),b"KEEP ORIGINAL")
         self.assertGreater(original.stat().st_size,0)
 
+    def test_minas_eldorado_real_def_wrong_freights_neutralized_and_rbr_unchanged(self):
+        """Entrada realista dos relatórios atuais: marketplace quimico,
+        embalagem descartavel, revenda de maquinas e centros de troca
+        de produtos variados. Nao alterar a Company RBR original.
+        """
+        chemical={"acid","arsenic","chlorine","cyanide","mercuric",
+                  "sulfuric","nitrocel","potahydro","sodhydro",
+                  "phosphor","fertilizer"}
+        grocery={"beverages","clothes","clothes3","toys","tyres",
+                 "tableware","canned_beans","carrots","cauliflower",
+                 "drymilk","sugar","sugar2","fertilizer"}
+        farming={"adubo","aramefar","bcorte","escavadeira",
+                 "fertilizante","pneutrator_s","trator"}
+        mapfiles={
+            "sellplan2":(set(chemical),set(chemical)),
+            "sanbuilders2":(set(chemical),set(chemical)),
+            "cmddiesel":(set(grocery),set(grocery)|{"lixo"}),
+            "emersonmaqui":(set(farming),set(farming)),
+            "copobras":(set(),{"coposdesc","pratosdesc","talheresdesc"}),
+            "faz_milho":({"fertilizer"},{"corn"}),
+            "silo_central":({"corn"},set())
+        }
+        contents={}
+        for firm,(ins,outs) in mapfiles.items():
+            for direction,values in (("in",ins),("out",outs)):
+                for value in values:
+                    contents[f"{firm}/{direction}/{value}.sii"]=old(value)
+        entries={}
+        for map_name in ("Minas_Gerais","Eldorado"):
+            original=self.root/(map_name+"_company_orig.zip")
+            zip_write(original,contents)
+            prior=self.root/(map_name+"_Company.scs")
+            zip_write(prior,{
+                "def/company/sellplan2/in/carga12.sii":g.cargo_sii("carga12"),
+                "def/company/sanbuilders2/in/carga6.sii":g.cargo_sii("carga6"),
+                "def/company/cmddiesel/out/carga3.sii":g.cargo_sii("carga3"),
+                "def/company/emersonmaqui/in/carga1.sii":g.cargo_sii("carga1"),
+                "def/company/copobras/out/carga13.sii":g.cargo_sii("carga13"),
+                "def/company/faz_milho/out/carga1.sii":g.cargo_sii("carga1"),
+                "def/company/silo_central/in/carga1.sii":g.cargo_sii("carga1"),
+                "source.txt":b"SOURCE MUST REMAIN SAME"})
+            entries[map_name]={"existing":prior,"map_def":original}
+        before={name:entry["existing"].read_bytes() for name,entry in entries.items()}
+        dest=self.root/"two_maps_real_economic_fixes"
+        dest.mkdir()
+        sentinel=dest/"RBR_cliente_original.scs"
+        sentinel.write_bytes(b"DO NOT TOUCH RBR")
+        results=audit.run(g,entries,dest,professional=True,
+                          source_files={k:self.fixture.inp[k]
+                                        for k in ("mod","def1","def2")})
+        self.assertEqual({x["mapa"] for x in results},
+                         {"Minas_Gerais","Eldorado"})
+        self.assertEqual(sentinel.read_bytes(),b"DO NOT TOUCH RBR")
+        self.assertFalse((dest/"AUDITORIA_RBR.json").exists())
+        for report in results:
+            with self.subTest(map=report["mapa"]):
+                self.assertGreaterEqual(report["permissoes_removidas"],4)
+                self.assertEqual(entries[report["mapa"]]["existing"].read_bytes(),
+                                 before[report["mapa"]])
+                with zipfile.ZipFile(dest/report["arquivo_corrigido"]) as z:
+                    self.assertIsNone(z.testzip())
+                    self.assertEqual(z.read("source.txt"),
+                                     b"SOURCE MUST REMAIN SAME")
+                    for p in ("sellplan2/in/carga12.sii",
+                              "sanbuilders2/in/carga6.sii",
+                              "emersonmaqui/in/carga1.sii",
+                              "copobras/out/carga13.sii"):
+                        self.assertEqual(audit.file_active_ids(
+                            g,z.read("def/company/"+p)),[])
+                    for p,cid in (
+                        ("cmddiesel/out/carga3.sii","carga3"),
+                        ("faz_milho/out/carga1.sii","carga1"),
+                        ("silo_central/in/carga1.sii","carga1")):
+                        self.assertEqual(audit.file_active_ids(
+                            g,z.read("def/company/"+p)),[cid])
+                mapped={row["empresa"]:row["atividade"] for row in
+                        report["matriz_empresa_cidade"]["empresas"]}
+                self.assertEqual(mapped["sellplan2"],"terminal_quimico_inferido")
+                self.assertEqual(mapped["cmddiesel"],"centro_logistico_inferido")
+                self.assertEqual(mapped["copobras"],"fabricante_descartaveis_inferido")
+
     def test_rbr_audit5_logging_and_fuel_cleanup_preserves_original(self):
         """AUDITORIA_RBR(5): extracao_ju move troncos, postos movem combustivel.
         Corrige SOMENTE fretes antigos incompatíveis no SCS novo.
