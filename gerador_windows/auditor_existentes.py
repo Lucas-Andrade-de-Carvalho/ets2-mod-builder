@@ -195,6 +195,24 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
         # Outros setores: nao apagar mercadoria realmente declarada no
         # IN/OUT autentico sem uma contradicao material acima.
         return None
+    # Empresas ficticias reclassificadas por forte evidencia DIRECIONAL.
+    # Nao confundir quimicos com supermarket/obra nem descartaveis com
+    # fabricacao de cimento/tijolos. As mercadorias documentadas na
+    # propria direcao foram preservadas no teste acima.
+    if role=="terminal_quimico_inferido":
+        return ("Fluxo predominante de quimicos perigosos no IN e OUT "
+                "da DEF, sem esta mercadoria do Librelato; remover "
+                "permissao antiga de setor errado")
+    if role=="fabricante_descartaveis_inferido":
+        return ("Fabrica de copos, pratos e talheres descartaveis; "
+                "nao produz nem recebe automaticamente esta "
+                "mercadoria Librelato sem IN/OUT original")
+    if role=="reciclagem_inferida":
+        return ("Reciclagem documentada de residuos/paletes; "
+                "nao assumir outras 23 cargas sem produto no IN/OUT")
+    if role=="revenda_maquinas_agricolas_inferida":
+        return ("Venda documentada de maquinas agricolas e fertilizante "
+                "mas nao desta colheita/carga na direcao original")
     # RBR: extracao de troncos exige maquinaria florestal Ponsse e
     # expedicao de madeira bruta. Fretes legados de milho, soja ou
     # racao para esses pontos vieram de mapeamentos genericos de IN/OUT
