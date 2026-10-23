@@ -60,6 +60,24 @@ class MGAndEldoradoEconomicFlows(unittest.TestCase):
         self.assertFalse(policy.decide(c,"milho","out").allowed)
         self.assertFalse(policy.decide(c,"soja","out").allowed)
 
+    def test_agro_inputs_do_not_inherit_undocumented_grain_receipts(self):
+        for map_name,company in (
+            ("Minas_Gerais","agromais"),
+            ("Eldorado","agrish"),
+            ("RBR","agro_capim")
+        ):
+            with self.subTest(map=map_name):
+                c=examined(company,
+                    in_tokens=["adubo","fertilizante","racao"],
+                    out_tokens=["adubo","fertilizante","racao"])
+                self.assertEqual(c.role,"agroinsumos")
+                for cat in ("milho","soja"):
+                    self.assertIsNotNone(proven_incompatibility(
+                        c,cat,"in",map_name=map_name))
+                c.old_in.add("milho")
+                self.assertIsNone(proven_incompatibility(
+                    c,"milho","in",map_name=map_name))
+
     def test_minas_copobras_disposables_not_cement_or_bricks(self):
         c=examined("copobras",out_tokens=[
             "coposdesc","pratosdesc","talheresdesc"])
