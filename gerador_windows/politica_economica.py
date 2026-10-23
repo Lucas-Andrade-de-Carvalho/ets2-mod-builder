@@ -822,7 +822,9 @@ REGIONAL_FORBIDDEN_ROLES=frozenset({
     "obras","posto_combustivel","infra_passageiros",
     "transportadora","mineracao_minerios","mineracao_calcario",
     "siderurgica","metalurgica","premoldados","cimenteira",
-    "automotiva_fabrica","bananal","cervejaria","ceramica"
+    "automotiva_fabrica","bananal","cervejaria","ceramica",
+    "terminal_quimico_inferido","fabricante_descartaveis_inferido",
+    "revenda_maquinas_agricolas_inferida","reciclagem_inferida"
 })
 
 
