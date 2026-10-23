@@ -41,7 +41,7 @@ ROLES=(
     ("entreposto_hortigraos",r"^ceagesp$"),
     ("fabricante_fertilizante",r"^mosaico2?$|^mosaic_fertilizantes$"),
     ("beneficiadora_algodao",r"algodoeira|cotton_gin|^mt_torre_alg$|^ms_alg_ib$"),
-    ("fabrica_moveis",r"marcenaria|furniture_factory|furniture_plant|moveis|^bechara$|^brigatto$|^esplane$"),
+    ("fabrica_moveis",r"marcenaria|furniture_factory|furniture_plant|moveis|^bechara$|^brigatto$|^esplane$|^boisserie$"),
     ("comercio_graos",r"(?:^|_)graos(?:_|$)|^grupo_cereal$|^g_cereal_(?:rv|stb)$|^pr_anaconda$|^amaggi$"),
     ("concreteira",r"^polimix(?:1|_rib)?$|^concretar$|concreto_usinado|concrete_batch"),
     # CSN Arcos na DEF MG descreve extracao de calcario/brita, nao
@@ -271,6 +271,27 @@ def infer_by_flow(company):
                         "maquinas e implementos agricolas em IN e OUT "
                         "junto de fertilizante; revenda mista documentada")
 
+    # RBR: revenda de maquinaria agricola comprovada pela mesma linha de
+    # tratores/colheitadeiras em IN e OUT, com pecas/filtros de manutencao.
+    # IDs podem nao conter palavras "agro" ou "maquinas". Nao transformar
+    # concessionaria de maquinas em fazenda apenas por causa do nome.
+    machine_models=re.compile(
+        r"^(?:case9230|newlholl|excadee|trator|trator_ca|trator_jd)"
+        r"(?:_(?:3e|4e))?$")
+    incoming_machines={x for x in in_names if machine_models.fullmatch(x)}
+    outgoing_machines={x for x in out_names if machine_models.fullmatch(x)}
+    kinds={re.sub(r"_(?:3e|4e)$","",x) for x in
+           (incoming_machines & outgoing_machines)}
+    if (len(kinds)>=2 and
+            not (outgoing & CROP_CLASSES) and
+            not _any_evidence(out_names,r"(?:milho|soja|racao|sorgo)")):
+        return Identity(
+            "revenda_maquinas_agricolas_inferida","alta",
+            "mesmos modelos de maquinas agricolas em IN e OUT da DEF; "
+            "nenhuma colheita/racao expedida; fretes rurais herdados nao "
+            "ficam autorizados automaticamente"
+        )
+
     # MG: fabricante de descartaveis com emissao de copos/pratos/talheres.
     # Nenhum destes itens equivale às 24 cargas do Librelato.
     disposable={"coposdesc","pratosdesc","talheresdesc"}
@@ -472,6 +493,21 @@ def classify(company):
         return Identity("silo","alta",
                         "nome exibido diz armazenagem de graos e especies "
                         "compartilhadas constam de IN e OUT originais")
+    # O nome de fabricante de REFRIGERANTES nao equivale a cervejaria.
+    # Exigir simultaneamente nome explicito e produto de bebidas no OUT.
+    # Nenhum nome ambiguo ("bebidas", "distribuidor") basta sozinho.
+    brand=identifier+"_"+display
+    is_soda_brand=bool(re.search(
+        r"(?:^|_)(?:pepsico|coca_?cola)(?:_|$)",brand))
+    soda_out=any(re.fullmatch(
+        r"(?:refrigerant|refrigerante|refrigerantes|bebidas|bebidas_b)",
+        norm(x)) for x in company.old_out)
+    if is_soda_brand and soda_out:
+        return Identity(
+            "fabricante_refrigerantes","alta",
+            "identidade explicita de refrigerantes e bebidas expedidas "
+            "na DEF; bebidas genericas nao comprovam cerveja"
+        )
     for role,pattern in ROLES:
         if re.search(pattern,identifier,re.I):
             if (role=="terminal_portuario" and
@@ -564,6 +600,18 @@ def decide(company,category,direction,identity=None):
         return forbid("ramo nao confirmado e nenhum IN/OUT original para "
                       "esta mercadoria/direcao; nao criar rota")
 
+    if role=="fabricante_refrigerantes":
+        if category=="palete" and documentary:
+            return permit(
+                "paletes documentados na mesma direcao da fabrica de bebidas",
+                "IN/OUT original de paletes")
+        if category=="cerveja" and documentary:
+            return permit(
+                "cerveja expressamente declarada na DEF original",
+                "produto cerveja, nao bebidas genericas")
+        return forbid(
+            "industria de refrigerantes nao comprova cerveja nem "
+            "outras cargas Librelato fora do IN/OUT original")
     if role=="transportadora":
         return forbid("transportadora executa fretes, nao produz nem consome automaticamente a mercadoria")
     if role in {"posto_combustivel","mineracao_minerios"}:
