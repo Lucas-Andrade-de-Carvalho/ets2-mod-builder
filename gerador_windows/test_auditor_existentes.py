@@ -288,6 +288,7 @@ class AuditorSCSRegression(unittest.TestCase):
             "cmddiesel":(set(grocery),set(grocery)|{"lixo"}),
             "emersonmaqui":(set(farming),set(farming)),
             "copobras":(set(),{"coposdesc","pratosdesc","talheresdesc"}),
+            "abcatacado":({"beer","potatoes","oranges"},{"supaletes"}),
             "faz_milho":({"fertilizer"},{"corn"}),
             "silo_central":({"corn"},set())
         }
@@ -307,6 +308,7 @@ class AuditorSCSRegression(unittest.TestCase):
                 "def/company/cmddiesel/out/carga3.sii":g.cargo_sii("carga3"),
                 "def/company/emersonmaqui/in/carga1.sii":g.cargo_sii("carga1"),
                 "def/company/copobras/out/carga13.sii":g.cargo_sii("carga13"),
+                "def/company/abcatacado/in/carga5.sii":g.cargo_sii("carga5"),
                 "def/company/faz_milho/out/carga1.sii":g.cargo_sii("carga1"),
                 "def/company/silo_central/in/carga1.sii":g.cargo_sii("carga1"),
                 "source.txt":b"SOURCE MUST REMAIN SAME"})
@@ -325,7 +327,7 @@ class AuditorSCSRegression(unittest.TestCase):
         self.assertFalse((dest/"AUDITORIA_RBR.json").exists())
         for report in results:
             with self.subTest(map=report["mapa"]):
-                self.assertGreaterEqual(report["permissoes_removidas"],4)
+                self.assertGreaterEqual(report["permissoes_removidas"],5)
                 self.assertEqual(entries[report["mapa"]]["existing"].read_bytes(),
                                  before[report["mapa"]])
                 with zipfile.ZipFile(dest/report["arquivo_corrigido"]) as z:
@@ -335,7 +337,8 @@ class AuditorSCSRegression(unittest.TestCase):
                     for p in ("sellplan2/in/carga12.sii",
                               "sanbuilders2/in/carga6.sii",
                               "emersonmaqui/in/carga1.sii",
-                              "copobras/out/carga13.sii"):
+                              "copobras/out/carga13.sii",
+                              "abcatacado/in/carga5.sii"):
                         self.assertEqual(audit.file_active_ids(
                             g,z.read("def/company/"+p)),[])
                     for p,cid in (
