@@ -8,6 +8,98 @@ import politica_economica as p
 import cobertura_maxima_rbr as coverage
 
 
+class MGAndEldoradoRealReportsRegression(unittest.TestCase):
+    """Fixtures tiradas de COBERTURA_MAXIMA_*.json de 22/10/2026.
+
+    Nomes ficticios nao sao consulta ao mundo real; classificar atividade
+    por conjuntos reais de mercadorias documentadas no IN e OUT.
+    """
+
+    def test_eldorado_cmddiesel_multisector_not_fertilizer_reseller(self):
+        original={"beverages","bguerra","big_bag_seed","canned_beans",
+                  "carrots","cauliflower","clothes","clothes3",
+                  "copp_rf_gutt","drymilk","fertilizer","granel",
+                  "sugar","sugar2","tableware","toys","tyres"}
+        for name in ("cmddiesel","midwest","drekkar2","gnt2","norrsk"):
+            c=g.Company(name,old_in=set(original),
+                        old_out=set(original)|{"lixo"})
+            with self.subTest(company=name):
+                self.assertEqual(p.classify(c).role,
+                                 "centro_logistico_inferido")
+                self.assertTrue(p.decide(c,"adubo","in").allowed)
+                self.assertTrue(p.decide(c,"adubo","out").allowed)
+                self.assertFalse(p.decide(c,"sorgo","out").allowed)
+                self.assertFalse(p.decide(c,"coco","out").allowed)
+
+    def test_eldorado_sellplan2_and_sanbuilders2_are_chemical_flows(self):
+        original={"acetylene","acid","ammunition","arsenic",
+                  "chemicals","chlorine","coal","contamin","cyanide",
+                  "diesel","emptytank","fertilizer","fluorine",
+                  "forklifts","fueltanker","hchemicals","hipresstank",
+                  "hmetal","kerosene","lpg","magnesium","mercuric",
+                  "neon","nitrocel","nitrogen","oil","pesticide",
+                  "petrol","phosphor","potahydro","potassium",
+                  "sodhydro","sodium","sulfuric"}
+        for name in ("sellplan2","sanbuilders2"):
+            c=g.Company(name,old_in=set(original),old_out=set(original))
+            with self.subTest(name=name):
+                self.assertEqual(p.classify(c).role,
+                                 "terminal_quimico_inferido")
+                self.assertTrue(p.decide(c,"adubo","out").allowed)
+                self.assertFalse(p.decide(c,"cerveja","in").allowed)
+                self.assertFalse(p.decide(c,"cimento","in").allowed)
+                self.assertFalse(p.decide(c,"coco","in").allowed)
+                # Adaptacao regional de coco nao se aplica a quimicos
+                self.assertIsNone(p.regional_approved_decision(
+                    c,"coco","in","Eldorado"))
+
+    def test_minas_emersonmaqui_machines_and_adubo_not_only_adubo(self):
+        original={"adubo","aramefar","bcorte","escavadeira",
+                  "fertilizante","pneutrator_s","trator"}
+        c=g.Company("emersonmaqui",old_in=set(original),
+                    old_out=set(original))
+        self.assertEqual(p.classify(c).role,
+                         "revenda_maquinas_agricolas_inferida")
+        self.assertTrue(p.decide(c,"adubo","out").allowed)
+        self.assertFalse(p.decide(c,"milho","out").allowed)
+        self.assertFalse(p.decide(c,"soja","in").allowed)
+
+    def test_minas_copobras_disposables_cannot_be_tijolo_cimento(self):
+        for name in ("copobras","copobras2"):
+            c=g.Company(name,old_out={"coposdesc","pratosdesc",
+                                      "talheresdesc"})
+            self.assertEqual(p.classify(c).role,
+                             "fabricante_descartaveis_inferido")
+            self.assertFalse(p.decide(c,"cimento","in").allowed)
+            self.assertFalse(p.decide(c,"tijolo","in").allowed)
+            self.assertFalse(p.decide(c,"cerveja","out").allowed)
+
+    def test_minas_recycling_pallets_are_directional_not_manufacturing(self):
+        original={"papelao","plasticom","sualuminio","suferrosa",
+                  "sumadeira","sumetal","supaletes","supneus"}
+        c=g.Company("acomais",old_in=set(original),
+                    old_out=set(original)-{"supneus"})
+        self.assertEqual(p.classify(c).role,"reciclagem_inferida")
+        self.assertTrue(p.decide(c,"palete","in").allowed)
+        self.assertTrue(p.decide(c,"palete","out").allowed)
+        self.assertFalse(p.decide(c,"cimento","out").allowed)
+
+    def test_pluma_minas_abcatacado_wholesale_food_not_fiber_warehouse(self):
+        in_original={"brahma","skol","batata","laranja","banana",
+                     "soja","racao","sucovilma"}
+        c=g.Company("abcatacado",old_in=in_original,
+                    old_out={"supaletes","papelao","plasticom"})
+        self.assertEqual(p.classify(c).role,"distribuidor")
+        self.assertIsNone(p.regional_approved_decision(
+            c,"algodao","in","Minas_Gerais"))
+        self.assertTrue(p.regional_approved_decision(
+            c,"coco","in","Minas_Gerais") is None)
+        # Um armazem que realmente distribui algodao pode receber pluma.
+        ware=g.Company("atacado_algodao",
+                       old_in={"algodao"},old_out={"algodao"})
+        self.assertTrue(p.regional_approved_decision(
+            ware,"algodao","in","Eldorado").allowed)
+
 class RegionalCottonCoconutPolicyTests(unittest.TestCase):
     def test_farms_supply_cotton_and_coconut_in_two_maps_only(self):
         companies=[
