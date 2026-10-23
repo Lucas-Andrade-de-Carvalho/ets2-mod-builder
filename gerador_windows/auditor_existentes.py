@@ -170,6 +170,23 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
             return ("ADAPTACAO REGIONAL: pluma/coco nao devem ser "
                     "carregados ou descarregados em obra, posto ou "
                     "industria incompatível; permissao legada neutralizada")
+    # Minas: etapa anterior adicionava pluma a distribuidores
+    # alimenticios genericos (ex.: abcatacado), embora o usuario tenha
+    # autorizado destinos agricolas/texteis e nao atacados de cerveja.
+    # Reverter APENAS a permissao de pluma herdada para unidade que
+    # comprovadamente recebe alimentos, mas nao fibra/armazenagem textil.
+    if (professional_policy.norm(map_name or "") in
+            professional_policy.REGIONAL_APPROVED_MAPS and
+            category=="algodao" and direction=="in" and
+            role=="distribuidor" and
+            professional_policy.regional_approved_decision(
+                company,"algodao","in",map_name) is None):
+        groceries=professional_policy.cargo_categories(company.old_in)
+        if (groceries & {"cerveja","batata","laranja","coco"} and
+                "algodao" not in groceries):
+            return ("Distribuidor de alimentos/cerveja sem operacao "
+                    "agricola/textil de algodao: pluma herdada de "
+                    "regra regional antiga excessivamente ampla")
     if spec is not None:
         if role in spec.get("forbidden_roles",()):
             return "Setor explicitamente proibido no cadastro desta mercadoria"
