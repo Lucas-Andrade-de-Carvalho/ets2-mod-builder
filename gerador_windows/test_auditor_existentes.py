@@ -57,6 +57,60 @@ class AuditorSCSRegression(unittest.TestCase):
                                          "map_def":self.baseline}},
                          out or self.root/"audit_output",mode=mode)
 
+    def test_neutralization_preserves_legacy_encoding_bom_crlf_and_other_cargos(self):
+        """Nunca converter silenciosamente nomes e comentarios cp1252
+        ou normalizar CRLF quando somente 1 permissao e removida."""
+        for encoding in ("utf-8-sig","cp1252"):
+            with self.subTest(encoding=encoding):
+                original=(
+                    'SiiNunit\r\n{\r\n'
+                    ' cargo_def : .carga12 {\r\n'
+                    '  cargo: "cargo.carga12" // depósito de pluma\r\n'
+                    '  label: "São José - Açúcar"\r\n'
+                    ' }\r\n'
+                    ' cargo_def : .carga7 {\r\n'
+                    '  cargo: "cargo.carga7" # intacto\r\n'
+                    ' }\r\n}\r\n').encode(encoding)
+                self.assertEqual(audit.file_active_ids(g,original),
+                                 ["carga12","carga7"])
+                edited=audit.disable_id(g,original,"carga12")
+                self.assertEqual(audit.file_active_ids(g,edited),["carga7"])
+                self.assertEqual(edited,original.replace(
+                    b'cargo: "cargo.carga12"',b'cargo: ""'))
+                self.assertEqual(edited.count(b"\r\n"),original.count(b"\r\n"))
+                self.assertEqual(edited.startswith(b"\xef\xbb\xbf"),
+                                 original.startswith(b"\xef\xbb\xbf"))
+
+    def test_repeat_audit_on_cp1252_company_is_stable_and_lossless(self):
+        """Executar auditoria repetida nao deve destruir caracteres
+        de comentarios, ainda que carga invalida tenha sido neutralizada."""
+        with zipfile.ZipFile(self.existing) as z:
+            contents={p:z.read(p) for p in z.namelist()}
+        annotated=(
+            'SiiNunit\r\n{\r\n cargo_def : .carga7 {\r\n'
+            ' cargo: "cargo.carga7"\r\n'
+            ' note: "Depósito São João"\r\n }\r\n}\r\n'
+        ).encode("cp1252")
+        contents["def/company/brasilog/out/carga7.sii"]=annotated
+        zip_write(self.existing,contents)
+        output=self.root/"legacy_encoding_roundtrip"
+        first=self.invoke(out=output)[0]
+        with zipfile.ZipFile(output/first["arquivo_corrigido"]) as z:
+            edited=z.read("def/company/brasilog/out/carga7.sii")
+            self.assertEqual(
+                edited,annotated.replace(
+                    b'cargo: "cargo.carga7"',b'cargo: ""'))
+            self.assertIn('São João'.encode("cp1252"),edited)
+        # Reimportar a nova Company nao pode corromper bytes novamente.
+        second=output/first["arquivo_corrigido"]
+        again=audit.run(g,{"Eldorado":{"existing":second,
+                                       "map_def":self.baseline}},
+                        self.root/"legacy_encoding_again")[0]
+        with zipfile.ZipFile(self.root/"legacy_encoding_again"/
+                             again["arquivo_corrigido"]) as z:
+            self.assertEqual(
+                z.read("def/company/brasilog/out/carga7.sii"),edited)
+
     def test_sii_parser_accepts_trailing_comments_but_rejects_unparsed_cargo(self):
         documented=b'''SiiNunit
 {
