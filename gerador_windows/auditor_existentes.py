@@ -273,6 +273,14 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
     if role in {"posto_combustivel","mineracao_minerios"}:
         return ("A DEF original comprova combustiveis/minerios brutos, "
                 "nao esta carga do Librelato; permissao legada contraditoria")
+    # RBR: refrigerante nao e cerveja. O nome da marca e o OUT da
+    # DEF demonstram bebida NAO alcoolica; so preservar cerveja se o
+    # proprio IN/OUT original trouxer identificador especifico de beer.
+    # Nao bloquear paletes documentados (retorno de embalagens).
+    if (role=="fabricante_refrigerantes" and category=="cerveja"
+            and category not in original):
+        return ("Fabrica de refrigerantes expede bebidas genericas, "
+                "nao cerveja: permissao herdada de carga12 incompatível")
     if role=="fabrica_moveis" and category in {
             "milho","soja","sorgo","adubo","racao","cerveja",
             "batata","laranja","coco","algodao"}:
