@@ -84,10 +84,12 @@ class EldoradoEnglishEconomicSimulation(unittest.TestCase):
         self.assertTrue(policy.decide(c,"adubo","in").allowed)
         self.assertFalse(policy.decide(c,"batata","out").allowed)
         self.assertFalse(policy.decide(c,"racao","in").allowed)
-        self.assertTrue(policy.regional_approved_decision(
-            c,"algodao","out","Eldorado").allowed)
+        self.assertIsNone(policy.regional_approved_decision(
+            c,"algodao","out","Eldorado"))
         self.assertIsNone(policy.regional_approved_decision(
             c,"algodao","out","RBR"))
+        self.assertTrue(policy.regional_approved_decision(
+            c,"coco","out","Eldorado").allowed)
 
     def test_potatoes_documented_from_real_crop_farm(self):
         c=company("agronord2",
