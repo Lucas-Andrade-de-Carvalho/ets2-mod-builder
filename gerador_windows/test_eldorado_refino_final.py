@@ -50,6 +50,20 @@ class EldoradoFinalDefIndustry(unittest.TestCase):
         self.assertFalse(policy.decide(c,"racao","in").allowed)
         self.assertFalse(policy.decide(c,"milho","out").allowed)
 
+    def test_ancapi_smd_utillog_are_megahubs_not_animal_factories(self):
+        # Os tres cadastros reais possuem cerca de 109 mercadorias OUT,
+        # de varios setores, e nenhum IN documentado.
+        cargoes={"beef_meat","cheese","drymilk","milk","potatoes",
+                 "apples","beverages","cement","lumber","fertilizer"}
+        cargoes.update("artigo_"+str(n) for n in range(100))
+        for name in ("ancapi","smd","utillog"):
+            with self.subTest(company=name):
+                c=real_company(name,set(),cargoes)
+                self.assertEqual(c.role,"eldorado_hub_saida")
+                self.assertTrue(policy.decide(c,"batata","out").allowed)
+                self.assertFalse(policy.decide(c,"racao","in").allowed)
+                self.assertFalse(policy.decide(c,"soja","out").allowed)
+
     def test_primaz_multi_food_distribution_not_dairy_manufacturer(self):
         c=real_company(
             "primaz",
