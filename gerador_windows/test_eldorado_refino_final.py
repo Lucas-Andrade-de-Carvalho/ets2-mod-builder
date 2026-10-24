@@ -101,6 +101,41 @@ class EldoradoFinalDefIndustry(unittest.TestCase):
             {"potatoes"})
         self.assertNotEqual(c2.role,"eldorado_lavoura")
 
+    def test_evidence_matrix_separates_source_and_simulation(self):
+        import csv
+        import tempfile
+        from pathlib import Path
+        farm=real_company("fazenda",{"bois","leite"},{"bois"})
+        food=real_company("polar_fish2",
+                          {"peas","potatoes","tomatoes"},
+                          {"container","containersud"})
+        with tempfile.TemporaryDirectory() as temp:
+            eld.export_translation_reports(
+                {"fazenda":farm,"polar_fish2":food},temp)
+            p=Path(temp)/"MATRIZ_ECONOMICA_ELDORADO.csv"
+            self.assertTrue(p.is_file())
+            with p.open(encoding="utf-8-sig",newline="") as stream:
+                records=list(csv.DictReader(stream,delimiter=";"))
+            for key in ("empresa","categoria_librelato","direcao",
+                        "tipo_de_evidencia","base_da_decisao"):
+                self.assertIn(key,records[0])
+            self.assertTrue(any(
+                row["empresa"]=="fazenda" and
+                row["categoria_librelato"]=="racao" and
+                row["direcao"]=="in" and
+                row["tipo_de_evidencia"]=="SIMULACAO_ECONOMICA"
+                for row in records))
+            self.assertTrue(any(
+                row["empresa"]=="polar_fish2" and
+                row["categoria_librelato"]=="batata" and
+                row["direcao"]=="in" and
+                row["tipo_de_evidencia"]=="DEF_ORIGINAL"
+                for row in records))
+            self.assertFalse(any(
+                row["empresa"]=="fazenda" and
+                row["categoria_librelato"]=="soja" and
+                row["direcao"]=="out" for row in records))
+
     def test_other_maps_do_not_get_eldorado_rules(self):
         original=g.Company("lov",old_in={"digger500","diggers"},
                            old_out={"potatoes"})
