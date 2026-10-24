@@ -170,13 +170,15 @@ class MGAndEldoradoEconomicFlows(unittest.TestCase):
         self.assertFalse(policy.decide(c,"milho","out").allowed)
         self.assertFalse(policy.decide(c,"sorgo","out").allowed)
 
-    def test_region_coconut_and_cotton_only_mg_eldorado(self):
+    def test_only_coconut_exception_in_eldorado_minas_untouched(self):
         farm=examined("fazenda_teste",in_tokens=["adubo"])
-        for map_name in ("Minas_Gerais","Eldorado"):
-            for category in ("algodao","coco"):
-                with self.subTest(map_name=map_name,category=category):
-                    self.assertTrue(policy.regional_approved_decision(
-                        farm,category,"out",map_name).allowed)
+        for category in ("algodao","coco"):
+            self.assertTrue(policy.regional_approved_decision(
+                farm,category,"out","Minas_Gerais").allowed)
+        self.assertTrue(policy.regional_approved_decision(
+            farm,"coco","out","Eldorado").allowed)
+        self.assertIsNone(policy.regional_approved_decision(
+            farm,"algodao","out","Eldorado"))
         for category in ("algodao","coco"):
             self.assertIsNone(policy.regional_approved_decision(
                 farm,category,"out","RBR"))
