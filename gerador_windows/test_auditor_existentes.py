@@ -796,8 +796,8 @@ class AuditorSCSRegression(unittest.TestCase):
 
 
     def test_minas_eldorado_cotton_coconut_regional_scs_without_changing_rbr(self):
-        """Excecao de pluma/coco gera cargas novas nos dois mapas mas
-        RBR permanece byte a byte idêntico e nao é aberto."""
+        """Minas preserva pluma/coco; Eldorado só permite coco regional,
+        enquanto RBR permanece byte a byte intacto."""
         from gerador import MANIFEST
         # O mod sintetico de base tem 23 cargas; adicionar a vigesima quarta
         # no mesmo formato do cargo_data, preservando as 23 primeiras.
@@ -857,18 +857,28 @@ class AuditorSCSRegression(unittest.TestCase):
                 self.assertGreater(report["permissoes_adaptacao_regional_adicionadas"],0)
                 cotton=report["rotas_depois"]["carga5"]
                 coconut=report["rotas_depois"]["carga24"]
-                self.assertGreater(cotton["pares_distintos"],0)
+                if region=="Minas_Gerais":
+                    self.assertGreater(cotton["pares_distintos"],0)
+                else:
+                    self.assertEqual(cotton["pares_distintos"],0)
                 self.assertGreater(coconut["pares_distintos"],0)
                 with zipfile.ZipFile(out/report["arquivo_corrigido"]) as z:
                     members=set(z.namelist())
                     self.assertIsNone(z.testzip())
                     for farm in ("fazenda_milho","fazenda_batata"):
-                        for cargo in ("carga5","carga24"):
-                            self.assertIn(
-                                f"def/company/{farm}/out/audit_{cargo}.sii",members)
-                    for dst in ("silo_central","cooperativa_vale"):
                         self.assertIn(
-                            f"def/company/{dst}/in/audit_carga5.sii",members)
+                            f"def/company/{farm}/out/audit_carga24.sii",members)
+                        cotton_file=f"def/company/{farm}/out/audit_carga5.sii"
+                        if region=="Minas_Gerais":
+                            self.assertIn(cotton_file,members)
+                        else:
+                            self.assertNotIn(cotton_file,members)
+                    for dst in ("silo_central","cooperativa_vale"):
+                        cotton_file=f"def/company/{dst}/in/audit_carga5.sii"
+                        if region=="Minas_Gerais":
+                            self.assertIn(cotton_file,members)
+                        else:
+                            self.assertNotIn(cotton_file,members)
                         self.assertNotIn(
                             f"def/company/{dst}/in/audit_carga24.sii",members)
                     for dst in ("martminas","mercearia_jardim","ceasa_centro"):
@@ -892,8 +902,11 @@ class AuditorSCSRegression(unittest.TestCase):
                             audit.file_active_ids(g,z.read(bad_file)),[])
                 self.assertGreaterEqual(report["permissoes_removidas"],2)
                 quality=report["qualidade_logistica"]
-                self.assertGreater(
-                    quality["cargas"]["carga5"]["pares_simulacao_regional"],0)
+                cotton_simulated=quality["cargas"]["carga5"]["pares_simulacao_regional"]
+                if region=="Minas_Gerais":
+                    self.assertGreater(cotton_simulated,0)
+                else:
+                    self.assertEqual(cotton_simulated,0)
                 self.assertGreater(
                     quality["cargas"]["carga24"]["pares_simulacao_regional"],0)
                 # Algumas CEASAs ja possuem comercio hortifruti como
@@ -908,7 +921,9 @@ class AuditorSCSRegression(unittest.TestCase):
                            if d["acao"]=="ADICIONAR_ADAPTACAO_REGIONAL"]
                 self.assertTrue(decisions)
                 self.assertEqual(
-                    {d["carga"] for d in decisions},{"carga5","carga24"})
+                    {d["carga"] for d in decisions},
+                    {"carga5","carga24"} if region=="Minas_Gerais"
+                    else {"carga24"})
                 self.assertTrue(all(
                     d["fonte"]=="SIMULACAO_ECONOMICA_REGIONAL_AUTORIZADA"
                     for d in decisions))
