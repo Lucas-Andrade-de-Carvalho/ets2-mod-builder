@@ -119,6 +119,19 @@ PT = {
 "hchemicals":"quimicos perigosos","carbn_pwdr_c":"po de carbono",
 "sodchlor":"cloreto de sodio","water":"agua"
 }
+# Complemento validado contra os 225 IDs existentes na DEF entregue.
+PT.update({
+    "asph_miller":"fresadora de asfalto (maquina pesada)",
+    "cacamvazio":"cacamba vazia",
+    "dozer":"trator de esteiras",
+    "goat_cheese":"queijo de cabra",
+    "ketchup":"molho ketchup",
+    "locomotive":"locomotiva",
+    "mobile_crane":"guindaste movel",
+    "sq_tub":"tubos metalicos de secao quadrada",
+    "transformat":"transformador eletrico",
+    "wrk_cloth":"roupas de trabalho"
+})
 for i in range(2,10):
     PT["passageiros"+str(i)]="passageiros"
 
