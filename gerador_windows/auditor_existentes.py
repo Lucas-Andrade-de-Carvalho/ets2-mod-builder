@@ -395,6 +395,7 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
         for c in baseline.values():
             if professional:
                 if name.lower()=="eldorado":
+                    c._eldorado_map=True
                     import eldorado_ingles
                     scoped=eldorado_ingles.infer_identity(c,professional_policy)
                     if scoped is not None:
