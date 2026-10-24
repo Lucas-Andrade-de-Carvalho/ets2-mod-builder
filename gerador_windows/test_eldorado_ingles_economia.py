@@ -140,7 +140,7 @@ class EldoradoEnglishEconomicSimulation(unittest.TestCase):
             c,"cerveja","out",map_name="Eldorado"))
         self.assertIsNone(proven_incompatibility(
             c,"milho","out",map_name="Eldorado"))
-        self.assertIsNone(proven_incompatibility(
+        self.assertIsNotNone(proven_incompatibility(
             c,"algodao","out",map_name="Eldorado"))
 
     def test_bun_receives_grains_but_cannot_ship_unspecified_species(self):
