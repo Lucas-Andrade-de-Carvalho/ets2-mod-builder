@@ -990,6 +990,12 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             checked_maps[name]=extract_map(path)
             if professional:
                 for company in checked_maps[name][0].values():
+                    if name.lower()=="eldorado":
+                        import eldorado_ingles
+                        scoped=eldorado_ingles.infer_identity(
+                            company,professional_policy)
+                        if scoped is not None:
+                            company._eldorado_identity=scoped
                     identity=professional_policy.classify(company)
                     company.role=identity.role
                     company.explicit_role=(identity.certainty=="alta")
