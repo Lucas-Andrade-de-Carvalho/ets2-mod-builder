@@ -20,6 +20,19 @@ def company(name, incoming=(), outgoing=()):
 
 
 class EldoradoEnglishEconomicSimulation(unittest.TestCase):
+    def test_all_225_original_eldorado_cargo_identifiers_translate(self):
+        raw = (
+            "acetylene acid alcool almond ammonia ammunition apples apples_c areia arsenic asph_miller bagacof banana beans bebidas beef3 beef_meat betoneira beverages beverages_c bguerra big_bag_seed bois boric_acid bottle_water brake_pads bricks cable_reel cacamvazio calcario cana canavazio canned_beans carb_water carbn_pwdr_c carrots carrots_c cauliflower cement cheese chem_sorb_c chem_sorbent chemicals chewing_gums chimney_syst chlorine chlorine_t chocolate clinquer clothes clothes3 clothes_c coal concr_beams concrete cont_trees container containersud contamin contrato_tnl_bau contrato_tnl_bau2 copp_rf_gutt cyanide diesel diesel2 digger1000 digger500 diggers dozer dryers drymilk dynamite electronics empty_barr empty_palet emptytank encomendas eucalipto excavator excavator2 explosives feijao fertilizer fireworks floorpanels flour fluorine forklifts fosforo fuel_oil fueltanker furniture gas gasolina glass glass_packed goat_cheese granel graos grapes graph_grease grass_rolls gravel hchemicals hipresstank hmetal honey hwaste hydrochlor hydrogen ibc_cont icecream iron_pipes kerosene ketchup largetubes lead leite limonades lixo lixo1 lixo2 lixo3 lixo4 lixo5 locomotive logs lpg lumber magnesium maple_syrup mason_jars med_equip mercuric metal_center milho milk mobile_crane mondeos motor_oil motor_oil_c neon nitrocel nitrogen nonalco_beer nuts oil oil_filt_c oil_filters oranges ore outdr_flr_tl overweight packag_food paper passageiros passageiros2 passageiros3 passageiros4 passageiros5 passageiros6 passageiros7 passageiros8 passageiros9 peas pesticide petrol phosphor plant_substr plastic_gra plums pnut_butter potahydro potassium potatoes precast_strs princess querosene radiators rice rice_c roof_tiles roofing_felt rooflights sand sandwch_pnls sawpanels scrap_metals sedex sodchlor sodhydro sodium soja sq_tub stones straw_bales sucata sugar sugar2 sulfuric sulfuric_t tableware tanquevazio tomatoes toys tractors tractors2 transformat truck_rims truck_rims_c truck_tyres tyres used_battery used_packag used_plast used_plast_c vent_tube vinegar vinegar_c wallpanels watermelons wrk_cloth wshavings yogurt young_seed"
+        )
+        items = raw.split()
+        self.assertEqual(len(items),225)
+        missing = [name for name in items
+                   if english.translate(name).startswith("NAO_TRADUZIDO")]
+        self.assertEqual(missing,[])
+        self.assertEqual(english.translate(
+            "concr_beams.dlc_heavy_cargo"),
+            "vigas de concreto")
+
     def test_semantics_translate_without_false_commodity_equivalence(self):
         self.assertEqual(english.translate("fertilizer"),"fertilizante (adubo)")
         self.assertEqual(english.translate("big_bag_seed"),"sementes em big bags")
