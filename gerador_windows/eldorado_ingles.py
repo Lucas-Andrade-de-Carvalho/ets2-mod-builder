@@ -222,6 +222,60 @@ def infer_identity(company,policy):
             "cimento expedido e operacao de betoneiras/areia; "
             "distribuicao documentada, nao prova fabrica de cimento")
 
+    # Refinamento final: ramos CONSTATADOS em mercadorias inglesas sem
+    # equivalencia entre as 24 cargas do Librelato. Ramo informativo nao
+    # significa permissao comercial: somente mesmo IN/OUT autorizado.
+    if standard.role=="desconhecida":
+        # Diesel, gasolina e querosene em circuito com tanque vazio.
+        # Pode ser revenda/terminal; nao fabrica ou fazenda.
+        fuel={"diesel2","gasolina","querosene"}
+        if (len(ii & fuel)>=2 and len(oo & fuel)>=2 and
+                "tanquevazio" in oo and not crop_output):
+            return policy.Identity("eldorado_combustiveis","alta",
+                "combustiveis em IN e OUT e devolucao de tanque vazio; "
+                "nao possui mercadoria equivalente nas 24 cargas")
+        # Passageiros e suas variantes de ida/volta, sem mercadorias.
+        passenger_in={x for x in ii if x.startswith("passageiros")}
+        passenger_out={x for x in oo if x.startswith("passageiros")}
+        if len(passenger_in | passenger_out)>=5 and not (
+                policy.cargo_categories(ii | oo)):
+            return policy.Identity("eldorado_transporte_passageiros","alta",
+                "fluxos passageiros na DEF, nao empresa que produz cargas")
+        # Industria de laticinios: leite entra e queijo/iogurte saem.
+        if ({"milk","cheese","yogurt"} <= ii | oo
+                and ("milk" in ii or "leite" in ii)
+                and {"cheese","yogurt"} <= oo):
+            return policy.Identity("eldorado_laticinios","alta",
+                "leite no IN e queijo/iogurte no OUT: industria lactea")
+        # Unidade agroindustrial: varios derivados animais no OUT mas
+        # sem bois vivo OUT; nao inventar criacao bovina/racao no IN.
+        if ({"beef_meat","cheese","drymilk","milk"} <= oo
+                and not ({"bois","milho","soja"} & oo)):
+            return policy.Identity("eldorado_produtos_animais","alta",
+                "carnes e derivados leiteiros expedidos; sem rebanho "
+                "vivo ou graos produzidos comprovados")
+        # Unidade consumidora de batatas/horticolas processadas.
+        if ({"potatoes","peas","tomatoes"} <= ii
+                and "potatoes" not in oo
+                and {"container","containersud"} & oo):
+            return policy.Identity("eldorado_processador_alimentos","alta",
+                "batata e horticolas no IN e embalagens/containers no OUT")
+        # Comercio de pecas e pneus: paletes vazios expedidos, nao
+        # fabricante de paletes, madeira, adubo ou lavoura.
+        if ({"brake_pads","truck_tyres"} <= ii
+                and "empty_palet" in oo):
+            return policy.Identity("eldorado_autopecas","alta",
+                "pecas de freio e pneus recebidos; paletes retornados")
+        # Lavoura de batata sem adubo original: maquinario especifico
+        # recebido, colheita propria na saida, sem batata no IN.
+        if (co=={"batata"} and "potatoes" in oo
+                and not (ci & {"batata","milho","soja"})
+                and {"digger500","diggers"} <= ii
+                and len(oo)<=2 and len(ii)<=12):
+            return policy.Identity("eldorado_lavoura","alta",
+                "maquinas de colheita no IN e batata no OUT; "
+                "entrada de adubo e simulacao coerente de lavoura")
+
     # Distribuidores sintéticos sem qualquer IN nao produzem centenas
     # de produtos. Preservar apenas cargas originais no OUT.
     if (standard.role=="desconhecida" and len(oo)>=65 and not ii):
@@ -262,6 +316,13 @@ def evaluate(company,category,direction,identity,policy):
             return yes("canavial recebe fertilizante para o cultivo")
         return no("cana-de-acucar nao equivale a soja, milho, sorgo "
                   "ou outras cargas do Librelato")
+    if role in {"eldorado_combustiveis","eldorado_transporte_passageiros",
+                "eldorado_laticinios","eldorado_produtos_animais",
+                "eldorado_processador_alimentos","eldorado_autopecas"}:
+        if documented:
+            return yes("movimento original da mercadoria no setor identificado",
+                       "mesma categoria e direcao da DEF original")
+        return no("setor identificado nao comprova esta carga Librelato")
     if role in {"eldorado_recebedor_graos",
                 "eldorado_hub_bidirecional",
                 "eldorado_distribuidor_cimento"}:
@@ -295,6 +356,11 @@ def inherited_conflict(company,category,direction,policy):
     role=identity.role
     # Frete antigo herdado nao supera evidencia contraria da DEF.
     # So limitar atividades com perfil forte, exclusivamente no Eldorado.
+    if role in {"eldorado_combustiveis","eldorado_transporte_passageiros",
+                "eldorado_laticinios","eldorado_produtos_animais",
+                "eldorado_processador_alimentos","eldorado_autopecas"}:
+        return ("Fluxo herdado sem a mesma mercadoria e direcao da DEF "
+                "para setor nao produtor dessa carga")
     if role in {"eldorado_comercio_rural","eldorado_recebedor_graos",
                 "eldorado_armazem_graos","eldorado_hub_saida",
                 "eldorado_hub_bidirecional","eldorado_distribuidor_cimento"}:
