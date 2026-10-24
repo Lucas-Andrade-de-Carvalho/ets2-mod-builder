@@ -666,6 +666,15 @@ def decide(company,category,direction,identity=None):
                 "Eldorado: algodao exige IN/OUT original da pluma "
                 "nessa direcao; a unica excecao regional e o coco",
                 "DEF original por empresa/direcao","alta")
+        if identity.role=="distribuidor":
+            # Atacadista nao pode receber pluma por inferencia. Mas se
+            # recebeu cotton/pluma LITERALMENTE em IN/OUT original, e
+            # logistica comercial concreta (sem excecao regional).
+            return Decision(
+                True,
+                "atacadista de algodao movimenta pluma documentada "
+                "na mesma direcao na DEF original",
+                "IN/OUT original cotton/pluma", "alta")
     if getattr(company,"_eldorado_identity",None) is not None:
         import eldorado_ingles
         scoped=eldorado_ingles.evaluate(
