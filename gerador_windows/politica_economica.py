@@ -640,6 +640,21 @@ def decide(company,category,direction,identity=None):
     if category not in CATEGORIES or direction not in {"in","out"}:
         return Decision(False,"categoria ou direcao invalida","nenhuma","alta")
     identity=identity or classify(company)
+    # Plantações de soja/milho são produtoras de grão, nunca fabricantes
+    # de ração pela mera associação agrícola, mesmo se uma Company velha
+    # tiver adicionado carga17-20 equivocadamente. Somente unidade com
+    # ramo fabril de ração comprovado pode ofertá-la.
+    if (getattr(company,"_eldorado_map",False)
+            and category=="racao" and direction=="out"):
+        crop_roles={"fazenda","fazenda_soja","fazenda_batata",
+                    "fazenda_laranja","eldorado_lavoura"}
+        crop_output=cargo_categories(company.old_out)&{"milho","soja"}
+        if identity.role in crop_roles and crop_output:
+            return Decision(
+                False,
+                "Plantacao de milho/soja expede graos, NAO racao; "
+                "producao de racao requer industria especializada",
+                "ramo de lavoura e especies expedidas na DEF", "alta")
     # O algodao nao e excecao no Eldorado. Bloquear comercializacao
     # inferida sem um cotton/pluma efetivamente documentado pela DEF
     # ORIGINAL na MESMA direcao. Nao restringir Minas ou RBR.
