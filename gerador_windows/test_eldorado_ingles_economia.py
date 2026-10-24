@@ -32,6 +32,8 @@ class EldoradoEnglishEconomicSimulation(unittest.TestCase):
         self.assertEqual(english.translate(
             "concr_beams.dlc_heavy_cargo"),
             "vigas de concreto")
+        self.assertEqual(english.translate("tnl_bau"),"carga de contrato em bau")
+        self.assertEqual(english.translate("tnl_bau2"),"carga de contrato em bau (variante)")
 
     def test_semantics_translate_without_false_commodity_equivalence(self):
         self.assertEqual(english.translate("fertilizer"),"fertilizante (adubo)")
