@@ -991,6 +991,7 @@ def generate(inputs,output,log=lambda s:None, fix_skills=True, require_complete=
             if professional:
                 for company in checked_maps[name][0].values():
                     if name.lower()=="eldorado":
+                        company._eldorado_map=True
                         import eldorado_ingles
                         scoped=eldorado_ingles.infer_identity(
                             company,professional_policy)
