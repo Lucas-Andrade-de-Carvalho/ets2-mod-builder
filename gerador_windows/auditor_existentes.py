@@ -170,6 +170,12 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
     podem plantar; cooperativas armazenam e revendem varias mercadorias.
     """
     role=company.role
+    if professional_policy.norm(map_name or "")=="eldorado":
+        import eldorado_ingles
+        scoped=eldorado_ingles.inherited_conflict(
+            company,category,direction,professional_policy)
+        if scoped is not None:
+            return scoped
     if (professional_policy.norm(map_name or "") in
             professional_policy.REGIONAL_APPROVED_MAPS and
             category in {"algodao","coco"}):
@@ -388,6 +394,11 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
             g,baseline,source,entry.get("editor_source"))
         for c in baseline.values():
             if professional:
+                if name.lower()=="eldorado":
+                    import eldorado_ingles
+                    scoped=eldorado_ingles.infer_identity(c,professional_policy)
+                    if scoped is not None:
+                        c._eldorado_identity=scoped
                 identity=professional_policy.classify(c)
                 c.role=identity.role
                 c.explicit_role=(identity.certainty=="alta")
@@ -403,6 +414,14 @@ def _run_unpublished(g, map_entries, out_path, mode="corrigir",
                 elif (g.ELDORADO_BANANA.search(g.normal(c.name)) and
                       c.role in {"hortifruti","fazenda","desconhecida"}):
                     c.role="bananal";c.explicit_role=True
+        if professional and name.lower()=="eldorado":
+            import eldorado_ingles
+            eldorado_ingles.export_translation_reports(baseline,out)
+            identified=sum(getattr(c,"_eldorado_identity",None) is not None
+                           for c in baseline.values())
+            log("ELDORADO: dicionario de cargas inglesas e perfis: "+
+                str(identified)+" empresas com classificacao dedicada; "+
+                "TRADUCAO_DEF_ELDORADO.csv / PERFIS_ECONOMICOS_ELDORADO.csv")
         if not source:raise ValueError(name+": Company existente vazia ou ilegivel")
         loaded[name]=(source,baseline,entry,editor_recovery)
     outputs=[]
