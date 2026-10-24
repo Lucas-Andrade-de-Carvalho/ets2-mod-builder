@@ -130,7 +130,9 @@ PT.update({
     "mobile_crane":"guindaste movel",
     "sq_tub":"tubos metalicos de secao quadrada",
     "transformat":"transformador eletrico",
-    "wrk_cloth":"roupas de trabalho"
+    "wrk_cloth":"roupas de trabalho",
+    "tnl_bau":"carga de contrato em bau",
+    "tnl_bau2":"carga de contrato em bau (variante)"
 })
 for i in range(2,10):
     PT["passageiros"+str(i)]="passageiros"
