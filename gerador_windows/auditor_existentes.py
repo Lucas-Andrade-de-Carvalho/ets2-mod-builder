@@ -171,6 +171,18 @@ def proven_incompatibility(company, category, direction, spec=None, map_name=Non
     """
     role=company.role
     if professional_policy.norm(map_name or "")=="eldorado":
+        original=professional_policy.cargo_categories(
+            company.old_in if direction=="in" else company.old_out)
+        if category=="algodao" and category not in original:
+            return ("Eldorado: pluma/algodao NAO e excecao; "
+                    "sem esta mercadoria no IN/OUT original da DEF")
+        if (category=="racao" and direction=="out"
+                and role in {"fazenda","fazenda_soja","fazenda_batata",
+                             "fazenda_laranja","eldorado_lavoura"}
+                and (professional_policy.cargo_categories(
+                    company.old_out)&{"milho","soja"})):
+            return ("Lavoura de milho/soja nao fabrica racao; "
+                    "a saida de graos nao justifica carga17-20")
         import eldorado_ingles
         scoped=eldorado_ingles.inherited_conflict(
             company,category,direction,professional_policy)
