@@ -118,6 +118,29 @@ class EldoradoEnglishEconomicSimulation(unittest.TestCase):
         self.assertFalse(policy.decide(c,"soja","out").allowed)
         self.assertFalse(policy.decide(c,"milho","out").allowed)
 
+    def test_legacy_unsupported_grain_exports_removed_at_dealer(self):
+        c=company("agh",
+                  incoming=("big_bag_seed","digger500","feijao","milho",
+                            "rice","rice_c","soja","tractors"),
+                  outgoing=("big_bag_seed","digger500","fertilizer","graos"))
+        self.assertEqual(c.role,"eldorado_comercio_rural")
+        self.assertIsNotNone(proven_incompatibility(
+            c,"soja","out",map_name="Eldorado"))
+        self.assertIsNone(proven_incompatibility(
+            c,"soja","in",map_name="Eldorado"))
+        self.assertIsNone(proven_incompatibility(
+            c,"adubo","out",map_name="Eldorado"))
+
+    def test_legacy_cargo_at_crop_farm_requires_real_crop_or_region(self):
+        c=company("rocasoja",incoming=("big_bag_seed","fertilizer","tractors"),
+                  outgoing=("feijao","milho","soja"))
+        self.assertIsNotNone(proven_incompatibility(
+            c,"cerveja","out",map_name="Eldorado"))
+        self.assertIsNone(proven_incompatibility(
+            c,"milho","out",map_name="Eldorado"))
+        self.assertIsNone(proven_incompatibility(
+            c,"algodao","out",map_name="Eldorado"))
+
     def test_bun_receives_grains_but_cannot_ship_unspecified_species(self):
         c=company("bun",incoming=("digger500","feijao","fertilizer",
                                   "milho","soja","tractors"),
