@@ -640,6 +640,17 @@ def decide(company,category,direction,identity=None):
     if category not in CATEGORIES or direction not in {"in","out"}:
         return Decision(False,"categoria ou direcao invalida","nenhuma","alta")
     identity=identity or classify(company)
+    # O algodao nao e excecao no Eldorado. Bloquear comercializacao
+    # inferida sem um cotton/pluma efetivamente documentado pela DEF
+    # ORIGINAL na MESMA direcao. Nao restringir Minas ou RBR.
+    if (getattr(company,"_eldorado_map",False) and category=="algodao"):
+        source=(company.old_in if direction=="in" else company.old_out)
+        if category not in cargo_categories(source):
+            return Decision(
+                False,
+                "Eldorado: algodao exige IN/OUT original da pluma "
+                "nessa direcao; a unica excecao regional e o coco",
+                "DEF original por empresa/direcao","alta")
     if getattr(company,"_eldorado_identity",None) is not None:
         import eldorado_ingles
         scoped=eldorado_ingles.evaluate(
@@ -993,6 +1004,12 @@ def regional_approved_decision(company,category,direction,map_name,identity=None
     if (scope not in REGIONAL_APPROVED_MAPS or
             category not in REGIONAL_APPROVED_CATEGORIES or
             direction not in {"in","out"}):
+        return None
+    # Restricao pedida para o Eldorado: a UNICA flexibilizacao regional
+    # e coco de fazendas existentes para varejo/CEASA existentes.
+    # Pluma/algodao exige evidencia original por empresa e direcao.
+    # Preserva integralmente as regras regionais anteriores do Minas.
+    if scope=="eldorado" and category!="coco":
         return None
     identity=identity or classify(company)
     role=identity.role
