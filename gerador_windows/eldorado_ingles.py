@@ -189,15 +189,37 @@ def infer_identity(company,policy):
     # nao transmutar graos genericos no OUT em cultivo de soja ou milho.
     if (standard.role=="desconhecida" and
             {"milho","soja"} <= ci and "fertilizer" in oo and
-            "big_bag_seed" in ii and not ("bois" in oo)):
+            "big_bag_seed" in (ii | oo) and
+            "tractors" in ii and not ("bois" in oo)):
         return policy.Identity("eldorado_comercio_rural","alta",
             "milho/soja recebidos e fertilizante expedido; "
             "graos genericos no OUT nao indicam especie")
+    if (standard.role=="desconhecida" and
+            {"milho","soja"} <= ci
+            and "graos" in oo and not (co & {"milho","soja"})):
+        return policy.Identity("eldorado_recebedor_graos","alta",
+            "milho e soja no IN; OUT apenas graos genericos: "
+            "nao simular expedicao dessas especies")
     if (standard.role=="desconhecida" and
             {"milho","soja"} <= ci and {"milho","soja"} <= co and
             len(oo)<=15):
         return policy.Identity("eldorado_armazem_graos","alta",
             "milho/soja em IN e OUT: entreposto, nao fazenda")
+    # Centrais com fluxo extenso em ambos os sentidos fazem transbordo,
+    # nao plantam todas as culturas presentes no catalogo.
+    if (standard.role=="desconhecida" and len(ii)>=25 and
+            len(oo)>=25 and len(ii & oo)>=20):
+        return policy.Identity("eldorado_hub_bidirecional","alta",
+            "dezenas de mercadorias iguais em IN/OUT: centro de "
+            "distribuicao, sem fabricacao/cultivo comprovados")
+    # Material de construcao: areias e betoneiras recebidas e
+    # cimento no OUT, nao confundir com pedreira ou silo agricola.
+    if (standard.role=="desconhecida" and "cement" in oo
+            and {"areia","betoneira"} <= ii and len(oo)<15):
+        return policy.Identity("eldorado_distribuidor_cimento","alta",
+            "cimento expedido e operacao de betoneiras/areia; "
+            "distribuicao documentada, nao prova fabrica de cimento")
+
     # Distribuidores sintéticos sem qualquer IN nao produzem centenas
     # de produtos. Preservar apenas cargas originais no OUT.
     if (standard.role=="desconhecida" and len(oo)>=65 and not ii):
@@ -238,6 +260,13 @@ def evaluate(company,category,direction,identity,policy):
             return yes("canavial recebe fertilizante para o cultivo")
         return no("cana-de-acucar nao equivale a soja, milho, sorgo "
                   "ou outras cargas do Librelato")
+    if role in {"eldorado_recebedor_graos",
+                "eldorado_hub_bidirecional",
+                "eldorado_distribuidor_cimento"}:
+        if documented:
+            return yes("produto original na direcao correta da unidade",
+                       "IN/OUT original da DEF; sem supor producao")
+        return no("centro/fornecedor nao registra mercadoria nessa direcao")
     if role=="eldorado_comercio_rural":
         if documented and category in {"milho","soja","adubo"}:
             return yes("revenda rural: carga original na direcao IN/OUT",
