@@ -116,6 +116,43 @@ class EldoradoEnglishEconomicSimulation(unittest.TestCase):
         self.assertFalse(policy.decide(c,"soja","out").allowed)
         self.assertFalse(policy.decide(c,"milho","out").allowed)
 
+    def test_bun_receives_grains_but_cannot_ship_unspecified_species(self):
+        c=company("bun",incoming=("digger500","feijao","fertilizer",
+                                  "milho","soja","tractors"),
+                  outgoing=("big_bag_seed","digger500","graos"))
+        self.assertEqual(c.role,"eldorado_recebedor_graos")
+        self.assertTrue(policy.decide(c,"milho","in").allowed)
+        self.assertTrue(policy.decide(c,"soja","in").allowed)
+        self.assertFalse(policy.decide(c,"milho","out").allowed)
+
+    def test_paduva_is_agro_dealer_not_producer(self):
+        c=company("paduva",incoming=("digger500","feijao","milho",
+                                    "rice","rice_c","soja","tractors"),
+                  outgoing=("big_bag_seed","digger500",
+                            "fertilizer","graos"))
+        self.assertEqual(c.role,"eldorado_comercio_rural")
+        self.assertTrue(policy.decide(c,"adubo","out").allowed)
+        self.assertFalse(policy.decide(c,"soja","out").allowed)
+
+    def test_many_in_out_products_is_distributor_not_plantation(self):
+        shared={"apples","beverages","cement","oranges","potatoes",
+                "rice","lumber","grapes","cheese","clothes"}
+        shared.update("item"+str(i) for i in range(25))
+        c=company("vale",incoming=shared,outgoing=shared)
+        self.assertEqual(c.role,"eldorado_hub_bidirecional")
+        self.assertTrue(policy.decide(c,"batata","in").allowed)
+        self.assertTrue(policy.decide(c,"batata","out").allowed)
+        self.assertFalse(policy.decide(c,"milho","out").allowed)
+        self.assertFalse(policy.decide(c,"cerveja","out").allowed)
+
+    def test_cement_dispatch_uses_actual_cement_out(self):
+        c=company("ben",incoming=("areia","betoneira","digger500"),
+                  outgoing=("cement","areia","betoneira"))
+        self.assertEqual(c.role,"eldorado_distribuidor_cimento")
+        self.assertTrue(policy.decide(c,"cimento","out").allowed)
+        self.assertFalse(policy.decide(c,"cimento","in").allowed)
+        self.assertFalse(policy.decide(c,"tijolo","out").allowed)
+
     def test_warehouse_not_producer(self):
         c=company("arc",
             incoming=("digger500","feijao","fertilizer","graos",
