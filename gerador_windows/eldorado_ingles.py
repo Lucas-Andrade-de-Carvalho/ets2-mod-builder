@@ -293,6 +293,18 @@ def inherited_conflict(company,category,direction,policy):
     ii,oo,ci,co=token_groups(company,policy)
     if category in (ci if direction=="in" else co):return None
     role=identity.role
+    # Frete antigo herdado nao supera evidencia contraria da DEF.
+    # So limitar atividades com perfil forte, exclusivamente no Eldorado.
+    if role in {"eldorado_comercio_rural","eldorado_recebedor_graos",
+                "eldorado_armazem_graos","eldorado_hub_saida",
+                "eldorado_hub_bidirecional","eldorado_distribuidor_cimento"}:
+        return ("Frete legado sem IN/OUT da mesma carga nessa direcao "
+                "para atividade inferida por fluxo original")
+    if role=="eldorado_lavoura" and direction=="out" and category not in {
+            "algodao","coco"}:
+        return "Lavoura nao produziu esta mercadoria no OUT original"
+    if role=="eldorado_lavoura" and direction=="in" and category!="adubo":
+        return "Lavoura nao comprovou compra desta mercadoria no IN"
     if role=="eldorado_pecuaria" and (
         direction=="out" or
         category in {"adubo","milho","soja","algodao","coco"}):
