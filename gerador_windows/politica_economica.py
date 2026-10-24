@@ -512,6 +512,11 @@ def infer_by_flow(company):
     return None
 
 def classify(company):
+    # Perfil bilíngue pertence EXCLUSIVAMENTE a DEF do Eldorado e é
+    # ativado pela auditoria desse mapa; MG/RBR não recebem atributo.
+    scoped=getattr(company,"_eldorado_identity",None)
+    if scoped is not None:
+        return scoped
     identifier=norm(company.name)
     # Empresas MG com identificadores abreviados: confirmar a especie
     # pela carga original antes de classificar. Nunca inventar colheita.
@@ -635,6 +640,13 @@ def decide(company,category,direction,identity=None):
     if category not in CATEGORIES or direction not in {"in","out"}:
         return Decision(False,"categoria ou direcao invalida","nenhuma","alta")
     identity=identity or classify(company)
+    if getattr(company,"_eldorado_identity",None) is not None:
+        import eldorado_ingles
+        scoped=eldorado_ingles.evaluate(
+            company,category,direction,identity,
+            __import__(__name__))
+        if scoped is not None:
+            return scoped
     role=identity.role
     old_in=cargo_categories(company.old_in)
     old_out=cargo_categories(company.old_out)
@@ -946,7 +958,8 @@ def decide(company,category,direction,identity=None):
 REGIONAL_APPROVED_MAPS=frozenset({"minas_gerais","eldorado"})
 REGIONAL_APPROVED_CATEGORIES=frozenset({"algodao","coco"})
 REGIONAL_FARM_ROLES=frozenset({
-    "fazenda","fazenda_soja","fazenda_batata","fazenda_laranja"
+    "fazenda","fazenda_soja","fazenda_batata","fazenda_laranja",
+    "eldorado_lavoura"
 })
 REGIONAL_COTTON_RECEIVERS=frozenset({
     "silo","cooperativa","beneficiadora_algodao","textil",
