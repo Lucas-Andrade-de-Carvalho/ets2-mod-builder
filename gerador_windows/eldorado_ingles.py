@@ -404,3 +404,36 @@ def export_translation_reports(companies,folder):
             wr.writerow([name,identity.role,identity.evidence,
                          ",".join(sorted(str(x) for x in c.old_in)),
                          ",".join(sorted(str(x) for x in c.old_out))])
+
+    # Reprodutibilidade: detalhar CADA permissao que o motor economico
+    # efetivamente autorizaria, distinguindo evidencia literal da DEF
+    # de simulacao de necessidades e excecao regional autorizada.
+    # A matriz serve para revisao do comprador/cliente; o .scs usa o
+    # auditor original e a compatibilidade exata das 24 variantes.
+    import politica_economica as policy
+    with (root/"MATRIZ_ECONOMICA_ELDORADO.csv").open(
+            "w",newline="",encoding="utf-8-sig") as fp:
+        wr=csv.writer(fp,delimiter=";")
+        wr.writerow([
+            "empresa","setor","categoria_librelato","direcao",
+            "tipo_de_evidencia","motivo","base_da_decisao"])
+        for name,c in sorted(companies.items()):
+            identity=policy.classify(c)
+            for category in sorted(policy.CATEGORIES):
+                for direction in ("in","out"):
+                    regional=policy.regional_approved_decision(
+                        c,category,direction,"Eldorado",identity)
+                    regional_ok=(regional is not None and regional.allowed)
+                    decision=(regional if regional_ok else
+                              policy.decide(c,category,direction,identity))
+                    if not decision.allowed:
+                        continue
+                    original=policy.cargo_categories(
+                        c.old_in if direction=="in" else c.old_out)
+                    proof=("DEF_ORIGINAL" if category in original else
+                           "SIMULACAO_REGIONAL" if regional_ok else
+                           "SIMULACAO_ECONOMICA")
+                    wr.writerow([
+                        name,identity.role,category,direction,proof,
+                        decision.reason,decision.evidence])
+
