@@ -57,8 +57,16 @@ beverages=bebidas genéricas (não cerveja Librelato).
   mercadoria original. Essa hipótese é rotulada nos relatórios.
 - **NÃO COMPROVADO**: produto ou direção ausente e ramo ambíguo; evitar
   adicionar ou preservar frete contraditório.
-- As adaptações regionais de pluma/coco continuam específicas do
-  Minas/Eldorado, mas deixam de tratar pecuária como lavoura.
+- **Única exceção regional autorizada no Eldorado: coco**. Pode sair de
+  fazendas identificadas no mapa e chegar aos supermercados/CEASAs/
+  hortifrutis reais. Não inventar plantações, empresas ou cidades.
+- **Pluma/algodão no Eldorado:** só autorizar quando houver o produto
+  específico no IN/OUT original da empresa e na direção exigida.
+  A permissão regional anterior de pluma permanece SOMENTE em Minas.
+- **Lavoura de milho/soja:** nunca expedir ração (variantes carga17-20),
+  inclusive se uma Company anterior trouxe essa permissão por engano.
+  Ração pode sair de fabricante/revenda comprovada e deve chegar às
+  criações de animais; lavouras recebem adubo e expedem culturas reais.
 
 ## Teste sugerido — sem regressões
 1. Selecionar 'Somente ELDORADO' e 'Auditar e corrigir SCS EXISTENTE'.
