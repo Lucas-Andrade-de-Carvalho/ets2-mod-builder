@@ -16,6 +16,9 @@ compilação e salvar um novo SCS em outra pasta.
   número de empresas da DEF em que aparece.
 - `PERFIS_ECONOMICOS_ELDORADO.csv`: empresas com atividade definida por
   fluxo bruto, evidências e mercadorias de entrada/saída.
+- `MATRIZ_ECONOMICA_ELDORADO.csv`: permissões por empresa, categoria e IN/OUT,
+  separando `DEF_ORIGINAL`, `SIMULACAO_ECONOMICA` e `SIMULACAO_REGIONAL`.
+  Permite auditar a simulação sem declarar como documentada uma compra inferida.
 - Auditorias normais `AUDITORIA_ELDORADO.json`, `COBERTURA_MAXIMA_ELDORADO.csv`,
   `PAINEL_GERAL_LOGISTICA_V3.txt` e o novo arquivo SCS.
 
