@@ -50,7 +50,18 @@ class EldoradoFinalDefIndustry(unittest.TestCase):
         self.assertFalse(policy.decide(c,"racao","in").allowed)
         self.assertFalse(policy.decide(c,"milho","out").allowed)
 
-    def test_aria_dairy_meat_processing_not_cattle_farm(self):
+    def test_primaz_multi_food_distribution_not_dairy_manufacturer(self):
+        c=real_company(
+            "primaz",
+            {"almond","carrots","cauliflower","empty_palet",
+             "glass","milk","rice","sugar","tomatoes","vinegar"},
+            {"almond","beef_meat","canned_beans","cheese",
+             "icecream","ketchup","limonades","milk","rice",
+             "rice_c","vinegar","vinegar_c","yogurt"})
+        self.assertNotEqual(c.role,"eldorado_laticinios")
+        self.assertFalse(policy.decide(c,"soja","out").allowed)
+
+
         c=real_company("aria_bd2",
             {"big_bag_seed","diesel","tractors","plant_substr"},
             {"beef3","beef_meat","cheese","drymilk","goat_cheese",
