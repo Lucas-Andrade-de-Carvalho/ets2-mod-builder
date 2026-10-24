@@ -97,8 +97,12 @@ class MGAndEldoradoRealReportsRegression(unittest.TestCase):
         # Um armazem que realmente distribui algodao pode receber pluma.
         ware=g.Company("atacado_algodao",
                        old_in={"algodao"},old_out={"algodao"})
-        self.assertTrue(p.regional_approved_decision(
-            ware,"algodao","in","Eldorado").allowed)
+        self.assertIsNone(p.regional_approved_decision(
+            ware,"algodao","in","Eldorado"))
+        # O IN original do armazem continua utilizavel pela politica
+        # documental, mas nao existe ADAPTACAO REGIONAL de pluma.
+        ware._eldorado_map=True
+        self.assertTrue(p.decide(ware,"algodao","in").allowed)
 
 class RegionalCottonCoconutPolicyTests(unittest.TestCase):
     def test_farms_supply_cotton_and_coconut_in_two_maps_only(self):
@@ -114,8 +118,11 @@ class RegionalCottonCoconutPolicyTests(unittest.TestCase):
                     with self.subTest(name=comp.name,map=region,product=product):
                         result=p.regional_approved_decision(
                             comp,product,"out",region)
-                        self.assertTrue(result and result.allowed)
-                        self.assertIn("SIMULACAO",result.evidence)
+                        if region=="Eldorado" and product=="algodao":
+                            self.assertIsNone(result)
+                        else:
+                            self.assertTrue(result and result.allowed)
+                            self.assertIn("SIMULACAO",result.evidence)
                         self.assertIsNone(p.regional_approved_decision(
                             comp,product,"in",region))
             for product in ("algodao","coco"):
@@ -129,9 +136,12 @@ class RegionalCottonCoconutPolicyTests(unittest.TestCase):
             with self.subTest(name=name):
                 c=g.Company(name)
                 v=p.regional_approved_decision(c,"algodao","in","Eldorado")
-                self.assertTrue(v and v.allowed)
+                self.assertIsNone(v)
                 self.assertIsNone(p.regional_approved_decision(
                     c,"algodao","out","Eldorado"))
+                # Minas conserva as regras previamente aprovadas.
+                self.assertTrue(p.regional_approved_decision(
+                    c,"algodao","in","Minas_Gerais").allowed)
         for name in ("obra_centro","posto_petrol", "mineracao_1",
                      "brasilog","siderurgica_casa","construcao_1"):
             with self.subTest(deny=name):
