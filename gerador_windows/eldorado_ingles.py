@@ -253,7 +253,11 @@ def infer_identity(company,policy):
         # Unidade agroindustrial: varios derivados animais no OUT mas
         # sem bois vivo OUT; nao inventar criacao bovina/racao no IN.
         if ({"beef_meat","cheese","drymilk","milk"} <= oo
+                and len(oo)<=14 and len(ii)<=25
                 and not ({"bois","milho","soja"} & oo)):
+            # Nao classificar distribuidor multissetorial que expede
+            # mais de 100 mercadorias como fabrica de carnes/laticinios.
+            # Ex.: ancapi, smd e utillog na DEF real do Eldorado.
             return policy.Identity("eldorado_produtos_animais","alta",
                 "carnes e derivados leiteiros expedidos; sem rebanho "
                 "vivo ou graos produzidos comprovados")
