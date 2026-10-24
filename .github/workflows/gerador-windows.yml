@@ -50,6 +50,7 @@ jobs:
           New-Item -ItemType Directory -Path release -Force | Out-Null
           Copy-Item dist/ETS2_Company_Gerador.exe release/ETS2_Company_Gerador.exe
           Copy-Item gerador_windows/GUIA_VERSAO_FINAL_CANDIDATA_20261022.md release/GUIA_DE_UTILIZACAO.md
+          Copy-Item gerador_windows/GUIA_ELDORADO_SEMANTICA_INGLESA.md release/GUIA_ELDORADO_SEMANTICA_INGLESA.md
           Copy-Item gerador_windows/VALIDACAO_FINAL_RBR_20261022.md release/VALIDACAO_FINAL_RBR.md
           Copy-Item gerador_windows/DIAGNOSTICO_RBR_RELATORIOS_5.md release/DIAGNOSTICO_RBR_AUDITORIA_5.md
           Copy-Item gerador_windows/GUIA_CONSOLIDACAO_TRES_MAPAS.md release/GUIA_CONSOLIDACAO_TRES_MAPAS.md
@@ -75,6 +76,7 @@ jobs:
           New-Item -ItemType Directory -Path release_portable -Force | Out-Null
           Copy-Item dist_portable/ETS2_Company_Gerador -Destination release_portable -Recurse -Force
           Copy-Item gerador_windows/GUIA_ALTERNATIVAS_DOWNLOAD_SEGURO.md release_portable/LEIA_PRIMEIRO.md
+          Copy-Item gerador_windows/GUIA_ELDORADO_SEMANTICA_INGLESA.md release_portable/GUIA_ELDORADO_SEMANTICA_INGLESA.md
           $exe = "release_portable/ETS2_Company_Gerador/ETS2_Company_Gerador.exe"
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           "COMMIT=$env:GITHUB_SHA" | Out-File release_portable/PROVENIENCIA_PASTA_SHA256.txt -Encoding utf8
@@ -83,6 +85,7 @@ jobs:
           New-Item -ItemType Directory -Path release_source -Force | Out-Null
           Copy-Item gerador_windows/*.py release_source/ -Force
           Copy-Item gerador_windows/GUIA_ALTERNATIVAS_DOWNLOAD_SEGURO.md release_source/LEIA_PRIMEIRO.md
+          Copy-Item gerador_windows/GUIA_ELDORADO_SEMANTICA_INGLESA.md release_source/GUIA_ELDORADO_SEMANTICA_INGLESA.md
           "COMMIT=$env:GITHUB_SHA" | Out-File release_source/PROVENIENCIA_CODIGO_FONTE.txt -Encoding utf8
           "VERSAO=Python_3.12_sem_EXE" | Out-File release_source/PROVENIENCIA_CODIGO_FONTE.txt -Append -Encoding utf8
           if (-not (Test-Path "release_source/gerador.py")) { throw "Codigo-fonte nao empacotado" }
