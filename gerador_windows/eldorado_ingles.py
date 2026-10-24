@@ -244,7 +244,10 @@ def infer_identity(company,policy):
         # Industria de laticinios: leite entra e queijo/iogurte saem.
         if ({"milk","cheese","yogurt"} <= ii | oo
                 and ("milk" in ii or "leite" in ii)
-                and {"cheese","yogurt"} <= oo):
+                and {"cheese","yogurt"} <= oo
+                and len(oo)<=6):
+            # Um distribuidor com dezenas de alimentos (e.g. Primaz)
+            # nao vira fabrica de laticinios por movimentar leite e queijo.
             return policy.Identity("eldorado_laticinios","alta",
                 "leite no IN e queijo/iogurte no OUT: industria lactea")
         # Unidade agroindustrial: varios derivados animais no OUT mas
