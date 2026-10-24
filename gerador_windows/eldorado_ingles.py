@@ -165,6 +165,15 @@ def infer_identity(company,policy):
             len(oo)<=14 and not generic_multisector):
         return policy.Identity("eldorado_pecuaria","alta",
             "criacao documentada: bois no OUT ou gado no IN + leite no OUT")
+    # Se as MESMAS culturas entram E saem, ha comercializacao/armazenagem:
+    # sementes/adubo no IN nao tornam o entreposto plantacao produtora.
+    # Preservar a cooperativa identificada por marca como cooperativa.
+    if (standard.role in {"fazenda","desconhecida","comercio_graos"}
+            and {"milho","soja"} <= ci
+            and {"milho","soja"} <= co and len(oo)<=15):
+        return policy.Identity("eldorado_armazem_graos","alta",
+            "milho e soja identificados no IN e no OUT; "
+            "armazenagem/comercio de grãos, nao cultivo demonstrado")
     if (farm and crop_output and
             ({"fertilizer","big_bag_seed","young_seed"} & ii)
             and len(oo)<=16):
