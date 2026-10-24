@@ -310,6 +310,11 @@ def evaluate(company,category,direction,identity,policy):
         return no("criacao bovina nao demonstra plantio de milho, soja, "
                   "coco ou algodao; nenhuma expedicao Librelato comprovada")
     if role=="eldorado_lavoura":
+        # Pluma pode sair se for colheita REAL na DEF (nao por excecao).
+        # Coco e a unica cultura com adaptacao regional autorizada.
+        if direction=="out" and category=="algodao" and category in co:
+            return yes("colheita de algodao documentada na DEF da fazenda",
+                       "OUT original cotton/pluma")
         if direction=="out" and category in {"milho","soja","batata","laranja"}:
             return (yes("colheita especifica expedida pela lavoura",
                         "OUT original da especie agricola")
